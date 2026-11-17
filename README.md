@@ -807,6 +807,32 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.09 — actualizar por Wi-Fi (antes «firmware 109»; la partida no cambia: sigue en la versión 42)
+
+Desde aquí las versiones se llaman **1.0.09, 1.0.10, 1.0.11…** El número vive en un solo lugar:
+`firmware/main/version.h` (`FW_VERSION` y `FW_NOMBRE`). Lo usan el orbe, `firmware/CMakeLists.txt` (descripción del
+programa) y la compilación en GitHub.
+
+**Ver la versión en el orbe:** Ajustes → botón «VERSIÓN 1.0.09» (abajo). Muestra número, nombre y fecha de compilación.
+Al arrancar con una versión distinta a la anterior dice «¡VERSIÓN x!». Por USB: `MASCOTA VERSION`.
+
+**Actualizar:** Ajustes → Versión → ACTUALIZAR. Guarda la partida y reinicia en un **modo actualizar** liviano
+(`firmware/main/ota.c`, sin el juego: sobra memoria para el Wi-Fi):
+- Crea su red **ORBEPET-XXXX** (clave `orbepet1`). Desde el celular, entra a esa red y abre **http://192.168.4.1**:
+  ahí eliges el Wi-Fi de la casa (queda guardado), buscas la actualización o subes un `mascota.bin` a mano.
+- Con el Wi-Fi de la casa: lee `version.json` de `ruloccc/orbepet-firmware` (raw.githubusercontent.com); si hay una
+  más nueva, baja `mascota.bin`, la instala en la otra ranura y reinicia. Si no, dice «¡ESTÁS AL DÍA!».
+- Botón SALIR (o 15 minutos sin uso): vuelve al juego.
+- **Vuelta atrás:** si la versión nueva se cae antes de su primer minuto, el arranque vuelve solo a la anterior y
+  el orbe lo dice («LA x NO FUNCIONÓ · VOLVÍ A LA VERSIÓN y»). Necesita el arranque nuevo: por eso la 1.0.09 se graba
+  **con cable** una vez (`idf.py flash`, el botón Instalar del probador). Las siguientes ya llegan por el aire.
+- Se revisa que el archivo sea un programa de este proyecto («mascota») antes de borrar nada.
+
+**Publicar una versión:** subir `FW_VERSION` en version.h, commit a `main` del repositorio privado `ruloccc/orbepet`
+y etiqueta `v<versión>` (ej. `v1.0.10`). GitHub Actions (`.github/workflows/firmware.yml`) compila con ESP-IDF
+v5.5, revisa que quepa en ota_1 (0x7A0000) y publica en `ruloccc/orbepet-firmware` (necesita el secreto
+`ORBEPET_FIRMWARE_TOKEN`; sin él deja el `.bin` como artefacto de la ejecución).
+
 ## Firmware 108 (la partida no cambia: sigue en la versión 42)
 Pedidos del 17-nov (14:26).
 

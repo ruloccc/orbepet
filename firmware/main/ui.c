@@ -20,6 +20,8 @@
 #define EXT_RAM_BSS_ATTR
 #endif
 #include "ui.h"
+#include "version.h" /* (1.0.09) FW_VERSION y FW_NOMBRE: Ajustes → Versión */
+#include <time.h>
 #include "sfx.h"
 #include "foto.h"
 
@@ -614,7 +616,7 @@ typedef enum {
     PANEL_NOMBRE, PANEL_FECHA, PANEL_AJUSTES, PANEL_RESUMEN, PANEL_JUGAR, PANEL_TRUCOS, PANEL_DIARIO,
     PANEL_HORA, PANEL_RESTAURAR, PANEL_RESPALDO, PANEL_ASPECTO, PANEL_SEMILLA, PANEL_FOTO, PANEL_MAPA, PANEL_MASCOTAS,
     PANEL_ALARMAS, PANEL_ALARMA, PANEL_DORMIR, PANEL_SONIDO, PANEL_PANTALLA, PANEL_HORA_MENU, PANEL_TEMPORIZADOR, PANEL_MAS_AJ, PANEL_MODO,
-    PANEL_BOLSA, PANEL_OBJETO, PANEL_RAPIDO, PANEL_COLOR, PANEL_BOTE, PANEL_FAMILIA, PANEL_VIAJE_PIDE, PANEL_CARTA, PANEL_CARTAS, PANEL_GENERO, PANEL_HISTORIA, PANEL_PAIS, PANEL_CRISTALES, PANEL_EVOLUCION, PANEL_RITMO, PANEL_FINAL, PANEL_TEMPORADA, PANEL_LIBHIST, PANEL_CINE, PANEL_COFRE, PANEL_PAGINA, PANEL_LUGAR, PANEL_CRISMENU, PANEL_CANCIONES
+    PANEL_BOLSA, PANEL_OBJETO, PANEL_RAPIDO, PANEL_COLOR, PANEL_BOTE, PANEL_FAMILIA, PANEL_VIAJE_PIDE, PANEL_CARTA, PANEL_CARTAS, PANEL_GENERO, PANEL_HISTORIA, PANEL_PAIS, PANEL_CRISTALES, PANEL_EVOLUCION, PANEL_RITMO, PANEL_FINAL, PANEL_TEMPORADA, PANEL_LIBHIST, PANEL_CINE, PANEL_COFRE, PANEL_PAGINA, PANEL_LUGAR, PANEL_CRISMENU, PANEL_CANCIONES, PANEL_VERSION
 } panel_t;
 static bool s_fin_repetida; /* se está viendo otra vez desde la Biblioteca: se puede cerrar y no da premios */
 static void final_revisar(void);
@@ -1662,7 +1664,7 @@ static bool panel_es_portal(panel_t p)
     case PANEL_MAS: case PANEL_AJUSTES: case PANEL_SONIDO: case PANEL_PANTALLA: case PANEL_HORA_MENU: case PANEL_ALARMAS: case PANEL_ALARMA:
     case PANEL_COFRE: case PANEL_DORMIR: case PANEL_TEMPORIZADOR: case PANEL_MASCOTAS: case PANEL_RESPALDO: case PANEL_MAS_AJ: case PANEL_MODO:
     case PANEL_MAPA: case PANEL_AMIGOS: case PANEL_CARTAS: case PANEL_RINCON: case PANEL_BOLSA:
-    case PANEL_CRISMENU: case PANEL_CANCIONES: return true; /* (v97) sus letras son claras: sobre el vidrio claro no se leían */
+    case PANEL_CRISMENU: case PANEL_CANCIONES: case PANEL_VERSION: return true; /* (v97) sus letras son claras: sobre el vidrio claro no se leían */
     default: return false;
     }
 }
@@ -2905,6 +2907,7 @@ void ui_set_device(const pet_device_t *d) { s_disp_aj = d; if (d) s_fuente_grand
 static void panel_sonido(void);
 static void panel_pantalla(void);
 static void panel_mas_ajustes(void);
+static void panel_version(void); /* (1.0.09) qué versión tiene y actualizar por Wi-Fi */
 static int s_hemi_vista, s_modo_vista = -1, s_desp_vista;
 static void panel_pais(bool desde_ajustes);
 static void panel_hora_menu(void);
@@ -2989,6 +2992,7 @@ static void ajustes_cb(lv_event_t *e)
     case 3: s_confirmar_nueva = 0; s_masc_sel = -1; s_masc_conf = 0; panel_mascotas(); break;
     case 4: panel_modo(); break; /* el selector de modos, en el menú de ajustes */
     case 5: panel_mas_ajustes(); break;
+    case 6: panel_version(); break;
     case 9: panel_ajustes(); break;
     default: break;
     }
@@ -3050,6 +3054,37 @@ static void panel_mas_ajustes(void)
         if (!s_nino) { lv_obj_t *tt = texto(b, "LISTA PARA CRECER", C_BLANCO, 2, 200); lv_obj_align(tt, LV_ALIGN_LEFT_MID, 58, 0); }
     }
     volver(mas_aj_cb, 9);
+}
+
+/* --- (1.0.09) la versión: número, nombre y fecha; desde aquí se pide actualizar por Wi-Fi --- */
+static void version_cb(lv_event_t *e)
+{
+    const int q = (int)(intptr_t)lv_event_get_user_data(e);
+    if (q == 1) { cerrar_panel(); ui_splash("ACTUALIZAR", "REINICIANDO EN MODO WI-FI...", false, 8000); accion(UI_ACCION_ACTUALIZAR, 0); }
+    else panel_ajustes();
+}
+static void panel_version(void)
+{
+    abrir_tarjeta(PANEL_VERSION, 360, 360);
+    lv_obj_t *t = texto(s_tarjeta, "VERSIÓN " FW_VERSION, C_TINTA, 3, 0);
+    lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 22);
+    lv_obj_t *n = texto_c(s_tarjeta, FW_NOMBRE, C_VIOLETA, 2, 300);
+    lv_obj_align(n, LV_ALIGN_TOP_MID, 0, 64);
+    char f[48] = "";
+#ifdef BUILD_UNIX_TIME
+    { static const char *const MES[12] = {"ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"};
+      const time_t bt = (time_t)BUILD_UNIX_TIME; struct tm tm; gmtime_r(&bt, &tm);
+      snprintf(f, sizeof f, "COMPILADA EL %d-%s-%d", tm.tm_mday, MES[tm.tm_mon % 12], tm.tm_year + 1900); }
+#endif
+    if (f[0]) { lv_obj_t *fe = texto(s_tarjeta, f, C_TINTA, 2, 0); lv_obj_align(fe, LV_ALIGN_TOP_MID, 0, 100); }
+    lv_obj_t *ex = texto_c(s_tarjeta, "PARA BUSCAR UNA MÁS NUEVA EL ORBE SE REINICIA EN MODO WI-FI. LA MASCOTA QUEDA GUARDADA.", C_TINTA, 2, 290);
+    lv_obj_align(ex, LV_ALIGN_TOP_MID, 0, 138);
+    lv_obj_t *b = boton(s_tarjeta, 250, 56, version_cb, 1);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 236);
+    lv_obj_set_style_bg_color(b, lv_color_hex(C_VERDE), 0);
+    lv_obj_t *bt = texto(b, "ACTUALIZAR", C_BLANCO, 3, 230);
+    lv_obj_center(bt);
+    volver(version_cb, 0);
 }
 
 /* --- el país: se escribe (con sugerencias). Si no está en la lista (o es inventado), pregunta en qué estación
@@ -4667,6 +4702,13 @@ static void panel_mas(void)
             lv_obj_t *ic = icono(bt, AI[i], 5);
             lv_obj_align(ic, LV_ALIGN_CENTER, 0, s_nino ? 0 : -14);
             if (!s_nino) { lv_obj_t *tt = texto(bt, TXT[i], C_BLANCO, 2, 100); lv_obj_align(tt, LV_ALIGN_BOTTOM_MID, 0, -8); }
+        }
+        { /* (1.0.09) abajo: la versión que tiene; al tocarla, la pantalla de actualizar */
+            lv_obj_t *bv = boton(s_tarjeta, 236, 44, ajustes_cb, 6);
+            lv_obj_align(bv, LV_ALIGN_TOP_MID, 0, y0 + 2 * 118 + 4);
+            lv_obj_set_style_radius(bv, 16, 0);
+            lv_obj_t *tv = texto(bv, "VERSIÓN " FW_VERSION, 0xFFE27A, 2, 220);
+            lv_obj_center(tv);
         }
     }
 }
@@ -16802,7 +16844,7 @@ static void tick_cb_cuerpo(void)
 /* ======================================================================
  * Prueba de los paneles: que nada quede fuera del círculo ni tape la X o la flecha de volver
  * ==================================================================== */
-#define PRUEBA_PANELES 84
+#define PRUEBA_PANELES 85
 #ifndef MARGEN_PRUEBA
 #define MARGEN_PRUEBA 12 /* px hacia adentro del vidrio */
 #endif
@@ -16814,7 +16856,7 @@ static const char *const PRUEBA_NOMBRE[PRUEBA_PANELES] = {
     "rincon-ropa", "rincon-juguetes", "objeto", "genero", "carta-hoja", "historia", "pais", "ritmo", "pantalla2", "pecera",
     "verso-propuesta", "verso-tilo", "verso-nuestra", "verso-prisma", "verso-todos", "biblioteca", "comida-temporada", "ella-barras", "paleta-0", "paleta-1", "paleta-2", "paleta-3", "paleta-4", "paleta-5", "paleta-6", "paleta-7", "verso-cuchara",
     "verso-nombre", "verso-carta", "prisma", "tilde-chisme", "brizna", "pagina-tilo", "pagina-tilo-leer", "animales", "rito-pantalla", "rito-hoja", "nota-tilde",
-    "cristales-menu", "canciones", "canciones-5", "libro-narradores", "verso-fin", "rito-oro"};
+    "cristales-menu", "canciones", "canciones-5", "libro-narradores", "verso-fin", "rito-oro", "version"};
 int ui_panel_actual(void) { return (int)s_panel; }
 int ui_test_count(void) { return PRUEBA_PANELES; }
 int ui_juego_actual(void) { return (int)s_juego; }
@@ -16935,6 +16977,7 @@ int ui_test_panel(int k)
     }
     case 57: s_mas_tab = 0; s_ella_pag = 0; panel_mas(); s_ella_pag = 1; panel_mas(); break;
     case 55: s_bolsa_libro = 1; s_bolsa_pag = 0; panel_bolsa(); break;
+    case 84: panel_version(); break; /* (1.0.09) */
     case 42: { int id = -1; for (int i = 0; i < PET_OBJETOS && id < 0; i++) if (s_pet->bolsa[i]) id = i; if (id < 0) return 0; panel_objeto(id); break; }
     }
     if (s_panel == PANEL_NINGUNO) return 0;

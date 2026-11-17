@@ -27,6 +27,8 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "hal.h"
+#include "ota.h"     /* (1.0.09) actualizar por Wi-Fi */
+#include "version.h" /* (1.0.09) FW_VERSION */
 #include "esp_timer.h"
 #include "esp_pm.h"
 #include "esp_sleep.h"
@@ -1641,7 +1643,9 @@ static void comando_usb(const char *l)
 {
     if (strncmp(l, "MASCOTA ", 8)) return;
     l += 8;
-    if (!strcmp(l, "HOLA")) {
+    if (!strcmp(l, "VERSION")) { /* (1.0.09) qué versión tiene: «MASCOTA VERSION 1.0.09 <nombre>» */
+        printf("MASCOTA VERSION %s %s\n", FW_VERSION, FW_NOMBRE);
+    } else if (!strcmp(l, "HOLA")) {
         printf("MASCOTA OK %d %s\n", PET_SAVE_VERSION, s_pet.nombre);
     } else if (!strncmp(l, "HORA ", 5)) {
         long long u = 0;
@@ -1813,13 +1817,19 @@ void app_main(void)
     s_arr_sub = 0; s_arr_ui = 0;
     s_arr_marca = ARR_MARCA;
     PASO(0);
-    { static esp_timer_handle_t vig; const esp_timer_create_args_t a = {.callback = arranque_vigilante, .name = "arr_vig"};
+    static esp_timer_handle_t vig;
+    { const esp_timer_create_args_t a = {.callback = arranque_vigilante, .name = "arr_vig"};
       if (esp_timer_create(&a, &vig) == ESP_OK) esp_timer_start_once(vig, 12ull * 1000000ull); }
     vTaskPrioritySet(NULL, 8); /* la lógica del juego por encima de LVGL (4) y del sonido: antes se quedaba sin tiempo y no corría nunca */
     hal_night_boot_check(); /* (v101) si dormía de noche y nadie la despertó, vuelve a dormir aquí (en un momento) */
     hal_reserve_boot_check(); /* si estaba en modo reserva y sigue sin carga, vuelve a dormir aquí */
     ESP_ERROR_CHECK(hal_storage_init());
     PASO(1);
+    if (ota_modo_pedido()) { /* (1.0.09) se pidió actualizar por Wi-Fi: modo liviano, sin el juego (no vuelve: termina reiniciando) */
+        if (vig) esp_timer_stop(vig);
+        PASO(18);
+        ota_modo();
+    }
     hal_usb_init();
     PASO(2); /* primero: la tarea del USB necesita RAM interna, que después se acaba */
     cargar_zona();
@@ -1885,8 +1895,27 @@ void app_main(void)
         if (s_pet.edad_dueno) { /* ya configurada: te saluda al encender; si el reinicio fue por un fallo, lo dice en rojo */
             const esp_reset_reason_t rr = esp_reset_reason();
             const bool fallo = rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT || rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT || rr == ESP_RST_BROWNOUT;
+            /* (1.0.09) ¿cambió la versión desde el último arranque? (se actualizó) ¿o una actualización falló y volvió a la de antes? */
+            char vant[33] = "", vmala[33] = "", t1[64];
+            size_t lv = sizeof vant, lm = sizeof vmala;
+            if (!hal_storage_get("fwv", vant, &lv)) vant[0] = 0;
+            vant[sizeof vant - 1] = 0;
+            if (!hal_storage_get("fwmala", vmala, &lm)) vmala[0] = 0;
+            vmala[sizeof vmala - 1] = 0;
+            const char *fallida = ota_version_fallida();
+            const bool volvio = fallida && strcmp(fallida, vmala) && strcmp(fallida, FW_VERSION);
+            const bool nueva = strcmp(vant, FW_VERSION) != 0;
+            if (volvio) hal_storage_set("fwmala", fallida, strlen(fallida) + 1);
+            if (nueva) hal_storage_set("fwv", FW_VERSION, strlen(FW_VERSION) + 1);
             if (fallo) ui_splash("¡UPS! ME REINICIÉ", rr == ESP_RST_PANIC ? "FALLO DEL PROGRAMA (PÁNICO)" : (rr == ESP_RST_BROWNOUT ? "POCA ENERGÍA" : "SE TRABÓ (WATCHDOG)"), true, 10000);
-            else ui_splash("¡HOLA! ¡VOLVISTE!", "", false, 3000);
+            else if (volvio) {
+                snprintf(t1, sizeof t1, "LA %s NO FUNCIONÓ", fallida);
+                hal_evento("ACTUALIZACIÓN: la %s no arrancó bien y se volvió a la %s", fallida, FW_VERSION);
+                ui_splash(t1, "VOLVÍ A LA VERSIÓN " FW_VERSION, true, 8000);
+            } else if (nueva) {
+                hal_evento("ACTUALIZACIÓN: ahora en la versión %s (antes %s)", FW_VERSION, vant[0] ? vant : "sin número");
+                ui_splash("¡VERSIÓN " FW_VERSION "!", FW_NOMBRE, false, 6000);
+            } else ui_splash("¡HOLA! ¡VOLVISTE!", "", false, 3000);
         }
         hal_display_unlock();
         hal_ram_log("interfaz");
@@ -1909,6 +1938,8 @@ void app_main(void)
     while (true) {
         uint32_t t = ahora();
         bool hubo_accion = false;
+        { static bool confirmada; /* (1.0.09) un minuto jugando sin caerse: esta versión queda confirmada (si no, el arranque vuelve a la anterior) */
+          if (!confirmada && esp_timer_get_time() > 60ll * 1000000ll) { confirmada = true; ota_arranque_ok(); } }
         if (s_guardar_ext) { s_guardar_ext = false; guardar_pronto = true; hubo_accion = true; }
 
         hal_main_tick();
@@ -2107,6 +2138,14 @@ void app_main(void)
             case UI_ACCION_FIESTA: pet_party_done(&s_pet, m.arg, t); break;
             case UI_ACCION_VIAJE_NO: pet_trip_not_yet(&s_pet, t); break;
             case UI_ACCION_DESPEDIDA_NAT: s_pet.despedida_natural = (uint8_t)(m.arg != 0); break;
+            case UI_ACCION_ACTUALIZAR: /* (1.0.09) guarda todo y reinicia en el modo actualizar por Wi-Fi */
+                pet_seal(&s_pet);
+                hal_storage_save(&s_pet);
+                guardar_dispositivo();
+                hal_log("actualizar: reinicio en el modo Wi-Fi (versión %s)", FW_VERSION);
+                hal_log_flush(true);
+                ota_pedir_modo();
+                break;
             case UI_ACCION_FOTO:
                 if (m.arg & 0x10000) pet_photo_legacy(&s_pet, m.arg & 0xFFFF);
                 else pet_photo_add(&s_pet, m.arg); /* la más vieja (si había que borrarla) ya la borró la interfaz */
@@ -2675,6 +2714,7 @@ void app_main(void)
                     if (x && (!prox || x < prox)) prox = x;
                 }
                 ESP_LOGW(TAG, "casi sin batería: modo reserva");
+                ota_arranque_ok(); /* (1.0.09) despertar es un arranque nuevo: que no cuente como versión fallida */
                 hal_reserve_enter(prox);
             }
         }
@@ -2732,6 +2772,7 @@ void app_main(void)
                     hal_log("energia: SUEÑO PROFUNDO de noche hasta dentro de %u min (batería %d%%, %d mV)", (unsigned)((hasta - t) / 60u), hal_battery_percent(), hal_battery_mv());
                     hal_storage_save(&s_pet);
                     hal_log_flush(true);
+                    ota_arranque_ok(); /* (1.0.09) */
                     hal_night_enter(hasta); /* no vuelve: al despertar la placa arranca de nuevo */
                 }
             }

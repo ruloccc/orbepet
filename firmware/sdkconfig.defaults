@@ -92,3 +92,15 @@ CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 # verificar el programa al salir del sueño profundo (despierta cada 5 s a mirar si apretaron PWR o enchufaron el cable)
 CONFIG_SPIRAM_MEMTEST=n
 CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP=y
+
+# (1.0.09) actualizar por Wi-Fi: si la versión nueva no llega a confirmarse (se cae antes de su primer minuto), el arranque vuelve
+# solo a la anterior. Es una opción del ARRANQUE (bootloader): queda puesta al grabar la 1.0.09 con cable («idf.py flash» lo graba).
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+# las memorias del Wi-Fi, de la red y de la conexión segura van a la PSRAM: la RAM interna está justa
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+# los celulares mandan cabeceras largas
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
