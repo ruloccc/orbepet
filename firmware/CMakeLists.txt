@@ -13,3 +13,17 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # (8 KB) una lista de LV_INV_BUF_SIZE*4+4 rectángulos de 16 bytes: con 96 eran 6,2 KB, se desbordaba la pila y la placa
 # entraba en pánico al dibujar muchas cosas chicas a la vez, como las gotitas del chapoteo.)
 project(mascota)
+
+# (1.0.09) la red, la conexión segura y el Bluetooth se compilan para ocupar poco (-Os): no necesitan velocidad y así el
+# programa cabe en ota_1. El juego, LVGL y el dibujo siguen con -O2.
+foreach(_c mbedtls lwip wpa_supplicant bt esp_netif esp_http_server esp_http_client esp_https_ota tcp_transport esp-tls)
+    idf_component_get_property(_lib ${_c} COMPONENT_LIB)
+    if(_lib)
+        target_compile_options(${_lib} PRIVATE -Os)
+    endif()
+endforeach()
+foreach(_t mbedtls mbedcrypto mbedx509) # (las librerías de verdad de mbedTLS)
+    if(TARGET ${_t})
+        target_compile_options(${_t} PRIVATE -Os)
+    endif()
+endforeach()
