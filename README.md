@@ -807,6 +807,13 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.16 — ya no se cae al crear una mascota nueva
+
+- **Pánico al crear una mascota** (desde el 108): al cambiar o estrenar mascota, `po_fuera()` escondía la imagen de
+  Pochi y su plato, que no existen si Pochi nunca había venido: `lv_obj_add_flag(NULL)`. Ahora `ocultar()` no hace nada
+  con un objeto que todavía no se crea (vale para todo el juego).
+- Trae todo lo de la 1.0.15 (teclado grande con ojito, Versión con fecha y hora, juego igual de rápido).
+
 ## Versión 1.0.15 — teclado grande, versión con fecha y hora, juego igual de rápido
 
 - **Ajustes → Versión:** sin la explicación; muestra versión, nombre, fecha y hora de compilación (hora de su país) y

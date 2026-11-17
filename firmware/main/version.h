@@ -11,8 +11,8 @@
  */
 #pragma once
 
-#define FW_VERSION "1.0.15"
-#define FW_NOMBRE "TECLADO GRANDE"
+#define FW_VERSION "1.0.16"
+#define FW_NOMBRE "ARREGLO AL CREAR MASCOTA"
 
 /* «1.0.09» → 10009, para comparar cuál es más nueva (−1 si el texto no es una versión) */
 static inline int fw_codigo(const char *v)

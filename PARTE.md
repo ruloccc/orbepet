@@ -1,7 +1,7 @@
 # PARTE — estado del trabajo (17-nov-2026, 16:30)
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.15** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
+Versión en curso: **1.0.16** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
 Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
@@ -38,6 +38,11 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 ---
 
 ## 2. Qué se hizo en las últimas versiones
+
+**1.0.16 (arreglo al crear mascota)** — pánico en po_fuera() (ui_pochi.inc) con s_po_img NULL. ocultar() ahora
+ignora NULL. Publicada en GitHub (con la 1.0.15 adentro).
+EN CURSO: juegos de a dos (ping pong, tira y afloja, memorice, escondidas) con fondos en la memoria de recursos
+(herramientas/dibujar_juegos_dos.py; falta empaquetar, cargar desde /res, los juegos y la instalación por USB/Wi-Fi).
 
 **1.0.15 (teclado grande)** — SOLO zip por USB (el usuario pidió no pasarla por GitHub: commit local, sin push).
 El usuario notó la 1.0.14 «muy lenta»: los datos de cada cuadro volvieron a la RAM interna (s_pet, s_ani, s_flot,

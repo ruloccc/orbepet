@@ -114,6 +114,7 @@ void __wrap_lv_obj_move_to_index(lv_obj_t *obj, int32_t index)
 }
 static void ocultar(lv_obj_t *o, bool si)
 {
+    if (!o) return; /* (1.0.16) un objeto que todavía no se crea: antes era un pánico (po_fuera al crear una mascota nueva sin que Pochi hubiera venido) */
     if (si) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
 }
