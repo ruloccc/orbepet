@@ -807,6 +807,20 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.11 — arreglo del modo Wi-Fi (se graba CON CABLE si vienes de la 1.0.09)
+
+- **El pánico al entrar al modo actualizar (1.0.09):** `esp_wifi_init` devolvía 0x101 (sin memoria). La pantalla
+  (LVGL, sus tareas y búferes) se come ~70 KB de RAM interna (de 123 KB a 53 KB según el registro) y se iniciaba antes
+  que el Wi-Fi. Ahora el orden es: Wi-Fi → página web → tarea de descarga → pantalla, y la pantalla **solo si quedan
+  84 KB o más**; si no, el modo funciona igual sin pantalla (todo se ve en la página del celular). Ningún paso usa
+  ESP_ERROR_CHECK: si el Wi-Fi no parte, avisa y vuelve al juego.
+- Wi-Fi con menos búferes internos (4 fijos de recepción, sin AMPDU).
+- **Diagnóstico:** lo que pasó en el modo actualizar (RAM al entrar, después del Wi-Fi y de la pantalla, errores,
+  cómo salió) queda en RTC y el siguiente arranque normal lo anota en el registro como
+  «ACTUALIZACIÓN (modo Wi-Fi): ...». Así se ve en el probador.
+- Ajustes → Versión muestra la red (ORBEPET-XXXX), la clave y la dirección. La clave pasa a **ORBEPET1** (mayúsculas,
+  como escribe el orbe).
+
 ## Versión 1.0.10 — el huevo tarda 5 minutos; el juego igual de rápido (se graba CON CABLE: cambia la tabla de particiones)
 
 **El primer huevo vuelve a tardar 5 minutos**, como se acordó al comienzo (el 107 lo había dejado en 9 segundos).
@@ -833,7 +847,7 @@ Al arrancar con una versión distinta a la anterior dice «¡VERSIÓN x!». Por 
 
 **Actualizar:** Ajustes → Versión → ACTUALIZAR. Guarda la partida y reinicia en un **modo actualizar** liviano
 (`firmware/main/ota.c`, sin el juego: sobra memoria para el Wi-Fi):
-- Crea su red **ORBEPET-XXXX** (clave `orbepet1`). Desde el celular, entra a esa red y abre **http://192.168.4.1**:
+- Crea su red **ORBEPET-XXXX** (clave `ORBEPET1`). Desde el celular, entra a esa red y abre **http://192.168.4.1**:
   ahí eliges el Wi-Fi de la casa (queda guardado), buscas la actualización o subes un `mascota.bin` a mano.
 - Con el Wi-Fi de la casa: lee `version.json` de `ruloccc/orbepet-firmware` (raw.githubusercontent.com); si hay una
   más nueva, baja `mascota.bin`, la instala en la otra ranura y reinicia. Si no, dice «¡ESTÁS AL DÍA!».

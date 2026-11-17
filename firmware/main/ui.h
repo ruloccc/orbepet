@@ -239,5 +239,6 @@ void ui_touch_reset(void);
 int ui_touch_get(int *x, int *y, int max); /* cuántos toques hubo desde el reset (y los primeros 16) */
 void ui_test_casita(int modo); /* (pruebas) 0 sale de la casita, 1 entra a visitarla, 2 salta en la cama */
 const char *ui_test_panel_name(int k);
-void ui_test_huevo_elegido(int especie); /* (1.0.10, pruebas) el primer huevo ya elegido: va a llegar al prado */
+void ui_test_huevo_elegido(int especie);
+void ui_set_red_ota(const char *red); /* (1.0.11) la red propia del modo actualizar, para Ajustes → Versión */ /* (1.0.10, pruebas) el primer huevo ya elegido: va a llegar al prado */
 int ui_check_panel(char *out, int n);

@@ -1,6 +1,7 @@
 /* Actualizar el firmware por Wi-Fi: ver ota.h. */
 #include "ota.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,7 @@
 #include "esp_app_format.h"
 #include "esp_attr.h"
 #include "esp_crt_bundle.h"
+#include "esp_heap_caps.h"
 #include "esp_event.h"
 #include "esp_http_client.h"
 #include "esp_http_server.h"
@@ -35,13 +37,45 @@ static const char *TAG = "ota";
 #ifndef OTA_URL_BASE
 #define OTA_URL_BASE "https://raw.githubusercontent.com/ruloccc/orbepet-firmware/main/"
 #endif
-#define OTA_AP_CLAVE "orbepet1"
+#define OTA_AP_CLAVE "ORBEPET1" /* (1.0.11) en mayúsculas: el orbe solo escribe mayúsculas */
 #define OTA_INACTIVO_MS (15u * 60u * 1000u) /* 15 min sin que nadie haga nada: vuelve al juego */
 
 /* ------------------------------------------------------------------ marca entre reinicios */
 
 #define OTA_MARCA 0x07A0B0E7u
 static RTC_NOINIT_ATTR uint32_t s_marca;
+/* (1.0.11) lo que pasó en el modo actualizar (memoria, errores): el próximo arranque normal lo anota en el registro */
+#define OTA_DIAG_MARCA 0xD1A60B7Eu
+static RTC_NOINIT_ATTR uint32_t s_diag_marca;
+static RTC_NOINIT_ATTR char s_diag[240];
+static void diag(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void diag(const char *fmt, ...)
+{
+    if (s_diag_marca != OTA_DIAG_MARCA) { s_diag_marca = OTA_DIAG_MARCA; s_diag[0] = 0; }
+    s_diag[sizeof s_diag - 1] = 0;
+    size_t k = strlen(s_diag);
+    if (k + 4 >= sizeof s_diag) return;
+    if (k) { s_diag[k++] = ' '; s_diag[k++] = '|'; s_diag[k++] = ' '; s_diag[k] = 0; }
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(s_diag + k, sizeof s_diag - k, fmt, ap);
+    va_end(ap);
+    ESP_LOGI(TAG, "diag: %s", s_diag + k);
+}
+const char *ota_diagnostico(void)
+{
+    if (s_diag_marca != OTA_DIAG_MARCA) return NULL;
+    s_diag_marca = 0;
+    s_diag[sizeof s_diag - 1] = 0;
+    return s_diag[0] ? s_diag : NULL;
+}
+static unsigned ram_kb(void) { return (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024); }
+void ota_nombre_red(char *b, size_t n)
+{
+    uint8_t mac[6] = {0};
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    snprintf(b, n, "ORBEPET-%02X%02X", mac[4], mac[5]);
+}
 
 void ota_pedir_modo(void)
 {
@@ -166,23 +200,25 @@ static void evento(void *arg, esp_event_base_t base, int32_t id, void *datos)
     (void)datos;
 }
 
-static void wifi_iniciar(void)
+/* (1.0.11) sin ESP_ERROR_CHECK: si algo falla (en la 1.0.09 esp_wifi_init daba «sin memoria» y la placa entraba en
+ * pánico) se anota, se avisa y se vuelve al juego */
+static esp_err_t wifi_iniciar(void)
 {
-    ESP_ERROR_CHECK(esp_netif_init());
-    esp_err_t e = esp_event_loop_create_default();
-    if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_ERROR_CHECK(e);
+    esp_err_t e = esp_netif_init();
+    if (e != ESP_OK) return e;
+    e = esp_event_loop_create_default();
+    if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) return e;
     esp_netif_create_default_wifi_ap();
     esp_netif_create_default_wifi_sta();
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    e = esp_wifi_init(&cfg);
+    if (e != ESP_OK) return e;
     esp_wifi_set_storage(WIFI_STORAGE_RAM); /* nada del Wi-Fi a la memoria: ahí vive la partida */
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, evento, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, evento, NULL);
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-
-    uint8_t mac[6] = {0};
-    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
-    snprintf(s_ap, sizeof s_ap, "ORBEPET-%02X%02X", mac[4], mac[5]);
+    e = esp_wifi_set_mode(WIFI_MODE_APSTA);
+    if (e != ESP_OK) return e;
+    ota_nombre_red(s_ap, sizeof s_ap);
     wifi_config_t ap = {0};
     snprintf((char *)ap.ap.ssid, sizeof ap.ap.ssid, "%s", s_ap);
     ap.ap.ssid_len = (uint8_t)strlen(s_ap);
@@ -190,7 +226,8 @@ static void wifi_iniciar(void)
     ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
     ap.ap.max_connection = 2;
     ap.ap.channel = 1;
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
+    e = esp_wifi_set_config(WIFI_IF_AP, &ap);
+    if (e != ESP_OK) return e;
     if (s_wifi.ssid[0]) {
         wifi_config_t c = {0};
         snprintf((char *)c.sta.ssid, sizeof c.sta.ssid, "%s", s_wifi.ssid);
@@ -198,7 +235,7 @@ static void wifi_iniciar(void)
         c.sta.threshold.authmode = s_wifi.clave[0] ? WIFI_AUTH_WEP : WIFI_AUTH_OPEN;
         esp_wifi_set_config(WIFI_IF_STA, &c);
     }
-    ESP_ERROR_CHECK(esp_wifi_start());
+    return esp_wifi_start();
 }
 
 /* ------------------------------------------------------------------ internet: version.json y descarga */
@@ -268,7 +305,7 @@ static void descargar(const char *ver)
     esp_https_ota_config_t oc = {.http_config = &hc};
     esp_https_ota_handle_t h = NULL;
     esp_err_t e = esp_https_ota_begin(&oc, &h);
-    if (e != ESP_OK) { estado("NO SE PUDO BAJAR", esp_err_to_name(e), -1); return; }
+    if (e != ESP_OK) { diag("descarga: no partió (error 0x%x), RAM %u KB", (unsigned)e, ram_kb()); estado("NO SE PUDO BAJAR", "PRUEBA DE NUEVO", -1); return; }
     esp_app_desc_t d;
     e = esp_https_ota_get_img_desc(h, &d);
     if (e != ESP_OK || strcmp(d.project_name, esp_app_get_description()->project_name)) {
@@ -285,7 +322,7 @@ static void descargar(const char *ver)
     }
     if (e == ESP_OK && esp_https_ota_is_complete_data_received(h)) e = esp_https_ota_finish(h);
     else { esp_https_ota_abort(h); if (e == ESP_OK) e = ESP_FAIL; }
-    if (e != ESP_OK) { estado("LA DESCARGA FALLÓ", "SIGUE LA VERSIÓN DE ANTES. PRUEBA DE NUEVO", -1); return; }
+    if (e != ESP_OK) { diag("descarga: falló (error 0x%x)", (unsigned)e); estado("LA DESCARGA FALLÓ", "SIGUE LA VERSIÓN DE ANTES. PRUEBA DE NUEVO", -1); return; }
     snprintf(t, sizeof t, "¡LISTO! INSTALADA LA %s", d.version);
     estado(t, "REINICIANDO...", 100);
     ESP_LOGI(TAG, "bajada la %s desde internet (estaba en la %s)", d.version, FW_VERSION);
@@ -304,6 +341,7 @@ static void buscar(void)
     estado("BUSCANDO LA ÚLTIMA VERSIÓN...", "", -1);
     char ver[33] = "", nombre[64] = "";
     if (!leer_version_publicada(ver, sizeof ver, nombre, sizeof nombre)) {
+        diag("version.json: no se pudo leer (RAM %u KB)", ram_kb());
         estado("NO PUDE VER LA ÚLTIMA VERSIÓN", "¿HAY INTERNET? PRUEBA DE NUEVO", -1);
         soltar();
         return;
@@ -565,12 +603,13 @@ static esp_err_t h_subir(httpd_req_t *r)
 static void web_iniciar(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.stack_size = 8192;
+    c.stack_size = 7168;
     c.max_uri_handlers = 10;
     c.lru_purge_enable = true;
     c.recv_wait_timeout = 15;
     httpd_handle_t s = NULL;
-    if (httpd_start(&s, &c) != ESP_OK) { ESP_LOGE(TAG, "no partió el servidor web"); return; }
+    const esp_err_t e = httpd_start(&s, &c);
+    if (e != ESP_OK) { diag("servidor web: error 0x%x", (unsigned)e); return; }
     const httpd_uri_t U[] = {
         {.uri = "/", .method = HTTP_GET, .handler = h_pagina},
         {.uri = "/estado", .method = HTTP_GET, .handler = h_estado},
@@ -672,25 +711,45 @@ void ota_modo(void)
     s_wifi.ssid[sizeof s_wifi.ssid - 1] = 0;
     s_wifi.clave[sizeof s_wifi.clave - 1] = 0;
 
-    lv_display_t *d = hal_display_init();
-    wifi_iniciar();
+    /* (1.0.11) ORDEN: la pantalla (LVGL y sus tareas) se come ~70 KB de RAM interna; en la 1.0.09 se iniciaba primero y
+     * al Wi-Fi ya no le quedaba (esp_wifi_init: sin memoria → pánico). Ahora: Wi-Fi, página y tarea primero; la pantalla
+     * después y solo si sobra memoria. Sin pantalla igual funciona: todo se ve en la página del celular. */
+    s_diag_marca = 0;
+    diag("v%s: RAM interna al entrar %u KB", FW_VERSION, ram_kb());
+    ota_nombre_red(s_ap, sizeof s_ap);
+    esp_err_t e = wifi_iniciar();
+    if (e == ESP_OK) diag("wifi ok, quedan %u KB", ram_kb()); else diag("wifi: error 0x%x (0x101 = sin memoria), quedan %u KB", (unsigned)e, ram_kb());
+    if (e != ESP_OK) {
+        lv_display_t *d0 = ram_kb() >= 80 ? hal_display_init() : NULL;
+        estado("NO SE PUDO PRENDER EL WI-FI", "VUELVO AL JUEGO", -1);
+        if (d0 && hal_display_lock()) { pantalla_crear(); pantalla_refrescar(); hal_display_unlock(); }
+        vTaskDelay(pdMS_TO_TICKS(6000));
+        esp_restart();
+    }
     if (s_wifi.ssid[0]) { char b[96]; snprintf(b, sizeof b, "CONECTANDO A %s...", s_wifi.ssid); estado("BUSCANDO INTERNET...", b, -1); }
     else estado("FALTA EL WI-FI DE CASA", "ELÍGELO DESDE EL CELULAR", -1);
-    if (d && hal_display_lock()) { pantalla_crear(); pantalla_refrescar(); hal_display_unlock(); }
     web_iniciar();
-    xTaskCreate(tarea_ota, "ota", 10240, NULL, 5, &s_tarea);
+    if (xTaskCreate(tarea_ota, "ota", 8192, NULL, 5, &s_tarea) != pdPASS) { s_tarea = NULL; diag("sin memoria para la tarea de descarga"); }
+    lv_display_t *d = NULL;
+    const unsigned antes = ram_kb();
+    if (antes >= 84) d = hal_display_init(); /* la pantalla necesita ~70 KB y deja un margen para la conexión segura */
+    diag("pantalla %s (había %u KB), quedan %u KB", d ? "sí" : "NO (falta memoria; todo se ve en el celular)", antes, ram_kb());
+    if (d && hal_display_lock()) { pantalla_crear(); pantalla_refrescar(); hal_display_unlock(); }
     uso();
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(200));
         const uint32_t t = ms();
         if (s_cambio && d && hal_display_lock()) { pantalla_refrescar(); hal_display_unlock(); }
+        if (!s_tarea && s_buscar) { s_buscar = false; buscar(); } /* sin tarea aparte: busca aquí mismo */
         const bool listo = s_reiniciar_ms && (int32_t)(t - s_reiniciar_ms) >= 0;
         const bool aburrido = !s_ocupado && t - s_ultimo_uso_ms > OTA_INACTIVO_MS;
         if (listo || (s_salir && !s_ocupado) || aburrido) {
             if (!listo) estado("VOLVIENDO AL JUEGO...", "", -1);
             if (d && hal_display_lock()) { pantalla_refrescar(); hal_display_unlock(); }
             vTaskDelay(pdMS_TO_TICKS(600));
+            diag("salgo: %s, mínimo de RAM interna %u KB", listo ? "versión nueva instalada" : (s_salir ? "SALIR" : "15 min sin uso"),
+                 (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
             esp_wifi_stop();
             esp_restart();
         }

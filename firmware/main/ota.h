@@ -10,6 +10,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 
 /* desde el juego: deja la marca y reinicia (la partida hay que guardarla antes) */
 void ota_pedir_modo(void);
@@ -19,5 +20,9 @@ bool ota_modo_pedido(void);
 void ota_modo(void);
 /* la versión que está corriendo funciona: cancela la vuelta atrás (llamar tras ~1 minuto de juego y antes de dormir profundo) */
 void ota_arranque_ok(void);
+/* (1.0.11) lo que pasó en el último modo actualizar (para el registro; NULL si nada). Se lee una sola vez. */
+const char *ota_diagnostico(void);
+/* (1.0.11) el nombre de la red propia del modo actualizar (ORBEPET-XXXX), sin prender el Wi-Fi */
+void ota_nombre_red(char *b, size_t n);
 /* si la última actualización falló y se volvió atrás: la versión que falló (NULL si no) */
 const char *ota_version_fallida(void);

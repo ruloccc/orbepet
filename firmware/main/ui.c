@@ -3064,6 +3064,8 @@ static void version_cb(lv_event_t *e)
     if (q == 1) { cerrar_panel(); ui_splash("ACTUALIZAR", "REINICIANDO EN MODO WI-FI...", false, 8000); accion(UI_ACCION_ACTUALIZAR, 0); }
     else panel_ajustes();
 }
+static char s_red_ota[24] = "ORBEPET";
+void ui_set_red_ota(const char *red) { if (red) snprintf(s_red_ota, sizeof s_red_ota, "%s", red); }
 static void panel_version(void)
 {
     abrir_tarjeta(PANEL_VERSION, 360, 360);
@@ -3078,10 +3080,12 @@ static void panel_version(void)
       snprintf(f, sizeof f, "COMPILADA EL %d-%s-%d", tm.tm_mday, MES[tm.tm_mon % 12], tm.tm_year + 1900); }
 #endif
     if (f[0]) { lv_obj_t *fe = texto(s_tarjeta, f, C_TINTA, 2, 0); lv_obj_align(fe, LV_ALIGN_TOP_MID, 0, 100); }
-    lv_obj_t *ex = texto_c(s_tarjeta, "PARA BUSCAR UNA MÁS NUEVA EL ORBE SE REINICIA EN MODO WI-FI. LA MASCOTA QUEDA GUARDADA.", C_TINTA, 2, 290);
-    lv_obj_align(ex, LV_ALIGN_TOP_MID, 0, 138);
-    lv_obj_t *b = boton(s_tarjeta, 250, 56, version_cb, 1);
-    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 236);
+    char ex_t[200];
+    snprintf(ex_t, sizeof ex_t, "SE REINICIA EN MODO WI-FI (LA MASCOTA QUEDA GUARDADA). EN EL CELULAR: RED %s, CLAVE ORBEPET1 Y ABRE 192.168.4.1", s_red_ota);
+    lv_obj_t *ex = texto_c(s_tarjeta, ex_t, C_TINTA, 2, 300);
+    lv_obj_align(ex, LV_ALIGN_TOP_MID, 0, 132);
+    lv_obj_t *b = boton(s_tarjeta, 230, 52, version_cb, 1);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 262);
     lv_obj_set_style_bg_color(b, lv_color_hex(C_VERDE), 0);
     lv_obj_t *bt = texto(b, "ACTUALIZAR", C_BLANCO, 3, 230);
     lv_obj_center(bt);

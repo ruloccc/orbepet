@@ -1863,6 +1863,8 @@ void app_main(void)
     hal_res_init();
     PASO(13);
     hal_log_init();
+    { const char *dg = ota_diagnostico(); if (dg) hal_evento("ACTUALIZACIÓN (modo Wi-Fi): %s", dg); } /* (1.0.11) */
+    { char red[24]; ota_nombre_red(red, sizeof red); ui_set_red_ota(red); } /* (1.0.11) para Ajustes → Versión */
     { const char *m = hal_night_wake_reason(); if (m) hal_log("energia: desperté del sueño profundo de noche (%s)", m); } /* (v101) */
     PASO(14);
     if (tenia_marca && paso_antes < 18) /* registro guardado en el dispositivo: desde acá anota el motivo del arranque (y al resumen de eventos raros) */
