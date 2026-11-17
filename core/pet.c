@@ -3076,7 +3076,10 @@ static void paso(pet_t *p, uint32_t t, float dt, bool vivo)
         if (luz && !agotada && N[NEED_ENERGIA] > 25 && terca > 0.35f && pet_mode(p) != MODO_INFANTE &&
             t - p->ultima_interaccion < aguante) {
             luz = false;
-            if (vivo && chance(p, prob_paso(1.2f, dt))) { sonar(p, SND_BOSTEZO, t); push_event(p, EV_NIEGA, ACT_DORMIR, 0, t); }
+            /* (1.0.12) antes: chance(prob_paso(1.2f, dt)), pero prob_paso recorta a 1 por hora → probabilidad 100 % en CADA paso:
+             * bostezaba y decía «¡UN RATITO MÁS!» cada segundo mientras la luz estuviera apagada. Ahora a lo más cada 4 minutos. */
+            static uint32_t s_terca_aviso;
+            if (vivo && (t - s_terca_aviso >= 240u || t < s_terca_aviso)) { s_terca_aviso = t; sonar(p, SND_BOSTEZO, t); push_event(p, EV_NIEGA, ACT_DORMIR, 0, t); }
         }
         bool hora_de_dormir = es_noche_su(p, t) && N[NEED_ENERGIA] < 60 && (t - p->ultima_interaccion) > 1800; /* (sola, a su hora: igual que siempre) */
         if (agotada || luz || hora_de_dormir) {

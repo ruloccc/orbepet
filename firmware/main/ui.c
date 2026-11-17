@@ -14757,6 +14757,7 @@ void ui_show_event(const pet_t *p, const pet_event_t *e)
         case ACT_DESPERTAR: t = "ZZZ... CINCO MINUTITOS MÁS"; ic = ICO_ZETA; break;
         default: break;
         }
+        if (ui_escena_especial() & 2) break; /* (1.0.12) cruzando a otro mundo: no la detiene a medio camino (quedaba entre los dos) */
         if (e->a == ACT_DORMIR) { mascota_modo(M_DUDA, 1200); flotar(ICO_ZETA, NULL, 0, hx + 20, hy, 0); }
         else flotar(ICO_ENOJO, NULL, 0, hx + 24, hy - 6, 150);
         if (t && !s_nino) globo(ic, t, 2600);

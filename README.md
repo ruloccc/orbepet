@@ -807,6 +807,15 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.12 — menos terca al dormir (la partida no cambia)
+
+- **«¡UN RATITO MÁS! NO TENGO SUEÑO...» cada segundo** (con bostezo): con la luz apagada, la terquedad del fw 104
+  usaba `chance(prob_paso(1.2f, dt))`, pero `prob_paso` recorta la tasa a 1 por hora y con 1 la probabilidad es 100 %
+  en cada paso. Ahora resiste igual (aguanta despierta un rato si la estaban tocando) pero lo dice **a lo más cada
+  4 minutos**. Prueba nueva en test_core.
+- **Quedaba a medio camino entre dos mundos:** ese aviso la ponía en «duda» cada segundo y le cortaba el cruce. Ahora,
+  mientras cruza a otro mundo, el aviso no la detiene.
+
 ## Versión 1.0.11 — arreglo del modo Wi-Fi (se graba CON CABLE si vienes de la 1.0.09)
 
 - **El pánico al entrar al modo actualizar (1.0.09):** `esp_wifi_init` devolvía 0x101 (sin memoria). La pantalla

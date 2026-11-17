@@ -1,7 +1,7 @@
 # PARTE — estado del trabajo (17-nov-2026, 16:30)
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.11** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
+Versión en curso: **1.0.12** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
 Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
@@ -38,6 +38,11 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 ---
 
 ## 2. Qué se hizo en las últimas versiones
+
+**1.0.12 (menos terca al dormir)** — con la luz apagada decía «¡UN RATITO MÁS!» y bostezaba cada segundo
+(prob_paso(1.2f) = 100 % por paso) y eso la dejaba a medio cruzar entre mundos. Ahora a lo más cada 4 min
+(estático `s_terca_aviso` en pet.c) y EV_NIEGA no la toca mientras cruza (ui_escena_especial() & 2).
+OJO: `prob_paso(x)` con x ≥ 1 da siempre 1; revisar otros usos con tasas > 1 si aparece algo parecido.
 
 **1.0.11 (arreglo del modo Wi-Fi)** — el usuario grabó la 1.0.09 y al entrar a ACTUALIZAR: pánico en
 `esp_wifi_init` (0x101 sin memoria). La pantalla gasta ~70 KB de RAM interna (inicio 123 KB → pantalla 53 KB). Ahora

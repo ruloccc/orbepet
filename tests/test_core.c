@@ -4754,6 +4754,20 @@ static void test_fw104(void)
             pet_event_t e; while (pet_poll_event(&c, &e)) nc += e.type == EV_NIEGA;
         }
         CHECK(nc == 0, "(fw 104) en modo infante no es terca (%d)", nc);
+        /* (1.0.12) con la luz apagada la terca resiste el sueño, pero NO dice «¡un ratito más!» cada segundo */
+        static pet_t d;
+        nueva(&d, 7, T0);
+        uint32_t td = T0 + 4u * 24u * H + 15u * H; pet_update(&d, td);
+        d.rasgo[TRAIT_TRAVIESA] = 1; d.rasgo[TRAIT_TIMIDA] = 0; d.vinculo = 20;
+        d.dormida = 0; d.necesidad[NEED_ENERGIA] = 70; d.luz_apagada = 1; d.ultima_interaccion = td;
+        vaciar_eventos(&d);
+        int nd = 0;
+        for (int i = 1; i <= 600; i++) { /* diez minutos, de a un segundo (como en la placa) */
+            d.ultima_interaccion = td + (uint32_t)i; /* la siguen tocando */
+            pet_update(&d, td + (uint32_t)i);
+            pet_event_t e; while (pet_poll_event(&d, &e)) nd += e.type == EV_NIEGA && e.a == ACT_DORMIR;
+        }
+        CHECK(nd >= 1 && nd <= 3, "(1.0.12) la terca se resiste a dormir a lo más cada 4 min (%d avisos en 10 min)", nd);
     }
     /* --- paseos de verdad: cuenta con 800+ pasos, máximo 2 por día, el largo trae algo, queda en el diario --- */
     {
