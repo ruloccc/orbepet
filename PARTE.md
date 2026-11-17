@@ -1,7 +1,7 @@
 # PARTE — estado del trabajo (17-nov-2026, 16:30)
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.14** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
+Versión en curso: **1.0.15** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
 Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
@@ -38,6 +38,13 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 ---
 
 ## 2. Qué se hizo en las últimas versiones
+
+**1.0.15 (teclado grande)** — SOLO zip por USB (el usuario pidió no pasarla por GitHub: commit local, sin push).
+El usuario notó la 1.0.14 «muy lenta»: los datos de cada cuadro volvieron a la RAM interna (s_pet, s_ani, s_flot,
+s_gpend, s_chi, s_amb, s_ptxt_info). Falta medir: pedir el registro y comparar «pantalla lenta: dibujar X ms» y
+«vuelta prom». Ojo: ya en la 1.0.09 el prado dibujaba ~104 ms por cuadro (9 cuadros/s) con la pantalla encendida.
+Zip liviano (firmware, core, herramientas, tests, raíz): el zip completo solo si lo pide.
+Idea para la próxima: juegos de dos (ping pong y otros) cuando llega un vecino o amigo.
 
 **1.0.14 (más memoria libre)** — pánicos en la 1.0.12: fopen → lock_init → sin RAM interna (135 B) → abort. El Wi-Fi
 fija ~6,5 KB de RAM interna. Se pasaron ~20 KB de estáticos a la PSRAM (s_pet, textos, animales, etc.). Ver en el

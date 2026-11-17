@@ -71,6 +71,7 @@ int main(int argc, char **argv)
     s_ver_clave = true; s_modo_tec = 0; pantalla_clave(NULL); guardar(dir, "ota_clave");
     s_modo_tec = 2; pantalla_clave("NO PUDE ENTRAR: REVISA LA CLAVE"); guardar(dir, "ota_clave123");
     s_modo_tec = 1; s_ver_clave = false; pantalla_clave(NULL); guardar(dir, "ota_claveABC");
+    s_modo_tec = 3; pantalla_clave(NULL); guardar(dir, "ota_clave_signos");
     snprintf(s_nueva, 33, "1.0.14"); snprintf(s_nueva_nombre, 64, "%s", "LA LUNA LLENA");
     pantalla_aviso(4); guardar(dir, "ota_aviso");
     pantalla_bajar(); bajar_progreso(42); guardar(dir, "ota_bajar");

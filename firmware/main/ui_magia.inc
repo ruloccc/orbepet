@@ -1252,7 +1252,7 @@ static void animar_cita(void)
 #define N_ONDAS 12
 #define N_CHISPAS 30
 static struct { lv_obj_t *o; uint32_t t0, dur; int x, y, r; bool plano, vivo; } s_onda[N_ONDAS];
-static EXT_RAM_BSS_ATTR struct { lv_obj_t *o; float x, y, vx, vy; uint32_t t0, dur; bool vivo; } s_chi[N_CHISPAS];
+static struct { lv_obj_t *o; float x, y, vx, vy; uint32_t t0, dur; bool vivo; } s_chi[N_CHISPAS];
 static void onda(int x, int y, uint32_t color, int rmax, bool plano, uint32_t retraso_ms)
 {
     for (int i = 0; i < N_ONDAS; i++) {

@@ -713,7 +713,7 @@ typedef struct {
     art_img_t texto;
     bool usado;
 } flotante_t;
-static EXT_RAM_BSS_ATTR flotante_t s_flot[N_FLOTANTES];
+static flotante_t s_flot[N_FLOTANTES]; /* (1.0.15) de vuelta en la RAM interna: se usa en cada cuadro */
 
 static void anim_y(void *o, int32_t v) { lv_obj_set_style_translate_y((lv_obj_t *)o, v, 0); }
 static void anim_opa(void *o, int32_t v) { lv_obj_set_style_opa((lv_obj_t *)o, (lv_opa_t)v, 0); }
@@ -780,7 +780,7 @@ static bool po_globo_visible(void); /* ui_pochi.inc */
 static bool po_activo(void);        /* ui_pochi.inc: Pochi está de visita */
 static bool s_po_bypass;            /* una respuesta a Pochi: esa sí se dice */
 typedef struct { int ico; char t[220]; uint32_t ms; } globo_pend_t;
-static EXT_RAM_BSS_ATTR globo_pend_t s_gpend[4];
+static globo_pend_t s_gpend[4];
 static int s_gpend_n;
 static void globo(int ico, const char *texto, uint32_t ms)
 {
@@ -1267,7 +1267,7 @@ static bool s_fuente_grande, s_texto_l;
 static int fuente_escala(int escala) { return s_fuente_grande && s_texto_l && escala == 2 ? 3 : escala; }
 /* (v96) la letra va un 5 % más grande. Después de armar un panel se revisa cada texto: si así se sale de la cajita o del
  * botón donde va (o del panel), se vuelve a pintar del tamaño de antes (pixel exacto). Por eso se guarda con qué se pintó. */
-static EXT_RAM_BSS_ATTR struct { char *s; uint32_t color; int16_t ancho; int8_t escala; bool centrado; lv_obj_t *img; } s_ptxt_info[N_PTXT];
+static struct { char *s; uint32_t color; int16_t ancho; int8_t escala; bool centrado; lv_obj_t *img; } s_ptxt_info[N_PTXT];
 static bool s_txt_revisar;
 static void texto_pintar(int k, lv_obj_t *img, const char *s, uint32_t color, int escala, int ancho, bool centrado)
 {
@@ -3073,24 +3073,25 @@ static void version_cb(lv_event_t *e)
 }
 static void panel_version(void)
 {
-    abrir_tarjeta(PANEL_VERSION, 360, 360);
+    /* (1.0.15) sin explicación: la versión, la fecha y la hora de compilación (hora de su país) y el botón */
+    abrir_tarjeta(PANEL_VERSION, 340, 340);
     lv_obj_t *t = texto(s_tarjeta, "VERSIÓN " FW_VERSION, C_TINTA, 3, 0);
-    lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 22);
-    lv_obj_t *n = texto_c(s_tarjeta, FW_NOMBRE, C_VIOLETA, 2, 300);
-    lv_obj_align(n, LV_ALIGN_TOP_MID, 0, 64);
-    char f[48] = "";
+    lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 40);
+    lv_obj_t *n = texto_c(s_tarjeta, FW_NOMBRE, C_VIOLETA, 2, 290);
+    lv_obj_align(n, LV_ALIGN_TOP_MID, 0, 84);
 #ifdef BUILD_UNIX_TIME
     { static const char *const MES[12] = {"ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"};
-      const time_t bt = (time_t)BUILD_UNIX_TIME; struct tm tm; gmtime_r(&bt, &tm);
-      snprintf(f, sizeof f, "COMPILADA EL %d-%s-%d", tm.tm_mday, MES[tm.tm_mon % 12], tm.tm_year + 1900); }
+      const time_t bt = (time_t)BUILD_UNIX_TIME + (s_pet ? s_pet->zona_horaria : -3 * 3600); struct tm tm; gmtime_r(&bt, &tm);
+      char f[48];
+      snprintf(f, sizeof f, "COMPILADA EL %d-%s-%d", tm.tm_mday, MES[tm.tm_mon % 12], tm.tm_year + 1900);
+      lv_obj_t *fe = texto(s_tarjeta, f, C_TINTA, 2, 0); lv_obj_align(fe, LV_ALIGN_TOP_MID, 0, 142);
+      snprintf(f, sizeof f, "A LAS %02d:%02d", tm.tm_hour, tm.tm_min);
+      lv_obj_t *ho = texto(s_tarjeta, f, C_TINTA, 2, 0); lv_obj_align(ho, LV_ALIGN_TOP_MID, 0, 168); }
 #endif
-    if (f[0]) { lv_obj_t *fe = texto(s_tarjeta, f, C_TINTA, 2, 0); lv_obj_align(fe, LV_ALIGN_TOP_MID, 0, 100); }
-    lv_obj_t *ex = texto_c(s_tarjeta, "SE REINICIA EN MODO WI-FI: LA PRIMERA VEZ ELIGES TU RED Y ESCRIBES LA CLAVE; DESPUÉS SE CONECTA Y SE ACTUALIZA SOLO. LA MASCOTA QUEDA GUARDADA.", C_TINTA, 2, 300);
-    lv_obj_align(ex, LV_ALIGN_TOP_MID, 0, 132);
-    lv_obj_t *b = boton(s_tarjeta, 230, 52, version_cb, 1);
-    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 262);
+    lv_obj_t *b = boton(s_tarjeta, 260, 60, version_cb, 1);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 214);
     lv_obj_set_style_bg_color(b, lv_color_hex(C_VERDE), 0);
-    lv_obj_t *bt = texto(b, "ACTUALIZAR", C_BLANCO, 3, 230);
+    lv_obj_t *bt = texto_c(b, "BUSCAR ACTUALIZACIÓN", C_BLANCO, 2, 240);
     lv_obj_center(bt);
     volver(version_cb, 0);
 }
@@ -15502,7 +15503,7 @@ typedef struct {
     uint32_t visto_desde; /* desde cuándo está a la vista (para contarlo como visto juntos) */
     bool contado, espejo;
 } animal_vista_t;
-static EXT_RAM_BSS_ATTR animal_vista_t s_ani[ANIMAL_COUNT];
+static animal_vista_t s_ani[ANIMAL_COUNT]; /* (1.0.15) interna: cada cuadro */
 #define N_RASTRO 8
 static lv_obj_t *s_rastro[N_RASTRO];
 static float s_rastro_x[N_RASTRO], s_rastro_y[N_RASTRO];

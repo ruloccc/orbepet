@@ -807,6 +807,20 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.15 — teclado grande, versión con fecha y hora, juego igual de rápido
+
+- **Ajustes → Versión:** sin la explicación; muestra versión, nombre, fecha y hora de compilación (hora de su país) y
+  el botón **BUSCAR ACTUALIZACIÓN**.
+- **Teclado del Wi-Fi:** teclas de 50 × 50 px (antes 33 × 38), 7 por fila en orden alfabético (abc / ABC / 123 / #+=)
+  y un **ojito** en vez de «VER» (abierto: se ve la clave; cerrado: asteriscos). La caja de la clave es más angosta y
+  el nombre de la red ya no se corta.
+- **Rendimiento:** lo que se usa en cada cuadro vuelve a la RAM interna (la partida `s_pet`, animales, flotantes,
+  globos, chispas, ambiente y los textos de los paneles); en la PSRAM quedan solo búferes grandes que se usan poco
+  (copias de prueba, textos largos, íconos propios, degradados, fotos de pantallas). Igual quedan ~15-20 KB más de RAM
+  interna libre que antes del Wi-Fi.
+- El zip para instalar por USB es liviano: solo `firmware`, `core`, `herramientas`, `tests` y los archivos de la raíz
+  (sin simulador, editor, documentos ni dibujos fuente: están en el repositorio y en el zip completo).
+
 ## Versión 1.0.14 — más memoria libre (el juego se caía al quedarse sin RAM interna)
 
 - **Los dos pánicos de la 1.0.12** (al darle comida y al sacar una piedra brillante del cofre) son el mismo:

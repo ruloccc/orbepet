@@ -58,8 +58,10 @@ static lv_obj_t *boton(lv_obj_t *padre, int w, int h, uint32_t color, const char
 
 static lv_obj_t *s_scr, *s_barra, *s_barra_fill, *s_pct_txt, *s_campo, *s_teclas, *s_aviso_txt;
 
+static lv_obj_t *s_ojo_abierto, *s_ojo_cerrado;
 static void limpiar(void)
 {
+    s_ojo_abierto = s_ojo_cerrado = NULL;
     s_scr = lv_screen_active();
     lv_obj_clean(s_scr);
     s_barra = s_barra_fill = s_pct_txt = s_campo = s_teclas = s_aviso_txt = NULL;
@@ -128,24 +130,62 @@ static void pantalla_lista(void)
     boton_cancelar(378, NULL);
 }
 
-/* --- el teclado */
-static int s_modo_tec;      /* 0 minúsculas, 1 mayúsculas, 2 números y símbolos */
+/* --- el teclado (1.0.15: teclas grandes, 7 por fila y en orden alfabético: así se atinan con el dedo) */
+static int s_modo_tec;      /* 0 minúsculas, 1 mayúsculas, 2 números y signos, 3 más signos */
 static bool s_ver_clave;
 static volatile bool s_tec_rearmar; /* (se rearma desde la tarea principal, no dentro del toque) */
-static const char *const FILAS[3][4] = {
-    {"qwertyuiop", "asdfghjkl", "zxcvbnm", ""},
-    {"QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", ""},
-    {"1234567890", "@#$%&*-+=_", ".,;:!?'\"/\\", "()[]<>{}|~"},
+static const char *const FILAS[4][4] = {
+    {"abcdefg", "hijklmn", "opqrstu", "vwxyz"},
+    {"ABCDEFG", "HIJKLMN", "OPQRSTU", "VWXYZ"},
+    {"1234567", "890@#$%", "&*-_+=.", "!?,;:/'"},
+    {"()[]{}<", ">|~^`\\\"", "", ""},
 };
 enum { T_BORRAR = 1000, T_ESPACIO, T_MODO, T_NUM, T_VER, T_CONECTAR };
 static void teclado_armar(void);
+/* (1.0.15) el botón de ver la clave es un ojito: abierto = se ve la clave; cerrado = asteriscos */
+static void ojito_refrescar(void)
+{
+    if (!s_ojo_abierto || !s_ojo_cerrado) return;
+    if (s_ver_clave) { lv_obj_remove_flag(s_ojo_abierto, LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(s_ojo_cerrado, LV_OBJ_FLAG_HIDDEN); }
+    else { lv_obj_add_flag(s_ojo_abierto, LV_OBJ_FLAG_HIDDEN); lv_obj_remove_flag(s_ojo_cerrado, LV_OBJ_FLAG_HIDDEN); }
+}
+static lv_obj_t *pieza(lv_obj_t *padre, int w, int h, int r, uint32_t color)
+{
+    lv_obj_t *o = lv_obj_create(padre);
+    lv_obj_remove_style_all(o);
+    lv_obj_set_size(o, w, h);
+    lv_obj_set_style_radius(o, r, 0);
+    lv_obj_set_style_bg_color(o, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+    lv_obj_remove_flag(o, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(o, LV_OBJ_FLAG_SCROLLABLE);
+    return o;
+}
+static void ojito(lv_obj_t *b)
+{
+    /* abierto: el blanco del ojo con la pupila */
+    s_ojo_abierto = pieza(b, 28, 16, 8, 0xFFFFFF);
+    lv_obj_center(s_ojo_abierto);
+    lv_obj_t *p = pieza(s_ojo_abierto, 10, 10, 5, 0x1B1530);
+    lv_obj_center(p);
+    /* cerrado: el párpado (una curvita) con tres pestañas */
+    s_ojo_cerrado = lv_obj_create(b);
+    lv_obj_remove_style_all(s_ojo_cerrado);
+    lv_obj_set_size(s_ojo_cerrado, 30, 16);
+    lv_obj_center(s_ojo_cerrado);
+    lv_obj_remove_flag(s_ojo_cerrado, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *l = pieza(s_ojo_cerrado, 28, 4, 2, 0xFFFFFF);
+    lv_obj_align(l, LV_ALIGN_TOP_MID, 0, 4);
+    for (int i = 0; i < 3; i++) { lv_obj_t *q = pieza(s_ojo_cerrado, 3, 6, 1, 0xFFFFFF); lv_obj_align(q, LV_ALIGN_TOP_MID, (i - 1) * 9, 9); }
+    ojito_refrescar();
+}
 static void campo_refrescar(void)
 {
     char b[70];
     const size_t n = strlen(s_prueba.clave);
     if (s_ver_clave) snprintf(b, sizeof b, "%s_", s_prueba.clave);
     else { size_t i = 0; for (; i < n && i < sizeof b - 2; i++) b[i] = '*'; b[i++] = '_'; b[i] = 0; }
-    if (s_campo) s_campo = txt_cambiar(s_campo, b, 0xFFFFFF, 2, 280, true);
+    if (s_campo) s_campo = txt_cambiar(s_campo, b, 0xFFFFFF, 2, 250, true);
 }
 static void tecla_cb(lv_event_t *e)
 {
@@ -155,72 +195,72 @@ static void tecla_cb(lv_event_t *e)
     if (k == T_BORRAR) { if (n) s_prueba.clave[n - 1] = 0; }
     else if (k == T_ESPACIO) { if (n + 1 < sizeof s_prueba.clave) { s_prueba.clave[n] = ' '; s_prueba.clave[n + 1] = 0; } }
     else if (k == T_MODO) { s_modo_tec = s_modo_tec == 0 ? 1 : 0; s_tec_rearmar = true; return; }
-    else if (k == T_NUM) { s_modo_tec = s_modo_tec == 2 ? 0 : 2; s_tec_rearmar = true; return; }
-    else if (k == T_VER) { s_ver_clave = !s_ver_clave; }
+    else if (k == T_NUM) { s_modo_tec = s_modo_tec <= 1 ? 2 : (s_modo_tec == 2 ? 3 : 0); s_tec_rearmar = true; return; }
+    else if (k == T_VER) { s_ver_clave = !s_ver_clave; ojito_refrescar(); }
     else if (k == T_CONECTAR) { s_conectar_pedido = true; return; }
     else if (k > 0 && k < 128 && n + 1 < sizeof s_prueba.clave) { s_prueba.clave[n] = (char)k; s_prueba.clave[n + 1] = 0; }
     campo_refrescar();
 }
+#define TEC_W 50 /* tecla: 50 × 50 px (antes 33 × 38) */
+#define TEC_H 50
+#define TEC_G 4
 static void teclado_armar(void)
 {
     if (!s_teclas) return;
     lv_obj_clean(s_teclas);
-    const int W = 33, H = 38, G = 3, Y0 = 0;
     for (int f = 0; f < 4; f++) {
         const char *fila = FILAS[s_modo_tec][f];
         const int n = (int)strlen(fila);
         if (!n) continue;
-        const int ancho = n * W + (n - 1) * G;
+        const int ancho = n * TEC_W + (n - 1) * TEC_G;
         for (int i = 0; i < n; i++) {
             char t[2] = {fila[i], 0};
-            lv_obj_t *b = boton(s_teclas, W, H, C_BOTON, t, 2, tecla_cb, (intptr_t)(unsigned char)fila[i], s_modo_tec == 0);
-            lv_obj_set_pos(b, (370 - ancho) / 2 + i * (W + G), Y0 + f * (H + G));
+            lv_obj_t *b = boton(s_teclas, TEC_W, TEC_H, C_BOTON, t, 3, tecla_cb, (intptr_t)(unsigned char)fila[i], s_modo_tec == 0);
+            lv_obj_set_pos(b, (374 - ancho) / 2 + i * (TEC_W + TEC_G), f * (TEC_H + TEC_G));
         }
     }
-    /* la fila de abajo: modo, números, espacio, borrar, conectar (justo debajo de las filas que haya) */
-    const int filas = FILAS[s_modo_tec][3][0] ? 4 : 3;
-    const int y = Y0 + filas * (H + G) + 2;
+    /* la fila de abajo, siempre en el mismo lugar: mayúsculas, signos, espacio, borrar, conectar */
+    const int y = 4 * (TEC_H + TEC_G) + 2;
     lv_obj_t *b;
-    b = boton(s_teclas, 50, 40, C_BOTON, s_modo_tec == 1 ? "abc" : "ABC", 2, tecla_cb, T_MODO, true); lv_obj_set_pos(b, 22, y);
-    b = boton(s_teclas, 50, 40, C_BOTON, s_modo_tec == 2 ? "abc" : "123", 2, tecla_cb, T_NUM, true); lv_obj_set_pos(b, 76, y);
-    b = boton(s_teclas, 74, 40, C_BOTON, "ESPACIO", 1, tecla_cb, T_ESPACIO, false); lv_obj_set_pos(b, 130, y);
-    b = boton(s_teclas, 48, 40, C_BOTON, "<", 2, tecla_cb, T_BORRAR, false); lv_obj_set_pos(b, 208, y);
-    b = boton(s_teclas, 108, 40, C_VERDE, "CONECTAR", 2, tecla_cb, T_CONECTAR, false); lv_obj_set_pos(b, 260, y);
+    b = boton(s_teclas, 58, 46, C_BOTON, s_modo_tec == 0 ? "ABC" : "abc", 2, tecla_cb, T_MODO, true); lv_obj_set_pos(b, 2, y);
+    b = boton(s_teclas, 58, 46, C_BOTON, s_modo_tec <= 1 ? "123" : (s_modo_tec == 2 ? "#+=" : "abc"), 2, tecla_cb, T_NUM, false); lv_obj_set_pos(b, 64, y);
+    b = boton(s_teclas, 86, 46, C_BOTON, "ESPACIO", 1, tecla_cb, T_ESPACIO, false); lv_obj_set_pos(b, 126, y);
+    b = boton(s_teclas, 52, 46, C_BOTON, "<", 3, tecla_cb, T_BORRAR, false); lv_obj_set_pos(b, 216, y);
+    b = boton(s_teclas, 102, 46, C_VERDE, "CONECTAR", 1, tecla_cb, T_CONECTAR, false); lv_obj_set_pos(b, 272, y);
 }
 static void pantalla_clave(const char *aviso)
 {
     limpiar();
-    char t[60];
-    snprintf(t, sizeof t, "%s", s_prueba.ssid);
-    lv_obj_t *a = txt(s_scr, t, C_AMARILLO, 2, 300, true);
-    lv_obj_align(a, LV_ALIGN_TOP_MID, 0, 30);
-    s_aviso_txt = txt(s_scr, aviso ? aviso : "ESCRIBE LA CLAVE", aviso ? 0xFF9A9A : C_SUAVE, 1, 300, false);
-    lv_obj_align(s_aviso_txt, LV_ALIGN_TOP_MID, 0, 54);
+    char t[80];
+    snprintf(t, sizeof t, "CLAVE DE %s", s_prueba.ssid);
+    lv_obj_t *a = txt(s_scr, aviso ? aviso : t, aviso ? 0xFF9A9A : C_AMARILLO, 1, 230, !aviso);
+    lv_obj_align(a, LV_ALIGN_TOP_MID, 0, 24);
     lv_obj_t *caja = lv_obj_create(s_scr); /* el campo de la clave */
     lv_obj_remove_style_all(caja);
-    lv_obj_set_size(caja, 300, 38);
-    lv_obj_align(caja, LV_ALIGN_TOP_MID, -22, 74);
+    lv_obj_set_size(caja, 262, 42);
+    lv_obj_align(caja, LV_ALIGN_TOP_MID, -24, 54);
     lv_obj_set_style_bg_color(caja, lv_color_hex(0x0E0B1E), 0);
     lv_obj_set_style_bg_opa(caja, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(caja, 10, 0);
     lv_obj_set_style_border_color(caja, lv_color_hex(C_SUAVE), 0);
     lv_obj_set_style_border_width(caja, 2, 0);
     lv_obj_remove_flag(caja, LV_OBJ_FLAG_SCROLLABLE);
-    s_campo = txt(caja, "_", 0xFFFFFF, 2, 280, true);
-    lv_obj_align(s_campo, LV_ALIGN_TOP_MID, 0, 10);
-    lv_obj_t *v = boton(s_scr, 44, 38, C_BOTON, "VER", 1, tecla_cb, T_VER, false); /* mostrar u ocultar la clave */
-    lv_obj_align(v, LV_ALIGN_TOP_MID, 152, 74);
+    s_campo = txt(caja, "_", 0xFFFFFF, 2, 250, true);
+    lv_obj_align(s_campo, LV_ALIGN_TOP_MID, 0, 12);
+    lv_obj_t *v = boton(s_scr, 44, 42, C_BOTON, NULL, 1, tecla_cb, T_VER, false); /* el ojito: mostrar u ocultar la clave */
+    lv_obj_align(v, LV_ALIGN_TOP_MID, 134, 54);
+    ojito(v);
     s_teclas = lv_obj_create(s_scr);
     lv_obj_remove_style_all(s_teclas);
-    lv_obj_set_size(s_teclas, 370, 210);
-    lv_obj_align(s_teclas, LV_ALIGN_TOP_MID, 0, 124);
+    lv_obj_set_size(s_teclas, 374, 4 * (TEC_H + TEC_G) + 50);
+    lv_obj_align(s_teclas, LV_ALIGN_TOP_MID, 0, 104);
     lv_obj_remove_flag(s_teclas, LV_OBJ_FLAG_SCROLLABLE);
     teclado_armar();
     campo_refrescar();
-    lv_obj_t *o = boton(s_scr, 120, 38, C_BOTON, "OTRA RED", 1, otra_cb, 0, false);
-    lv_obj_align(o, LV_ALIGN_TOP_MID, -66, 340);
-    lv_obj_t *c = boton(s_scr, 120, 38, C_ROJO, "CANCELAR", 1, cancelar_cb, 0, false);
-    lv_obj_align(c, LV_ALIGN_TOP_MID, 66, 340);
+    lv_obj_t *o = boton(s_scr, 118, 38, C_BOTON, "OTRA RED", 1, otra_cb, 0, false);
+    lv_obj_align(o, LV_ALIGN_TOP_MID, -64, 380);
+    lv_obj_t *c = boton(s_scr, 118, 38, C_ROJO, "CANCELAR", 1, cancelar_cb, 0, false);
+    lv_obj_align(c, LV_ALIGN_TOP_MID, 64, 380);
 }
 
 /* --- hay una versión nueva: aviso con cuenta regresiva */

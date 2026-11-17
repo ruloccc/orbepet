@@ -44,7 +44,7 @@ static const vineta_t *s_esc_v;
 static lv_obj_t *s_esc_velo, *s_esc_senal, *s_esc_fugaz;
 static int s_esc_z = 1; /* ampliación: 1 en las historias; 2 en las escenas a pantalla completa */
 
-static EXT_RAM_BSS_ATTR act_t s_amb[28]; /* lo de ambiente de cada escena: nubes, pájaros, luciérnagas, bichitos... (se arma al mostrarla) */
+static act_t s_amb[28]; /* lo de ambiente de cada escena: nubes, pájaros, luciérnagas, bichitos... (se arma al mostrarla) */
 static int s_amb_n;
 static int esc_suave(int a, int b, int f) /* f 0..1000, con aceleración y frenado */
 {
