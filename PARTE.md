@@ -1,7 +1,7 @@
 # PARTE — estado del trabajo (17-nov-2026, 16:30)
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.12** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
+Versión en curso: **1.0.13** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
 Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
@@ -38,6 +38,13 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 ---
 
 ## 2. Qué se hizo en las últimas versiones
+
+**1.0.13 (Wi-Fi desde el orbe)** — pedido del usuario: nada de celular. Modo Wi-Fi con pantalla propia: lista de
+redes → teclado (minúsculas/mayúsculas/símbolos) → conecta → aviso con 5 s → descarga → reinicio. Con Wi-Fi guardado
+no pregunta nada. CANCELAR reinicia al juego. Pantalla en modo liviano (bsp_display_modo_liviano) para que quepa el
+Wi-Fi. NO COMPILADO con ESP-IDF al entregar el zip (el usuario pidió solo el zip; aquí no hay ESP-IDF completo):
+revisar la primera compilación. Ni la pantalla del modo Wi-Fi ni la memoria están probadas en la placa.
+Sin publicar en orbepet-firmware (el usuario avisa cuándo). Commits locales sin subir desde 1.0.12.
 
 **1.0.12 (menos terca al dormir)** — con la luz apagada decía «¡UN RATITO MÁS!» y bostezaba cada segundo
 (prob_paso(1.2f) = 100 % por paso) y eso la dejaba a medio cruzar entre mundos. Ahora a lo más cada 4 min

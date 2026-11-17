@@ -11,8 +11,8 @@
  */
 #pragma once
 
-#define FW_VERSION "1.0.12"
-#define FW_NOMBRE "MENOS TERCA AL DORMIR"
+#define FW_VERSION "1.0.13"
+#define FW_NOMBRE "WI-FI DESDE EL ORBE"
 
 /* «1.0.09» → 10009, para comparar cuál es más nueva (−1 si el texto no es una versión) */
 static inline int fw_codigo(const char *v)

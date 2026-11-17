@@ -3064,13 +3064,9 @@ static void version_cb(lv_event_t *e)
 {
     const int q = (int)(intptr_t)lv_event_get_user_data(e);
     if (q == 1) {
-        /* (1.0.12) estas instrucciones son lo ÚLTIMO que dibuja el juego: la pantalla las sigue mostrando durante el modo
-         * actualizar aunque ese modo no alcance a prender la pantalla (le falta memoria): así se sabe qué hacer.
-         * (En la 1.0.11 quedaba «REINICIANDO EN MODO WI-FI...» y parecía pegada.) */
-        char t[160];
-        snprintf(t, sizeof t, "\nEN EL CELULAR:\nWI-FI %s\nCLAVE ORBEPET1\nY ABRE 192.168.4.1\n(VUELVE SOLA EN 15 MIN)", s_red_ota);
+        /* (1.0.13) el modo Wi-Fi tiene su propia pantalla (lista de redes, teclado): aquí solo se avisa que se abre */
         cerrar_panel();
-        ui_splash("MODO ACTUALIZAR\n\n", t, false, 600000);
+        ui_splash("MODO WI-FI", "ABRIENDO...", false, 600000);
         accion(UI_ACCION_ACTUALIZAR, 0);
     }
     else panel_ajustes();
@@ -3089,9 +3085,7 @@ static void panel_version(void)
       snprintf(f, sizeof f, "COMPILADA EL %d-%s-%d", tm.tm_mday, MES[tm.tm_mon % 12], tm.tm_year + 1900); }
 #endif
     if (f[0]) { lv_obj_t *fe = texto(s_tarjeta, f, C_TINTA, 2, 0); lv_obj_align(fe, LV_ALIGN_TOP_MID, 0, 100); }
-    char ex_t[200];
-    snprintf(ex_t, sizeof ex_t, "SE REINICIA EN MODO WI-FI (LA MASCOTA QUEDA GUARDADA). EN EL CELULAR: RED %s, CLAVE ORBEPET1 Y ABRE 192.168.4.1", s_red_ota);
-    lv_obj_t *ex = texto_c(s_tarjeta, ex_t, C_TINTA, 2, 300);
+    lv_obj_t *ex = texto_c(s_tarjeta, "SE REINICIA EN MODO WI-FI: LA PRIMERA VEZ ELIGES TU RED Y ESCRIBES LA CLAVE; DESPUÉS SE CONECTA Y SE ACTUALIZA SOLO. LA MASCOTA QUEDA GUARDADA.", C_TINTA, 2, 300);
     lv_obj_align(ex, LV_ALIGN_TOP_MID, 0, 132);
     lv_obj_t *b = boton(s_tarjeta, 230, 52, version_cb, 1);
     lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 262);

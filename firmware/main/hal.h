@@ -11,6 +11,7 @@
 
 /* pantalla + táctil + LVGL (vía BSP) */
 lv_display_t *hal_display_init(void);
+lv_display_t *hal_display_init_liviano(void); /* (1.0.13) con búferes chicos: el modo actualizar, para que alcance el Wi-Fi */
 void hal_vel_info(int *cuadros, int *prom_ms, int *max_ms); /* última ventana de 3 s: cuadros, ms promedio y ms máximo */
 void hal_main_tick(void); /* la tarea principal da una vuelta (diagnóstico) */
 void hal_log(const char *fmt, ...) __attribute__((format(printf, 1, 2))); /* anota en el registro que queda guardado en el dispositivo */

@@ -563,6 +563,7 @@ void art_icono_fabrica(art_icono_t ico, uint32_t px[ART_ICONO_LADO * ART_ICONO_L
 void art_texto(art_img_t *dst, const char *utf8, uint32_t color, int escala, int ancho_max_px);
 void art_texto_centrado(art_img_t *dst, const char *utf8, uint32_t color, int escala, int ancho_max_px); /* cada renglón centrado */
 int art_texto_ancho(const char *utf8, int escala);
+void art_texto_minusculas(bool si); /* (1.0.13) los textos siguientes muestran las minúsculas tal cual (claves de Wi-Fi) */
 void art_texto_a8(bool si); /* (v97) los textos siguientes salen en A8 (el color lo pone image_recolor de la imagen) */
 void art_texto_factor(float f); /* (v96) cuánto más grande se pinta la letra (1.05 = un 5 %); 1 = como antes, pixel exacto */
 

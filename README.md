@@ -807,6 +807,23 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.13 — el Wi-Fi se configura en el orbe (sin celular)
+
+- **ACTUALIZAR** (Ajustes → Versión) reinicia en el **modo Wi-Fi**, que ahora tiene pantalla propia (`ota.c`):
+  1. Si ya hay un Wi-Fi guardado, se conecta solo («CONECTANDO...», con botón OTRA RED).
+  2. Si no (o si falla): **busca las redes** y muestra la lista (con la señal en palitos); tocas la tuya.
+  3. **Teclado** para la clave: minúsculas, mayúsculas («ABC»), números y símbolos («123»), espacio, borrar, VER (muestra
+     u oculta la clave) y CONECTAR. Si la clave no sirve: «NO PUDE ENTRAR: REVISA LA CLAVE».
+  4. Conectado: la red queda guardada (NVS "wifi") y mira `version.json`. Si hay una más nueva: «¡HAY UNA VERSIÓN
+     NUEVA!» con cuenta de 5 s (ACTUALIZAR YA / CANCELAR), barra de descarga y reinicio. Si no: «¡ESTÁS AL DÍA!» y vuelve.
+  5. **CANCELAR** en cualquier momento (o 10 min sin tocar nada): reinicia y vuelve el juego de siempre.
+- Se quitaron la red propia ORBEPET y la página del celular.
+- **Memoria:** la pantalla se prende primero en **modo liviano** (`bsp_display_modo_liviano`: franjas de 10 filas y sin
+  doble búfer: ~9 KB en vez de 37 KB de RAM interna) y después el Wi-Fi solo como cliente. La descarga corre en la tarea
+  principal (sin tareas extra). Todo queda en el diagnóstico del registro.
+- **Letra:** la fuente del orbe ganó minúsculas y los símbolos @ # $ & ; " [ ] { } ~ ^ | \ `. Las minúsculas solo se ven
+  con `art_texto_minusculas(true)` (claves y nombres de redes): el resto del juego sigue igual, en mayúsculas.
+
 ## Versión 1.0.12 — menos terca al dormir (la partida no cambia)
 
 - **«¡UN RATITO MÁS! NO TENGO SUEÑO...» cada segundo** (con bostezo): con la luz apagada, la terquedad del fw 104

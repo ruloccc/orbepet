@@ -1,4 +1,12 @@
-/* Actualizar el firmware por Wi-Fi: ver ota.h. */
+/* Actualizar el firmware por Wi-Fi: ver ota.h.
+ *
+ * (1.0.13) Todo desde el orbe, sin celular: el modo actualizar tiene su propia pantalla. Busca las redes, eliges la
+ * tuya, escribes la clave con un teclado (mayúsculas, minúsculas, números y símbolos), se conecta y, si hay una
+ * versión más nueva, avisa y se actualiza. Si el Wi-Fi ya estaba guardado, se conecta solo y no pregunta nada.
+ * CANCELAR (o 10 min sin tocar nada) reinicia y vuelve el juego de siempre.
+ *
+ * Memoria: la pantalla se prende primero (para mostrar todo de inmediato) y después el Wi-Fi solo como cliente, con
+ * pocos búferes; no hay tareas extra: la descarga corre en la tarea principal. Si no alcanza, lo dice y queda anotado. */
 #include "ota.h"
 
 #include <stdarg.h>
@@ -13,7 +21,6 @@
 #include "esp_heap_caps.h"
 #include "esp_event.h"
 #include "esp_http_client.h"
-#include "esp_http_server.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -37,8 +44,7 @@ static const char *TAG = "ota";
 #ifndef OTA_URL_BASE
 #define OTA_URL_BASE "https://raw.githubusercontent.com/ruloccc/orbepet-firmware/main/"
 #endif
-#define OTA_AP_CLAVE "ORBEPET1" /* (1.0.11) en mayúsculas: el orbe solo escribe mayúsculas */
-#define OTA_INACTIVO_MS (15u * 60u * 1000u) /* 15 min sin que nadie haga nada: vuelve al juego */
+#define OTA_INACTIVO_MS (10u * 60u * 1000u) /* 10 min sin tocar nada: vuelve al juego */
 
 /* ------------------------------------------------------------------ marca entre reinicios */
 
@@ -110,132 +116,122 @@ const char *ota_version_fallida(void)
     return v;
 }
 
-/* ------------------------------------------------------------------ estado compartido */
+/* ------------------------------------------------------------------ estado */
 
 typedef struct {
     char ssid[33];
     char clave[65];
 } ota_wifi_t;
 
-static SemaphoreHandle_t s_mx;
-static ota_wifi_t s_wifi;          /* el Wi-Fi de la casa (guardado en la memoria del orbe) */
-static char s_ap[24];              /* la red propia: ORBEPET-XXXX */
-static char s_linea1[96], s_linea2[96];
-static char s_ultima[33];          /* la última versión publicada (vacía: no se sabe todavía) */
-static int s_pct = -1;             /* progreso de la descarga o la subida (−1: sin barra) */
-static volatile bool s_conectado, s_buscar, s_salir, s_ocupado, s_cambio;
-static volatile int s_intentos;
-static volatile uint32_t s_reiniciar_ms, s_ultimo_uso_ms;
-static TaskHandle_t s_tarea;
+typedef enum { E_INICIO, E_BUSCAR, E_LISTA, E_CLAVE, E_CONECTAR, E_REVISAR, E_AVISO, E_BAJAR, E_FIN } etapa_t;
+
+#define N_REDES 12
+typedef struct { char ssid[33]; int8_t rssi; bool abierta; } red_t;
+
+static ota_wifi_t s_wifi;           /* el Wi-Fi guardado (NVS "wifi") */
+static ota_wifi_t s_prueba;         /* el que se está probando */
+static red_t s_redes[N_REDES];
+static int s_nredes;
+static volatile bool s_cancelar, s_ip, s_ya, s_buscar_otra;
+static volatile int s_razon;        /* motivo de la última desconexión */
+static volatile int s_elegida = -1; /* la red tocada en la lista */
+static volatile bool s_conectar_pedido;
+static char s_msg1[96], s_msg2[160];
+static char s_nueva[33], s_nueva_nombre[64];
+static uint32_t s_ultimo_uso_ms;
+static lv_display_t *s_disp;
 
 static uint32_t ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 static void uso(void) { s_ultimo_uso_ms = ms(); }
 
-static void estado(const char *l1, const char *l2, int pct)
-{
-    xSemaphoreTake(s_mx, portMAX_DELAY);
-    if (l1) snprintf(s_linea1, sizeof s_linea1, "%s", l1);
-    if (l2) snprintf(s_linea2, sizeof s_linea2, "%s", l2);
-    s_pct = pct;
-    s_cambio = true;
-    xSemaphoreGive(s_mx);
-    ESP_LOGI(TAG, "%s | %s | %d", l1 ? l1 : "", l2 ? l2 : "", pct);
-}
-
-static bool tomar(void)
-{
-    bool ok = false;
-    xSemaphoreTake(s_mx, portMAX_DELAY);
-    if (!s_ocupado && !s_reiniciar_ms) { s_ocupado = true; ok = true; }
-    xSemaphoreGive(s_mx);
-    return ok;
-}
-static void soltar(void) { s_ocupado = false; }
-
-static void linea_wifi(char *b, size_t n)
-{
-    if (!s_wifi.ssid[0]) snprintf(b, n, "SIN WI-FI DE CASA");
-    else snprintf(b, n, "WI-FI: %s%s", s_wifi.ssid, s_conectado ? "" : " (SIN CONEXIÓN)");
-}
-
-/* ------------------------------------------------------------------ Wi-Fi */
-
-static void conectar_casa(void)
-{
-    if (!s_wifi.ssid[0]) return;
-    wifi_config_t c = {0};
-    snprintf((char *)c.sta.ssid, sizeof c.sta.ssid, "%s", s_wifi.ssid);
-    snprintf((char *)c.sta.password, sizeof c.sta.password, "%s", s_wifi.clave);
-    c.sta.threshold.authmode = s_wifi.clave[0] ? WIFI_AUTH_WEP : WIFI_AUTH_OPEN;
-    c.sta.pmf_cfg.capable = true;
-    esp_wifi_disconnect();
-    esp_wifi_set_config(WIFI_IF_STA, &c);
-    s_intentos = 0;
-    esp_wifi_connect();
-}
+/* ------------------------------------------------------------------ Wi-Fi (solo cliente) */
 
 static void evento(void *arg, esp_event_base_t base, int32_t id, void *datos)
 {
     (void)arg;
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-        if (s_wifi.ssid[0]) esp_wifi_connect();
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        s_conectado = false;
-        /* pocos intentos: mientras busca la red de la casa, la red propia (la del celular) se corta a ratos */
-        if (s_wifi.ssid[0] && ++s_intentos <= 4) esp_wifi_connect();
-        else if (s_wifi.ssid[0] && s_intentos == 5) {
-            char b[96];
-            snprintf(b, sizeof b, "NO PUDE ENTRAR A %s: REVISA LA CLAVE EN EL CELULAR", s_wifi.ssid);
-            estado("SIN INTERNET", b, -1);
-        }
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        const wifi_event_sta_disconnected_t *d = datos;
+        s_razon = d ? d->reason : -1;
+        s_ip = false;
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-        s_conectado = true;
-        s_intentos = 0;
-        s_buscar = true; /* recién conectado: mira si hay versión nueva */
-        if (s_tarea) xTaskNotifyGive(s_tarea);
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STACONNECTED) {
-        uso();
-        estado("CELULAR CONECTADO", "ABRE 192.168.4.1 EN EL NAVEGADOR", -1);
+        s_ip = true;
     }
-    (void)datos;
 }
 
-/* (1.0.11) sin ESP_ERROR_CHECK: si algo falla (en la 1.0.09 esp_wifi_init daba «sin memoria» y la placa entraba en
- * pánico) se anota, se avisa y se vuelve al juego */
 static esp_err_t wifi_iniciar(void)
 {
     esp_err_t e = esp_netif_init();
     if (e != ESP_OK) return e;
     e = esp_event_loop_create_default();
     if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) return e;
-    esp_netif_create_default_wifi_ap();
     esp_netif_create_default_wifi_sta();
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     e = esp_wifi_init(&cfg);
     if (e != ESP_OK) return e;
     esp_wifi_set_storage(WIFI_STORAGE_RAM); /* nada del Wi-Fi a la memoria: ahí vive la partida */
-    esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, evento, NULL);
+    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, evento, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, evento, NULL);
-    e = esp_wifi_set_mode(WIFI_MODE_APSTA);
+    e = esp_wifi_set_mode(WIFI_MODE_STA);
     if (e != ESP_OK) return e;
-    ota_nombre_red(s_ap, sizeof s_ap);
-    wifi_config_t ap = {0};
-    snprintf((char *)ap.ap.ssid, sizeof ap.ap.ssid, "%s", s_ap);
-    ap.ap.ssid_len = (uint8_t)strlen(s_ap);
-    snprintf((char *)ap.ap.password, sizeof ap.ap.password, "%s", OTA_AP_CLAVE);
-    ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
-    ap.ap.max_connection = 2;
-    ap.ap.channel = 1;
-    e = esp_wifi_set_config(WIFI_IF_AP, &ap);
-    if (e != ESP_OK) return e;
-    if (s_wifi.ssid[0]) {
-        wifi_config_t c = {0};
-        snprintf((char *)c.sta.ssid, sizeof c.sta.ssid, "%s", s_wifi.ssid);
-        snprintf((char *)c.sta.password, sizeof c.sta.password, "%s", s_wifi.clave);
-        c.sta.threshold.authmode = s_wifi.clave[0] ? WIFI_AUTH_WEP : WIFI_AUTH_OPEN;
-        esp_wifi_set_config(WIFI_IF_STA, &c);
-    }
     return esp_wifi_start();
+}
+
+static int cmp_red(const void *a, const void *b) { return ((const red_t *)b)->rssi - ((const red_t *)a)->rssi; }
+
+static void buscar_redes(void)
+{
+    s_nredes = 0;
+    wifi_scan_config_t sc = {0};
+    esp_wifi_disconnect();
+    if (esp_wifi_scan_start(&sc, true) != ESP_OK) return;
+    uint16_t n = 0;
+    esp_wifi_scan_get_ap_num(&n);
+    if (n > 30) n = 30;
+    wifi_ap_record_t *ap = n ? calloc(n, sizeof *ap) : NULL;
+    if (!ap) { esp_wifi_clear_ap_list(); return; }
+    esp_wifi_scan_get_ap_records(&n, ap);
+    for (int i = 0; i < n && s_nredes < N_REDES; i++) {
+        if (!ap[i].ssid[0]) continue;
+        bool rep = false;
+        for (int j = 0; j < s_nredes && !rep; j++) rep = !strcmp(s_redes[j].ssid, (const char *)ap[i].ssid);
+        if (rep) continue;
+        red_t *r = &s_redes[s_nredes++];
+        snprintf(r->ssid, sizeof r->ssid, "%s", (const char *)ap[i].ssid);
+        r->rssi = ap[i].rssi;
+        r->abierta = ap[i].authmode == WIFI_AUTH_OPEN;
+    }
+    free(ap);
+    qsort(s_redes, (size_t)s_nredes, sizeof s_redes[0], cmp_red);
+}
+
+/* conecta con s_prueba; espera hasta 25 s. true = hay IP */
+static bool conectar(void)
+{
+    wifi_config_t c = {0};
+    snprintf((char *)c.sta.ssid, sizeof c.sta.ssid, "%s", s_prueba.ssid);
+    snprintf((char *)c.sta.password, sizeof c.sta.password, "%s", s_prueba.clave);
+    c.sta.threshold.authmode = s_prueba.clave[0] ? WIFI_AUTH_WEP : WIFI_AUTH_OPEN;
+    c.sta.pmf_cfg.capable = true;
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    s_ip = false; s_razon = 0;
+    if (esp_wifi_set_config(WIFI_IF_STA, &c) != ESP_OK) return false;
+    const uint32_t t0 = ms();
+    int intentos = 0;
+    esp_wifi_connect();
+    while (ms() - t0 < 25000u && !s_cancelar && !s_buscar_otra) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+        if (s_ip) return true;
+        if (s_razon) { /* se cayó: unos pocos intentos más */
+            if (++intentos >= 4) break;
+            const int r = s_razon; s_razon = 0;
+            if (r == WIFI_REASON_ASSOC_LEAVE) { intentos--; continue; } /* fue nuestro propio «desconectar» */
+            if (r == WIFI_REASON_NO_AP_FOUND && intentos >= 2) { s_razon = r; break; }
+            vTaskDelay(pdMS_TO_TICKS(600));
+            esp_wifi_connect();
+        }
+    }
+    return s_ip;
 }
 
 /* ------------------------------------------------------------------ internet: version.json y descarga */
@@ -281,7 +277,7 @@ static bool leer_version_publicada(char *ver, size_t nv, char *nombre, size_t nn
             buf[n] = 0;
             ok = json_txt(buf, "version", ver, nv) && fw_codigo(ver) > 0;
             if (!json_txt(buf, "nombre", nombre, nn)) nombre[0] = 0;
-        } else ESP_LOGW(TAG, "version.json: estado %d, %d bytes", st, n);
+        } else diag("version.json: estado %d, %d bytes", st, n);
     }
     free(buf);
     esp_http_client_close(c);
@@ -289,11 +285,308 @@ static bool leer_version_publicada(char *ver, size_t nv, char *nombre, size_t nn
     return ok;
 }
 
-static void descargar(const char *ver)
+/* ------------------------------------------------------------------ la pantalla */
+
+#define C_FONDO 0x1B1530
+#define C_AMARILLO 0xFFE27A
+#define C_SUAVE 0xB9B0E0
+#define C_BOTON 0x3A3160
+#define C_VERDE 0x2E9E50
+#define C_ROJO 0x8A3A4A
+
+/* un texto (imagen de la letra del orbe) con su búfer propio, que se suelta solo al borrarse */
+static void txt_borrado(lv_event_t *e)
 {
-    char t[96];
-    snprintf(t, sizeof t, "BAJANDO LA %s...", ver);
-    estado(t, "NO LO APAGUES", 0);
+    art_img_t *a = lv_event_get_user_data(e);
+    if (a) { art_img_free(a); free(a); }
+}
+static lv_obj_t *txt(lv_obj_t *padre, const char *s, uint32_t color, int escala, int ancho, bool minus)
+{
+    lv_obj_t *img = lv_image_create(padre);
+    art_img_t *a = calloc(1, sizeof *a);
+    if (!a) return img;
+    art_texto_minusculas(minus);
+    art_texto_centrado(a, s && s[0] ? s : " ", color, escala, ancho);
+    art_texto_minusculas(false);
+    lv_image_set_src(img, &a->dsc);
+    lv_obj_add_event_cb(img, txt_borrado, LV_EVENT_DELETE, a);
+    lv_obj_remove_flag(img, LV_OBJ_FLAG_CLICKABLE);
+    return img;
+}
+static lv_obj_t *txt_cambiar(lv_obj_t *img, const char *s, uint32_t color, int escala, int ancho, bool minus)
+{
+    if (!img) return NULL;
+    lv_obj_t *p = lv_obj_get_parent(img);
+    const int32_t x = lv_obj_get_x_aligned(img), y = lv_obj_get_y_aligned(img);
+    lv_obj_t *n = txt(p, s, color, escala, ancho, minus);
+    lv_obj_align(n, LV_ALIGN_TOP_MID, x, y);
+    lv_obj_delete(img);
+    return n;
+}
+
+static lv_obj_t *boton(lv_obj_t *padre, int w, int h, uint32_t color, const char *s, int escala, lv_event_cb_t cb, intptr_t dato, bool minus)
+{
+    lv_obj_t *b = lv_obj_create(padre);
+    lv_obj_remove_style_all(b);
+    lv_obj_set_size(b, w, h);
+    lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(b, 12, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x6A5AA8), LV_STATE_PRESSED);
+    lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(b, LV_OBJ_FLAG_SCROLLABLE);
+    if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, (void *)dato);
+    if (s) { lv_obj_t *t = txt(b, s, 0xFFFFFF, escala, w - 8, minus); lv_obj_center(t); }
+    return b;
+}
+
+static lv_obj_t *s_scr, *s_barra, *s_barra_fill, *s_pct_txt, *s_campo, *s_teclas, *s_aviso_txt;
+
+static void limpiar(void)
+{
+    s_scr = lv_screen_active();
+    lv_obj_clean(s_scr);
+    s_barra = s_barra_fill = s_pct_txt = s_campo = s_teclas = s_aviso_txt = NULL;
+    lv_obj_set_style_bg_color(s_scr, lv_color_hex(C_FONDO), 0);
+    lv_obj_set_style_bg_opa(s_scr, LV_OPA_COVER, 0);
+    lv_obj_remove_flag(s_scr, LV_OBJ_FLAG_SCROLLABLE);
+}
+
+/* --- botones comunes */
+static void cancelar_cb(lv_event_t *e) { (void)e; uso(); s_cancelar = true; }
+static void otra_cb(lv_event_t *e) { (void)e; uso(); s_buscar_otra = true; }
+static void ya_cb(lv_event_t *e) { (void)e; uso(); s_ya = true; }
+static void boton_cancelar(int y, const char *s)
+{
+    lv_obj_t *b = boton(s_scr, 170, 44, C_ROJO, s ? s : "CANCELAR", 2, cancelar_cb, 0, false);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, y);
+}
+
+/* --- pantalla de mensaje (título, texto, botones) */
+static void pantalla_msg(const char *t1, const char *t2, bool con_otra, bool con_cancelar)
+{
+    limpiar();
+    lv_obj_t *a = txt(s_scr, "MODO WI-FI", C_SUAVE, 2, 300, false);
+    lv_obj_align(a, LV_ALIGN_TOP_MID, 0, 44);
+    lv_obj_t *b = txt(s_scr, t1, C_AMARILLO, 3, 360, false);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 120);
+    if (t2 && t2[0]) { lv_obj_t *c = txt(s_scr, t2, 0xFFFFFF, 2, 340, true); lv_obj_align(c, LV_ALIGN_TOP_MID, 0, 186); }
+    if (con_otra) { lv_obj_t *o = boton(s_scr, 200, 44, C_BOTON, "OTRA RED", 2, otra_cb, 0, false); lv_obj_align(o, LV_ALIGN_TOP_MID, 0, 310); }
+    if (con_cancelar) boton_cancelar(370, NULL);
+}
+
+/* --- la lista de redes */
+static void red_cb(lv_event_t *e) { uso(); s_elegida = (int)(intptr_t)lv_event_get_user_data(e); }
+static void pantalla_lista(void)
+{
+    limpiar();
+    lv_obj_t *a = txt(s_scr, s_nredes ? "ELIGE TU WI-FI" : "NO ENCONTRÉ REDES", C_AMARILLO, 3, 340, false);
+    lv_obj_align(a, LV_ALIGN_TOP_MID, 0, 40);
+    lv_obj_t *l = lv_obj_create(s_scr);
+    lv_obj_remove_style_all(l);
+    lv_obj_set_size(l, 330, 236);
+    lv_obj_align(l, LV_ALIGN_TOP_MID, 0, 82);
+    lv_obj_set_flex_flow(l, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(l, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(l, 6, 0);
+    lv_obj_set_scroll_dir(l, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(l, LV_SCROLLBAR_MODE_OFF);
+    for (int i = 0; i < s_nredes; i++) {
+        lv_obj_t *b = boton(l, 310, 46, C_BOTON, NULL, 2, red_cb, i, true);
+        lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+        lv_obj_t *t = txt(b, s_redes[i].ssid, 0xFFFFFF, 2, 230, true);
+        lv_obj_align(t, LV_ALIGN_LEFT_MID, 12, 0);
+        const int barras = s_redes[i].rssi > -55 ? 4 : s_redes[i].rssi > -67 ? 3 : s_redes[i].rssi > -78 ? 2 : 1;
+        for (int k = 0; k < 4; k++) { /* la señal: cuatro palitos */
+            lv_obj_t *p = lv_obj_create(b);
+            lv_obj_remove_style_all(p);
+            lv_obj_set_size(p, 5, 6 + k * 5);
+            lv_obj_align(p, LV_ALIGN_BOTTOM_RIGHT, -12 - (3 - k) * 8, -10);
+            lv_obj_set_style_bg_color(p, lv_color_hex(k < barras ? C_AMARILLO : 0x5A527A), 0);
+            lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
+            lv_obj_remove_flag(p, LV_OBJ_FLAG_CLICKABLE);
+        }
+    }
+    lv_obj_t *o = boton(s_scr, 210, 44, C_BOTON, "BUSCAR DE NUEVO", 2, otra_cb, 0, false);
+    lv_obj_align(o, LV_ALIGN_TOP_MID, 0, 326);
+    boton_cancelar(378, NULL);
+}
+
+/* --- el teclado */
+static int s_modo_tec;      /* 0 minúsculas, 1 mayúsculas, 2 números y símbolos */
+static bool s_ver_clave;
+static volatile bool s_tec_rearmar; /* (se rearma desde la tarea principal, no dentro del toque) */
+static const char *const FILAS[3][4] = {
+    {"qwertyuiop", "asdfghjkl", "zxcvbnm", ""},
+    {"QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", ""},
+    {"1234567890", "@#$%&*-+=_", ".,;:!?'\"/\\", "()[]<>{}|~"},
+};
+enum { T_BORRAR = 1000, T_ESPACIO, T_MODO, T_NUM, T_VER, T_CONECTAR };
+static void teclado_armar(void);
+static void campo_refrescar(void)
+{
+    char b[70];
+    const size_t n = strlen(s_prueba.clave);
+    if (s_ver_clave) snprintf(b, sizeof b, "%s_", s_prueba.clave);
+    else { size_t i = 0; for (; i < n && i < sizeof b - 2; i++) b[i] = '*'; b[i++] = '_'; b[i] = 0; }
+    if (s_campo) s_campo = txt_cambiar(s_campo, b, 0xFFFFFF, 2, 280, true);
+}
+static void tecla_cb(lv_event_t *e)
+{
+    uso();
+    const int k = (int)(intptr_t)lv_event_get_user_data(e);
+    size_t n = strlen(s_prueba.clave);
+    if (k == T_BORRAR) { if (n) s_prueba.clave[n - 1] = 0; }
+    else if (k == T_ESPACIO) { if (n + 1 < sizeof s_prueba.clave) { s_prueba.clave[n] = ' '; s_prueba.clave[n + 1] = 0; } }
+    else if (k == T_MODO) { s_modo_tec = s_modo_tec == 0 ? 1 : 0; s_tec_rearmar = true; return; }
+    else if (k == T_NUM) { s_modo_tec = s_modo_tec == 2 ? 0 : 2; s_tec_rearmar = true; return; }
+    else if (k == T_VER) { s_ver_clave = !s_ver_clave; }
+    else if (k == T_CONECTAR) { s_conectar_pedido = true; return; }
+    else if (k > 0 && k < 128 && n + 1 < sizeof s_prueba.clave) { s_prueba.clave[n] = (char)k; s_prueba.clave[n + 1] = 0; }
+    campo_refrescar();
+}
+static void teclado_armar(void)
+{
+    if (!s_teclas) return;
+    lv_obj_clean(s_teclas);
+    const int W = 33, H = 38, G = 3, Y0 = 0;
+    for (int f = 0; f < 4; f++) {
+        const char *fila = FILAS[s_modo_tec][f];
+        const int n = (int)strlen(fila);
+        if (!n) continue;
+        const int ancho = n * W + (n - 1) * G;
+        for (int i = 0; i < n; i++) {
+            char t[2] = {fila[i], 0};
+            lv_obj_t *b = boton(s_teclas, W, H, C_BOTON, t, 2, tecla_cb, (intptr_t)(unsigned char)fila[i], s_modo_tec == 0);
+            lv_obj_set_pos(b, (370 - ancho) / 2 + i * (W + G), Y0 + f * (H + G));
+        }
+    }
+    /* la fila de abajo: modo, números, espacio, borrar, conectar */
+    const int y = Y0 + 4 * (H + G) + 2;
+    lv_obj_t *b;
+    b = boton(s_teclas, 50, 40, C_BOTON, s_modo_tec == 1 ? "abc" : "ABC", 2, tecla_cb, T_MODO, true); lv_obj_set_pos(b, 22, y);
+    b = boton(s_teclas, 50, 40, C_BOTON, s_modo_tec == 2 ? "abc" : "123", 2, tecla_cb, T_NUM, true); lv_obj_set_pos(b, 76, y);
+    b = boton(s_teclas, 74, 40, C_BOTON, "ESPACIO", 1, tecla_cb, T_ESPACIO, false); lv_obj_set_pos(b, 130, y);
+    b = boton(s_teclas, 48, 40, C_BOTON, "<", 2, tecla_cb, T_BORRAR, false); lv_obj_set_pos(b, 208, y);
+    b = boton(s_teclas, 108, 40, C_VERDE, "CONECTAR", 2, tecla_cb, T_CONECTAR, false); lv_obj_set_pos(b, 260, y);
+}
+static void pantalla_clave(const char *aviso)
+{
+    limpiar();
+    char t[60];
+    snprintf(t, sizeof t, "%s", s_prueba.ssid);
+    lv_obj_t *a = txt(s_scr, t, C_AMARILLO, 2, 300, true);
+    lv_obj_align(a, LV_ALIGN_TOP_MID, 0, 30);
+    s_aviso_txt = txt(s_scr, aviso ? aviso : "ESCRIBE LA CLAVE", aviso ? 0xFF9A9A : C_SUAVE, 1, 300, false);
+    lv_obj_align(s_aviso_txt, LV_ALIGN_TOP_MID, 0, 54);
+    lv_obj_t *caja = lv_obj_create(s_scr); /* el campo de la clave */
+    lv_obj_remove_style_all(caja);
+    lv_obj_set_size(caja, 300, 38);
+    lv_obj_align(caja, LV_ALIGN_TOP_MID, -22, 74);
+    lv_obj_set_style_bg_color(caja, lv_color_hex(0x0E0B1E), 0);
+    lv_obj_set_style_bg_opa(caja, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(caja, 10, 0);
+    lv_obj_set_style_border_color(caja, lv_color_hex(C_SUAVE), 0);
+    lv_obj_set_style_border_width(caja, 2, 0);
+    lv_obj_remove_flag(caja, LV_OBJ_FLAG_SCROLLABLE);
+    s_campo = txt(caja, "_", 0xFFFFFF, 2, 280, true);
+    lv_obj_align(s_campo, LV_ALIGN_TOP_MID, 0, 10);
+    lv_obj_t *v = boton(s_scr, 44, 38, C_BOTON, "VER", 1, tecla_cb, T_VER, false); /* mostrar u ocultar la clave */
+    lv_obj_align(v, LV_ALIGN_TOP_MID, 152, 74);
+    s_teclas = lv_obj_create(s_scr);
+    lv_obj_remove_style_all(s_teclas);
+    lv_obj_set_size(s_teclas, 370, 210);
+    lv_obj_align(s_teclas, LV_ALIGN_TOP_MID, 0, 124);
+    lv_obj_remove_flag(s_teclas, LV_OBJ_FLAG_SCROLLABLE);
+    teclado_armar();
+    campo_refrescar();
+    lv_obj_t *o = boton(s_scr, 120, 38, C_BOTON, "OTRA RED", 1, otra_cb, 0, false);
+    lv_obj_align(o, LV_ALIGN_TOP_MID, -66, 340);
+    lv_obj_t *c = boton(s_scr, 120, 38, C_ROJO, "CANCELAR", 1, cancelar_cb, 0, false);
+    lv_obj_align(c, LV_ALIGN_TOP_MID, 66, 340);
+}
+
+/* --- hay una versión nueva: aviso con cuenta regresiva */
+static void pantalla_aviso(int seg)
+{
+    limpiar();
+    lv_obj_t *a = txt(s_scr, "¡HAY UNA VERSIÓN NUEVA!", C_AMARILLO, 3, 360, false);
+    lv_obj_align(a, LV_ALIGN_TOP_MID, 0, 70);
+    char t[160];
+    snprintf(t, sizeof t, "TIENES LA %s\nLLEGA LA %s\n%s", FW_VERSION, s_nueva, s_nueva_nombre);
+    lv_obj_t *b = txt(s_scr, t, 0xFFFFFF, 2, 340, false);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 150);
+    snprintf(t, sizeof t, "SE ACTUALIZA EN %d S", seg);
+    s_aviso_txt = txt(s_scr, t, C_SUAVE, 2, 340, false);
+    lv_obj_align(s_aviso_txt, LV_ALIGN_TOP_MID, 0, 250);
+    lv_obj_t *y = boton(s_scr, 200, 46, C_VERDE, "ACTUALIZAR YA", 2, ya_cb, 0, false);
+    lv_obj_align(y, LV_ALIGN_TOP_MID, 0, 300);
+    boton_cancelar(360, NULL);
+}
+
+/* --- bajando: barra y porcentaje */
+static void pantalla_bajar(void)
+{
+    limpiar();
+    char t[80];
+    snprintf(t, sizeof t, "ACTUALIZANDO A LA %s", s_nueva);
+    lv_obj_t *a = txt(s_scr, t, C_AMARILLO, 3, 360, false);
+    lv_obj_align(a, LV_ALIGN_TOP_MID, 0, 120);
+    lv_obj_t *b = txt(s_scr, "NO LO APAGUES. SE REINICIA SOLO", 0xFFFFFF, 2, 340, false);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 190);
+    s_barra = lv_obj_create(s_scr);
+    lv_obj_remove_style_all(s_barra);
+    lv_obj_set_size(s_barra, 300, 18);
+    lv_obj_align(s_barra, LV_ALIGN_TOP_MID, 0, 250);
+    lv_obj_set_style_bg_color(s_barra, lv_color_hex(0x433868), 0);
+    lv_obj_set_style_bg_opa(s_barra, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_barra, 9, 0);
+    s_barra_fill = lv_obj_create(s_barra);
+    lv_obj_remove_style_all(s_barra_fill);
+    lv_obj_set_size(s_barra_fill, 0, 18);
+    lv_obj_set_style_bg_color(s_barra_fill, lv_color_hex(C_AMARILLO), 0);
+    lv_obj_set_style_bg_opa(s_barra_fill, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_barra_fill, 9, 0);
+    s_pct_txt = txt(s_scr, "0 %", C_SUAVE, 2, 200, false);
+    lv_obj_align(s_pct_txt, LV_ALIGN_TOP_MID, 0, 282);
+}
+static void bajar_progreso(int pct)
+{
+    if (!s_disp || !s_barra_fill || !hal_display_lock()) return;
+    lv_obj_set_width(s_barra_fill, 300 * (pct > 100 ? 100 : pct) / 100);
+    char t[16];
+    snprintf(t, sizeof t, "%d %%", pct);
+    s_pct_txt = txt_cambiar(s_pct_txt, t, C_SUAVE, 2, 200, false);
+    hal_display_unlock();
+}
+
+/* arma la pantalla que toca (desde la tarea principal, con el candado de la pantalla) */
+static void mostrar(void (*f)(void))
+{
+    if (s_disp && hal_display_lock()) { f(); hal_display_unlock(); }
+}
+static const char *s_m1, *s_m2;
+static bool s_m_otra, s_m_cancel;
+static void f_msg(void) { pantalla_msg(s_m1, s_m2, s_m_otra, s_m_cancel); }
+static void msg(const char *t1, const char *t2, bool otra, bool cancel)
+{
+    snprintf(s_msg1, sizeof s_msg1, "%s", t1 ? t1 : "");
+    snprintf(s_msg2, sizeof s_msg2, "%s", t2 ? t2 : "");
+    s_m1 = s_msg1; s_m2 = s_msg2; s_m_otra = otra; s_m_cancel = cancel;
+    mostrar(f_msg);
+}
+static void f_lista(void) { pantalla_lista(); }
+static const char *s_clave_aviso;
+static void f_clave(void) { pantalla_clave(s_clave_aviso); }
+static int s_aviso_seg;
+static void f_aviso(void) { pantalla_aviso(s_aviso_seg); }
+static void f_bajar(void) { pantalla_bajar(); }
+
+/* ------------------------------------------------------------------ descarga */
+
+static bool descargar(void)
+{
+    mostrar(f_bajar);
     esp_http_client_config_t hc = {
         .url = OTA_URL_BASE "mascota.bin",
         .crt_bundle_attach = esp_crt_bundle_attach,
@@ -305,453 +598,179 @@ static void descargar(const char *ver)
     esp_https_ota_config_t oc = {.http_config = &hc};
     esp_https_ota_handle_t h = NULL;
     esp_err_t e = esp_https_ota_begin(&oc, &h);
-    if (e != ESP_OK) { diag("descarga: no partió (error 0x%x), RAM %u KB", (unsigned)e, ram_kb()); estado("NO SE PUDO BAJAR", "PRUEBA DE NUEVO", -1); return; }
+    if (e != ESP_OK) { diag("descarga: no partió (error 0x%x), RAM %u KB", (unsigned)e, ram_kb()); return false; }
     esp_app_desc_t d;
     e = esp_https_ota_get_img_desc(h, &d);
     if (e != ESP_OK || strcmp(d.project_name, esp_app_get_description()->project_name)) {
         esp_https_ota_abort(h);
-        estado("ESE ARCHIVO NO ES DEL ORBE", "NO SE INSTALÓ NADA", -1);
-        return;
+        diag("descarga: el archivo no es del orbe");
+        return false;
     }
     const int total = esp_https_ota_get_image_size(h);
     int ult = -1;
     while ((e = esp_https_ota_perform(h)) == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
         const int leido = esp_https_ota_get_image_len_read(h);
         const int pct = total > 0 ? (int)((int64_t)leido * 100 / total) : 0;
-        if (pct != ult) { ult = pct; estado(NULL, NULL, pct); uso(); }
+        if (pct != ult) { ult = pct; bajar_progreso(pct); uso(); }
     }
     if (e == ESP_OK && esp_https_ota_is_complete_data_received(h)) e = esp_https_ota_finish(h);
     else { esp_https_ota_abort(h); if (e == ESP_OK) e = ESP_FAIL; }
-    if (e != ESP_OK) { diag("descarga: falló (error 0x%x)", (unsigned)e); estado("LA DESCARGA FALLÓ", "SIGUE LA VERSIÓN DE ANTES. PRUEBA DE NUEVO", -1); return; }
-    snprintf(t, sizeof t, "¡LISTO! INSTALADA LA %s", d.version);
-    estado(t, "REINICIANDO...", 100);
-    ESP_LOGI(TAG, "bajada la %s desde internet (estaba en la %s)", d.version, FW_VERSION);
-    s_reiniciar_ms = ms() + 2500;
-}
-
-static void buscar(void)
-{
-    if (!s_conectado) {
-        char b[96];
-        linea_wifi(b, sizeof b);
-        estado(s_wifi.ssid[0] ? "CONECTANDO A INTERNET..." : "FALTA EL WI-FI DE CASA", s_wifi.ssid[0] ? b : "ELÍGELO DESDE EL CELULAR", -1);
-        return;
-    }
-    if (!tomar()) return;
-    estado("BUSCANDO LA ÚLTIMA VERSIÓN...", "", -1);
-    char ver[33] = "", nombre[64] = "";
-    if (!leer_version_publicada(ver, sizeof ver, nombre, sizeof nombre)) {
-        diag("version.json: no se pudo leer (RAM %u KB)", ram_kb());
-        estado("NO PUDE VER LA ÚLTIMA VERSIÓN", "¿HAY INTERNET? PRUEBA DE NUEVO", -1);
-        soltar();
-        return;
-    }
-    snprintf(s_ultima, sizeof s_ultima, "%s", ver);
-    if (fw_codigo(ver) <= fw_codigo(FW_VERSION)) {
-        char b[96];
-        snprintf(b, sizeof b, "LA ÚLTIMA PUBLICADA ES LA %s", ver);
-        estado("¡ESTÁS AL DÍA!", b, -1);
-    } else {
-        descargar(ver);
-    }
-    soltar();
-}
-
-static void tarea_ota(void *arg)
-{
-    (void)arg;
-    while (true) {
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000));
-        if (s_buscar) { s_buscar = false; buscar(); }
-    }
-}
-
-/* ------------------------------------------------------------------ la página para el celular */
-
-static const char PAGINA[] =
-    "<!DOCTYPE html><html lang=es><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-    "<title>OrbePet</title><style>"
-    "body{font-family:system-ui,sans-serif;background:#1b1530;color:#fff;margin:0;padding:16px;max-width:520px;margin:auto}"
-    "h1{font-size:22px;color:#ffe27a;margin:4px 0 12px}section{background:#2a2148;border-radius:14px;padding:14px;margin:12px 0}"
-    "h2{font-size:16px;margin:0 0 8px;color:#ffe27a}input,select,button{font-size:16px;width:100%;box-sizing:border-box;padding:10px;"
-    "margin:5px 0;border-radius:10px;border:0}button{background:#2e9e50;color:#fff;font-weight:600}button.b2{background:#5a4a8a}"
-    "#est{font-size:15px;line-height:1.4}.bar{height:12px;background:#433868;border-radius:6px;overflow:hidden;margin-top:6px}"
-    ".bar div{height:100%;width:0;background:#ffe27a}small{color:#bbb}</style></head><body>"
-    "<h1>OrbePet · actualizar</h1>"
-    "<section><h2>Estado</h2><div id=est>...</div><div class=bar><div id=pb></div></div></section>"
-    "<section><h2>Buscar en internet</h2><button onclick=buscar()>Buscar actualización</button>"
-    "<small>Usa el Wi-Fi de la casa. Si hay una versión más nueva, la baja y se reinicia sola.</small></section>"
-    "<section><h2>Wi-Fi de la casa</h2><select id=redes><option>Buscando redes...</option></select>"
-    "<input id=ssid placeholder='Nombre de la red'><input id=clave type=password placeholder='Clave'>"
-    "<button onclick=guardar()>Guardar y conectar</button><button class=b2 onclick=redes()>Volver a buscar redes</button></section>"
-    "<section><h2>Subir un archivo .bin</h2><input type=file id=bin accept='.bin'><button onclick=subir()>Instalar este archivo</button>"
-    "<small>El mascota.bin que sale al compilar (o el de la página de versiones de GitHub).</small></section>"
-    "<section><button class=b2 onclick=\"fetch('/salir',{method:'POST'})\">Salir y volver al juego</button></section>"
-    "<script>"
-    "const $=i=>document.getElementById(i);"
-    "async function est(){try{const r=await fetch('/estado');const j=await r.json();"
-    "$('est').innerHTML='Versión instalada: <b>'+j.version+'</b>'+(j.ultima?' · última publicada: <b>'+j.ultima+'</b>':'')+'<br>'+j.wifi+'<br>'+j.l1+(j.l2?'<br>'+j.l2:'');"
-    "$('pb').style.width=(j.pct<0?0:j.pct)+'%';}catch(e){}}"
-    "async function redes(){$('redes').innerHTML='<option>Buscando redes...</option>';try{const r=await fetch('/redes');const l=await r.json();"
-    "$('redes').innerHTML='<option value=\"\">Elige tu red...</option>'+l.map(s=>'<option>'+s.replace(/</g,'&lt;')+'</option>').join('');}catch(e){}}"
-    "$('redes').onchange=e=>{if(e.target.value)$('ssid').value=e.target.value};"
-    "function guardar(){fetch('/wifi',{method:'POST',body:new URLSearchParams({ssid:$('ssid').value,clave:$('clave').value})}).then(est)}"
-    "function buscar(){fetch('/buscar',{method:'POST'}).then(est)}"
-    "function subir(){const f=$('bin').files[0];if(!f){alert('Elige el archivo .bin');return}"
-    "const x=new XMLHttpRequest();x.open('POST','/subir');x.upload.onprogress=e=>{if(e.lengthComputable)$('pb').style.width=(e.loaded*100/e.total)+'%'};"
-    "x.onload=()=>{$('est').innerHTML=x.responseText};x.onerror=()=>{$('est').innerHTML='Se cortó la conexión'};x.send(f)}"
-    "est();redes();setInterval(est,1500);"
-    "</script></body></html>";
-
-static esp_err_t h_pagina(httpd_req_t *r)
-{
-    uso();
-    httpd_resp_set_type(r, "text/html; charset=utf-8");
-    return httpd_resp_send(r, PAGINA, HTTPD_RESP_USE_STRLEN);
-}
-
-/* escapa comillas y barras para meter un texto en JSON */
-static void json_esc(char *dst, size_t n, const char *s)
-{
-    size_t k = 0;
-    for (; *s && k + 2 < n; s++) {
-        if (*s == '"' || *s == '\\') dst[k++] = '\\';
-        dst[k++] = *s;
-    }
-    dst[k] = 0;
-}
-
-static esp_err_t h_estado(httpd_req_t *r)
-{
-    char w[96], l1[200], l2[200], wf[200], ul[40];
-    linea_wifi(w, sizeof w);
-    xSemaphoreTake(s_mx, portMAX_DELAY);
-    json_esc(l1, sizeof l1, s_linea1);
-    json_esc(l2, sizeof l2, s_linea2);
-    json_esc(ul, sizeof ul, s_ultima);
-    const int pct = s_pct;
-    xSemaphoreGive(s_mx);
-    json_esc(wf, sizeof wf, w);
-    char *b = malloc(900);
-    if (!b) return httpd_resp_send_500(r);
-    snprintf(b, 900, "{\"version\":\"%s\",\"nombre\":\"%s\",\"ultima\":\"%s\",\"wifi\":\"%s\",\"l1\":\"%s\",\"l2\":\"%s\",\"pct\":%d}",
-             FW_VERSION, FW_NOMBRE, ul, wf, l1, l2, pct);
-    httpd_resp_set_type(r, "application/json");
-    esp_err_t e = httpd_resp_send(r, b, HTTPD_RESP_USE_STRLEN);
-    free(b);
-    return e;
-}
-
-static esp_err_t h_redes(httpd_req_t *r)
-{
-    uso();
-    wifi_scan_config_t sc = {0};
-    uint16_t n = 0;
-    if (!s_ocupado && esp_wifi_scan_start(&sc, true) == ESP_OK) esp_wifi_scan_get_ap_num(&n);
-    if (n > 20) n = 20;
-    wifi_ap_record_t *ap = n ? calloc(n, sizeof *ap) : NULL;
-    if (ap) esp_wifi_scan_get_ap_records(&n, ap);
-    else { n = 0; esp_wifi_clear_ap_list(); }
-    char *b = malloc(20 * 70 + 8);
-    if (!b) { free(ap); return httpd_resp_send_500(r); }
-    size_t k = 0;
-    b[k++] = '[';
-    for (int i = 0; i < n; i++) {
-        if (!ap[i].ssid[0]) continue;
-        bool rep = false;
-        for (int j = 0; j < i && !rep; j++) rep = !strcmp((char *)ap[j].ssid, (char *)ap[i].ssid);
-        if (rep) continue;
-        char e[70];
-        json_esc(e, sizeof e, (char *)ap[i].ssid);
-        k += (size_t)snprintf(b + k, 20 * 70 + 8 - k, "%s\"%s\"", k > 1 ? "," : "", e);
-    }
-    b[k++] = ']';
-    b[k] = 0;
-    free(ap);
-    httpd_resp_set_type(r, "application/json");
-    esp_err_t e = httpd_resp_send(r, b, HTTPD_RESP_USE_STRLEN);
-    free(b);
-    return e;
-}
-
-/* lee un campo de un formulario urlencoded (con %XX y +) */
-static void campo(const char *q, const char *nombre, char *out, size_t n)
-{
-    out[0] = 0;
-    char k[16];
-    snprintf(k, sizeof k, "%s=", nombre);
-    const char *p = q;
-    while ((p = strstr(p, k)) != NULL && p != q && p[-1] != '&') p++;
-    if (!p) return;
-    p += strlen(k);
-    size_t i = 0;
-    while (*p && *p != '&' && i + 1 < n) {
-        if (*p == '+') { out[i++] = ' '; p++; }
-        else if (*p == '%' && p[1] && p[2]) { char h[3] = {p[1], p[2], 0}; out[i++] = (char)strtol(h, NULL, 16); p += 3; }
-        else out[i++] = *p++;
-    }
-    out[i] = 0;
-}
-
-static esp_err_t h_wifi(httpd_req_t *r)
-{
-    uso();
-    char q[300] = "";
-    const int n = r->content_len < (int)sizeof q - 1 ? r->content_len : (int)sizeof q - 1;
-    int k = 0;
-    while (k < n) { const int m = httpd_req_recv(r, q + k, (size_t)(n - k)); if (m <= 0) break; k += m; }
-    q[k] = 0;
-    ota_wifi_t w = {0};
-    campo(q, "ssid", w.ssid, sizeof w.ssid);
-    campo(q, "clave", w.clave, sizeof w.clave);
-    if (!w.ssid[0]) return httpd_resp_sendstr(r, "Falta el nombre de la red");
-    s_wifi = w;
-    hal_storage_set("wifi", &s_wifi, sizeof s_wifi);
-    char b[96];
-    snprintf(b, sizeof b, "CONECTANDO A %s...", w.ssid);
-    estado("WI-FI GUARDADO", b, -1);
-    conectar_casa();
-    return httpd_resp_sendstr(r, "OK");
-}
-
-static esp_err_t h_buscar(httpd_req_t *r)
-{
-    uso();
-    s_buscar = true;
-    if (s_tarea) xTaskNotifyGive(s_tarea);
-    return httpd_resp_sendstr(r, "OK");
-}
-
-static esp_err_t h_salir(httpd_req_t *r)
-{
-    s_salir = true;
-    return httpd_resp_sendstr(r, "Volviendo al juego...");
-}
-
-/* el celular manda el .bin crudo (sin formulario): se escribe en la otra ranura a medida que llega */
-static esp_err_t h_subir(httpd_req_t *r)
-{
-    uso();
-    if (!tomar()) { httpd_resp_set_status(r, "409 Conflict"); return httpd_resp_sendstr(r, "El orbe está ocupado bajando otra versión"); }
-    const esp_partition_t *p = esp_ota_get_next_update_partition(NULL);
-    const int total = r->content_len;
-    if (!p || total <= 0 || (size_t)total > p->size) {
-        soltar();
-        httpd_resp_set_status(r, "400 Bad Request");
-        return httpd_resp_sendstr(r, "El archivo está vacío o es más grande que el espacio del programa");
-    }
-    enum { CAB = sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t) };
-    uint8_t *buf = malloc(4096);
-    uint8_t cab[CAB];
-    int ncab = 0, recib = 0, errores = 0;
-    esp_ota_handle_t oh = 0;
-    bool empezado = false;
-    const char *falla = NULL;
-    char ver[33] = "?";
-    estado("RECIBIENDO DEL CELULAR...", "NO LO APAGUES", 0);
-    while (buf && recib < total && !falla) {
-        int n = httpd_req_recv(r, (char *)buf, (size_t)(total - recib < 4096 ? total - recib : 4096));
-        if (n == HTTPD_SOCK_ERR_TIMEOUT && ++errores < 5) continue;
-        if (n <= 0) { falla = "Se cortó la conexión"; break; }
-        errores = 0;
-        int desde = 0;
-        if (!empezado) { /* junta la cabecera para revisar que es un programa del orbe antes de borrar nada */
-            const int c = n < CAB - ncab ? n : CAB - ncab;
-            memcpy(cab + ncab, buf, (size_t)c);
-            ncab += c;
-            desde = c;
-            if (ncab == CAB || recib + n == total) {
-                const esp_app_desc_t *d = (const esp_app_desc_t *)(cab + sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t));
-                if (ncab < CAB || cab[0] != ESP_IMAGE_HEADER_MAGIC || d->magic_word != ESP_APP_DESC_MAGIC_WORD) falla = "Ese archivo no es un programa del ESP32";
-                else if (strncmp(d->project_name, esp_app_get_description()->project_name, sizeof d->project_name)) falla = "Ese programa no es del orbe (proyecto distinto)";
-                else {
-                    snprintf(ver, sizeof ver, "%s", d->version);
-                    if (esp_ota_begin(p, OTA_WITH_SEQUENTIAL_WRITES, &oh) != ESP_OK) falla = "No se pudo preparar la memoria";
-                    else if (esp_ota_write(oh, cab, (size_t)ncab) != ESP_OK) falla = "No se pudo escribir";
-                    else empezado = true;
-                }
-            }
-        }
-        if (!falla && empezado && n > desde && esp_ota_write(oh, buf + desde, (size_t)(n - desde)) != ESP_OK) falla = "No se pudo escribir";
-        recib += n;
-        estado(NULL, NULL, (int)((int64_t)recib * 100 / total));
-    }
-    free(buf);
-    if (!buf) falla = "Sin memoria";
-    if (!falla && empezado) {
-        if (esp_ota_end(oh) != ESP_OK) { falla = "El archivo llegó dañado (no pasó la revisión)"; empezado = false; }
-        else if (esp_ota_set_boot_partition(p) != ESP_OK) falla = "No se pudo elegir la versión nueva";
-    }
-    if (empezado && falla) esp_ota_abort(oh);
-    char resp[160];
-    if (falla) {
-        estado("NO SE INSTALÓ", falla, -1);
-        snprintf(resp, sizeof resp, "No se instaló: %s", falla);
-        soltar();
-        httpd_resp_set_status(r, "400 Bad Request");
-        return httpd_resp_sendstr(r, resp);
-    }
-    char t[96];
-    snprintf(t, sizeof t, "¡LISTO! INSTALADA LA %s", ver);
-    estado(t, "REINICIANDO...", 100);
-    ESP_LOGI(TAG, "instalada la %s desde el celular (estaba en la %s)", ver, FW_VERSION);
-    snprintf(resp, sizeof resp, "¡Listo! Instalada la versión %s. El orbe se reinicia.", ver);
-    s_reiniciar_ms = ms() + 2500;
-    return httpd_resp_sendstr(r, resp);
-}
-
-static void web_iniciar(void)
-{
-    httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.stack_size = 7168;
-    c.max_uri_handlers = 10;
-    c.lru_purge_enable = true;
-    c.recv_wait_timeout = 15;
-    httpd_handle_t s = NULL;
-    const esp_err_t e = httpd_start(&s, &c);
-    if (e != ESP_OK) { diag("servidor web: error 0x%x", (unsigned)e); return; }
-    const httpd_uri_t U[] = {
-        {.uri = "/", .method = HTTP_GET, .handler = h_pagina},
-        {.uri = "/estado", .method = HTTP_GET, .handler = h_estado},
-        {.uri = "/redes", .method = HTTP_GET, .handler = h_redes},
-        {.uri = "/wifi", .method = HTTP_POST, .handler = h_wifi},
-        {.uri = "/buscar", .method = HTTP_POST, .handler = h_buscar},
-        {.uri = "/salir", .method = HTTP_POST, .handler = h_salir},
-        {.uri = "/subir", .method = HTTP_POST, .handler = h_subir},
-    };
-    for (size_t i = 0; i < sizeof U / sizeof U[0]; i++) httpd_register_uri_handler(s, &U[i]);
-}
-
-/* ------------------------------------------------------------------ la pantalla del orbe */
-
-typedef struct {
-    lv_obj_t *img;
-    art_img_t art;
-} rotulo_t;
-static rotulo_t s_r[6];
-static lv_obj_t *s_barra, *s_barra_fill;
-
-static void rotulo(int i, const char *txt, uint32_t color, int escala, int y)
-{
-    rotulo_t *r = &s_r[i];
-    if (!r->img) r->img = lv_image_create(lv_screen_active());
-    art_texto_centrado(&r->art, txt, color, escala, 340);
-    lv_image_set_src(r->img, &r->art.dsc);
-    lv_obj_align(r->img, LV_ALIGN_TOP_MID, 0, y);
-    lv_obj_invalidate(r->img);
-}
-
-static void salir_cb(lv_event_t *e) { (void)e; s_salir = true; }
-
-static void pantalla_crear(void)
-{
-    lv_obj_t *scr = lv_screen_active();
-    lv_obj_clean(scr);
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x1B1530), 0);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-    lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    rotulo(0, "ACTUALIZAR", 0xFFE27A, 3, 46);
-    rotulo(1, "VERSIÓN " FW_VERSION, 0xFFFFFF, 2, 92);
-    s_barra = lv_obj_create(scr);
-    lv_obj_remove_style_all(s_barra);
-    lv_obj_set_size(s_barra, 280, 14);
-    lv_obj_align(s_barra, LV_ALIGN_TOP_MID, 0, 214);
-    lv_obj_set_style_bg_color(s_barra, lv_color_hex(0x433868), 0);
-    lv_obj_set_style_bg_opa(s_barra, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(s_barra, 7, 0);
-    s_barra_fill = lv_obj_create(s_barra);
-    lv_obj_remove_style_all(s_barra_fill);
-    lv_obj_set_size(s_barra_fill, 0, 14);
-    lv_obj_set_style_bg_color(s_barra_fill, lv_color_hex(0xFFE27A), 0);
-    lv_obj_set_style_bg_opa(s_barra_fill, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(s_barra_fill, 7, 0);
-    lv_obj_add_flag(s_barra, LV_OBJ_FLAG_HIDDEN);
-    char b[160];
-    snprintf(b, sizeof b, "DESDE EL CELULAR:\nRED %s\nCLAVE " OTA_AP_CLAVE "\nY ABRE 192.168.4.1", s_ap);
-    rotulo(4, b, 0xB9B0E0, 2, 244);
-    lv_obj_t *bt = lv_obj_create(scr);
-    lv_obj_remove_style_all(bt);
-    lv_obj_set_size(bt, 150, 50);
-    lv_obj_align(bt, LV_ALIGN_TOP_MID, 0, 372);
-    lv_obj_set_style_bg_color(bt, lv_color_hex(0x5A4A8A), 0);
-    lv_obj_set_style_bg_opa(bt, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(bt, 16, 0);
-    lv_obj_add_flag(bt, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(bt, salir_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *bi = lv_image_create(bt);
-    art_texto(&s_r[5].art, "SALIR", 0xFFFFFF, 2, 0);
-    lv_image_set_src(bi, &s_r[5].art.dsc);
-    lv_obj_center(bi);
-}
-
-static void pantalla_refrescar(void)
-{
-    char l1[96], l2[96];
-    xSemaphoreTake(s_mx, portMAX_DELAY);
-    snprintf(l1, sizeof l1, "%s", s_linea1);
-    snprintf(l2, sizeof l2, "%s", s_linea2);
-    const int pct = s_pct;
-    s_cambio = false;
-    xSemaphoreGive(s_mx);
-    if (!l2[0]) linea_wifi(l2, sizeof l2);
-    rotulo(2, l1, 0xFFFFFF, 2, 134);
-    rotulo(3, l2, 0xB9B0E0, 2, 168);
-    if (pct < 0) lv_obj_add_flag(s_barra, LV_OBJ_FLAG_HIDDEN);
-    else { lv_obj_remove_flag(s_barra, LV_OBJ_FLAG_HIDDEN); lv_obj_set_width(s_barra_fill, 280 * (pct > 100 ? 100 : pct) / 100); }
+    if (e != ESP_OK) { diag("descarga: falló (error 0x%x), RAM %u KB", (unsigned)e, ram_kb()); return false; }
+    diag("instalada la %s (estaba en la %s)", d.version, FW_VERSION);
+    return true;
 }
 
 /* ------------------------------------------------------------------ el modo */
 
+static void salir(const char *por_que)
+{
+    diag("salgo: %s, mínimo de RAM interna %u KB", por_que, (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
+    esp_wifi_stop();
+    vTaskDelay(pdMS_TO_TICKS(300));
+    esp_restart();
+}
+
+/* espera un rato atendiendo CANCELAR; true si cancelaron */
+static bool esperar(uint32_t t)
+{
+    const uint32_t t0 = ms();
+    while (ms() - t0 < t) { if (s_cancelar) return true; vTaskDelay(pdMS_TO_TICKS(100)); }
+    return s_cancelar;
+}
+
+static void revisar_cancelar(void) { if (s_cancelar) salir("CANCELAR"); }
+
 void ota_modo(void)
 {
-    s_mx = xSemaphoreCreateMutex();
-    ESP_LOGI(TAG, "modo actualizar (versión %s)", FW_VERSION); /* (sin el registro del juego: sus archivos no se montan en este modo) */
+    s_diag_marca = 0;
+    diag("v%s: RAM interna al entrar %u KB", FW_VERSION, ram_kb());
     size_t n = sizeof s_wifi;
     if (!hal_storage_get("wifi", &s_wifi, &n) || n != sizeof s_wifi) memset(&s_wifi, 0, sizeof s_wifi);
     s_wifi.ssid[sizeof s_wifi.ssid - 1] = 0;
     s_wifi.clave[sizeof s_wifi.clave - 1] = 0;
 
-    /* (1.0.11) ORDEN: la pantalla (LVGL y sus tareas) se come ~70 KB de RAM interna; en la 1.0.09 se iniciaba primero y
-     * al Wi-Fi ya no le quedaba (esp_wifi_init: sin memoria → pánico). Ahora: Wi-Fi, página y tarea primero; la pantalla
-     * después y solo si sobra memoria. Sin pantalla igual funciona: todo se ve en la página del celular. */
-    s_diag_marca = 0;
-    diag("v%s: RAM interna al entrar %u KB", FW_VERSION, ram_kb());
-    ota_nombre_red(s_ap, sizeof s_ap);
-    esp_err_t e = wifi_iniciar();
-    if (e == ESP_OK) diag("wifi ok, quedan %u KB", ram_kb()); else diag("wifi: error 0x%x (0x101 = sin memoria), quedan %u KB", (unsigned)e, ram_kb());
+    /* primero la pantalla: se ve de inmediato qué está pasando */
+    s_disp = hal_display_init_liviano(); /* (búferes chicos: deja ~28 KB más para el Wi-Fi) */
+    diag("pantalla %s, quedan %u KB", s_disp ? "sí" : "NO", ram_kb());
+    msg("ENCENDIENDO EL WI-FI...", "", false, true);
+    const esp_err_t e = wifi_iniciar();
+    if (e == ESP_OK) diag("wifi ok, quedan %u KB", ram_kb());
+    else diag("wifi: error 0x%x (0x101 = sin memoria), quedan %u KB", (unsigned)e, ram_kb());
     if (e != ESP_OK) {
-        lv_display_t *d0 = ram_kb() >= 80 ? hal_display_init() : NULL;
-        estado("NO SE PUDO PRENDER EL WI-FI", "VUELVO AL JUEGO", -1);
-        if (d0 && hal_display_lock()) { pantalla_crear(); pantalla_refrescar(); hal_display_unlock(); }
-        vTaskDelay(pdMS_TO_TICKS(6000));
-        esp_restart();
+        msg("NO SE PUDO ENCENDER EL WI-FI", "FALTA MEMORIA. QUEDÓ ANOTADO EN EL REGISTRO. VUELVO AL JUEGO", false, false);
+        vTaskDelay(pdMS_TO_TICKS(7000));
+        salir("sin Wi-Fi");
     }
-    if (s_wifi.ssid[0]) { char b[96]; snprintf(b, sizeof b, "CONECTANDO A %s...", s_wifi.ssid); estado("BUSCANDO INTERNET...", b, -1); }
-    else estado("FALTA EL WI-FI DE CASA", "ELÍGELO DESDE EL CELULAR", -1);
-    web_iniciar();
-    if (xTaskCreate(tarea_ota, "ota", 8192, NULL, 5, &s_tarea) != pdPASS) { s_tarea = NULL; diag("sin memoria para la tarea de descarga"); }
-    lv_display_t *d = NULL;
-    const unsigned antes = ram_kb();
-    if (antes >= 84) d = hal_display_init(); /* la pantalla necesita ~70 KB y deja un margen para la conexión segura */
-    diag("pantalla %s (había %u KB), quedan %u KB", d ? "sí" : "NO (falta memoria; todo se ve en el celular)", antes, ram_kb());
-    if (d && hal_display_lock()) { pantalla_crear(); pantalla_refrescar(); hal_display_unlock(); }
     uso();
 
+    /* con el Wi-Fi guardado, se conecta solo; si no, a buscar */
+    etapa_t etapa = s_wifi.ssid[0] ? E_CONECTAR : E_BUSCAR;
+    if (etapa == E_CONECTAR) s_prueba = s_wifi;
+    bool guardada = etapa == E_CONECTAR; /* la red que se intenta es la guardada */
+
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(200));
-        const uint32_t t = ms();
-        if (s_cambio && d && hal_display_lock()) { pantalla_refrescar(); hal_display_unlock(); }
-        if (!s_tarea && s_buscar) { s_buscar = false; buscar(); } /* sin tarea aparte: busca aquí mismo */
-        const bool listo = s_reiniciar_ms && (int32_t)(t - s_reiniciar_ms) >= 0;
-        const bool aburrido = !s_ocupado && t - s_ultimo_uso_ms > OTA_INACTIVO_MS;
-        if (listo || (s_salir && !s_ocupado) || aburrido) {
-            if (!listo) estado("VOLVIENDO AL JUEGO...", "", -1);
-            if (d && hal_display_lock()) { pantalla_refrescar(); hal_display_unlock(); }
-            vTaskDelay(pdMS_TO_TICKS(600));
-            diag("salgo: %s, mínimo de RAM interna %u KB", listo ? "versión nueva instalada" : (s_salir ? "SALIR" : "15 min sin uso"),
-                 (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024));
-            esp_wifi_stop();
-            esp_restart();
+        revisar_cancelar();
+        if (ms() - s_ultimo_uso_ms > OTA_INACTIVO_MS) salir("10 min sin tocar nada");
+        s_buscar_otra = false;
+        switch (etapa) {
+        case E_BUSCAR:
+            msg("BUSCANDO REDES...", "", false, true);
+            buscar_redes();
+            s_elegida = -1;
+            mostrar(f_lista);
+            etapa = E_LISTA;
+            break;
+        case E_LISTA:
+            while (s_elegida < 0 && !s_buscar_otra && !s_cancelar && ms() - s_ultimo_uso_ms < OTA_INACTIVO_MS) vTaskDelay(pdMS_TO_TICKS(100));
+            revisar_cancelar();
+            if (s_buscar_otra) { etapa = E_BUSCAR; break; }
+            if (s_elegida < 0 || s_elegida >= s_nredes) break;
+            memset(&s_prueba, 0, sizeof s_prueba);
+            snprintf(s_prueba.ssid, sizeof s_prueba.ssid, "%s", s_redes[s_elegida].ssid);
+            guardada = s_wifi.ssid[0] && !strcmp(s_wifi.ssid, s_prueba.ssid);
+            if (guardada) { s_prueba = s_wifi; etapa = E_CONECTAR; }
+            else if (s_redes[s_elegida].abierta) etapa = E_CONECTAR;
+            else { s_clave_aviso = NULL; s_conectar_pedido = false; s_modo_tec = 0; s_ver_clave = false; mostrar(f_clave); etapa = E_CLAVE; }
+            break;
+        case E_CLAVE:
+            while (!s_conectar_pedido && !s_buscar_otra && !s_cancelar && ms() - s_ultimo_uso_ms < OTA_INACTIVO_MS) {
+                if (s_tec_rearmar) { s_tec_rearmar = false; mostrar(teclado_armar); }
+                vTaskDelay(pdMS_TO_TICKS(60));
+            }
+            revisar_cancelar();
+            if (s_buscar_otra) { etapa = E_BUSCAR; break; }
+            if (s_conectar_pedido) { s_conectar_pedido = false; etapa = E_CONECTAR; }
+            break;
+        case E_CONECTAR: {
+            char t[96];
+            snprintf(t, sizeof t, "%s", s_prueba.ssid);
+            msg("CONECTANDO...", t, true, true);
+            if (conectar()) {
+                if (strcmp(s_wifi.ssid, s_prueba.ssid) || strcmp(s_wifi.clave, s_prueba.clave)) { /* funciona: queda guardada */
+                    s_wifi = s_prueba;
+                    hal_storage_set("wifi", &s_wifi, sizeof s_wifi);
+                }
+                diag("conectado a la red (RAM %u KB)", ram_kb());
+                etapa = E_REVISAR;
+            } else {
+                revisar_cancelar();
+                if (s_buscar_otra) { etapa = E_BUSCAR; break; }
+                const int r = s_razon;
+                diag("no conectó (motivo %d)", r);
+                if (r == WIFI_REASON_NO_AP_FOUND) { msg("NO ENCUENTRO ESA RED", t, true, true); if (esperar(2500)) salir("CANCELAR"); etapa = E_BUSCAR; }
+                else if (s_prueba.clave[0] || !guardada) {
+                    s_clave_aviso = "NO PUDE ENTRAR: REVISA LA CLAVE";
+                    s_conectar_pedido = false; s_modo_tec = 0;
+                    if (guardada) s_prueba.clave[0] = 0; /* la guardada ya no sirve: a escribirla de nuevo */
+                    mostrar(f_clave);
+                    etapa = E_CLAVE;
+                } else etapa = E_BUSCAR;
+                guardada = false;
+            }
+            break;
+        }
+        case E_REVISAR: {
+            msg("CONECTADO", "BUSCANDO LA ÚLTIMA VERSIÓN...", false, true);
+            if (!leer_version_publicada(s_nueva, sizeof s_nueva, s_nueva_nombre, sizeof s_nueva_nombre)) {
+                msg("NO PUDE VER LAS VERSIONES", "HAY WI-FI PERO NO CONTESTA INTERNET. PRUEBA MÁS RATO", false, true);
+                if (esperar(15000)) salir("CANCELAR");
+                salir("sin respuesta de internet");
+            }
+            if (fw_codigo(s_nueva) <= fw_codigo(FW_VERSION)) {
+                char t[96];
+                snprintf(t, sizeof t, "TIENES LA %s, LA ÚLTIMA PUBLICADA", FW_VERSION);
+                msg("¡ESTÁS AL DÍA!", t, false, true);
+                diag("al día (publicada %s)", s_nueva);
+                if (esperar(6000)) salir("CANCELAR");
+                salir("al día");
+            }
+            etapa = E_AVISO;
+            break;
+        }
+        case E_AVISO:
+            s_ya = false;
+            for (int seg = 5; seg > 0 && !s_ya; seg--) {
+                s_aviso_seg = seg;
+                mostrar(f_aviso);
+                if (esperar(1000)) salir("CANCELAR");
+            }
+            etapa = E_BAJAR;
+            break;
+        case E_BAJAR:
+            if (descargar()) {
+                char t[96];
+                snprintf(t, sizeof t, "QUEDÓ INSTALADA LA %s", s_nueva);
+                msg("¡LISTO!", t, false, false);
+                vTaskDelay(pdMS_TO_TICKS(2500));
+                salir("versión nueva instalada");
+            }
+            msg("LA DESCARGA FALLÓ", "SIGUE LA VERSIÓN DE ANTES. PRUEBA DE NUEVO MÁS RATO", false, true);
+            if (esperar(10000)) salir("CANCELAR");
+            salir("descarga fallida");
+            break;
+        default:
+            etapa = E_BUSCAR;
+            break;
         }
     }
 }

@@ -489,6 +489,11 @@ esp_err_t bsp_touch_new(const bsp_display_cfg_t *cfg, esp_lcd_touch_handle_t *re
     return esp_lcd_touch_new_i2c_cst9217(tp_io_handle, &tp_cfg, ret_touch);
 }
 
+/* (1.0.13) modo liviano (el modo actualizar por Wi-Fi): franjas más chicas y sin doble búfer. Los búferes van en RAM
+ * interna apta para DMA (2 × 466 × 20 × 2 = 37 KB); así quedan ~9 KB y el resto queda para el Wi-Fi. */
+static bool s_liviano;
+void bsp_display_modo_liviano(bool si) { s_liviano = si; }
+
 static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
 {
     assert(cfg != NULL);
@@ -507,10 +512,10 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
             .rotation = cfg->rotation,
             .hor_res = BSP_LCD_H_RES,
             .ver_res = BSP_LCD_V_RES,
-            .buffer_height = 20, /* franjas chicas (con 12 el cuadro tardaba más: más envíos por pantalla) */
+            .buffer_height = s_liviano ? 10 : 20, /* franjas chicas (con 12 el cuadro tardaba más: más envíos por pantalla) */
             .use_psram = false, /* búferes en RAM interna apta para DMA: el SPI los envía directo, sin copia intermedia */
             .enable_ppa_accel = false,
-            .require_double_buffer = true,
+            .require_double_buffer = !s_liviano,
         },
         .tear_avoid_mode = cfg->tear_avoid_mode,
     };

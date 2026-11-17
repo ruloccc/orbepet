@@ -245,6 +245,7 @@ static void refr_evento(lv_event_t *e)
     }
 }
 
+lv_display_t *hal_display_init_liviano(void) { bsp_display_modo_liviano(true); return hal_display_init(); } /* (1.0.13) */
 lv_display_t *hal_display_init(void)
 {
     lv_display_t *d = bsp_display_start(); /* también inicia I2C, táctil y LVGL */

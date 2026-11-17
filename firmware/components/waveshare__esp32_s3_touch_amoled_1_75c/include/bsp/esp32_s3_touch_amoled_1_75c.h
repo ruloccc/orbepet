@@ -217,6 +217,8 @@ typedef struct {
  * @return Pointer to LVGL display or NULL when error occurred
  */
 lv_display_t *bsp_display_start(void);
+/* (1.0.13) antes de bsp_display_start: búferes chicos y simples (para que alcance la memoria del Wi-Fi) */
+void bsp_display_modo_liviano(bool si);
 
 /**
  * @brief Initialize display
