@@ -42,7 +42,9 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 **1.0.13 (Wi-Fi desde el orbe)** — pedido del usuario: nada de celular. Modo Wi-Fi con pantalla propia: lista de
 redes → teclado (minúsculas/mayúsculas/símbolos) → conecta → aviso con 5 s → descarga → reinicio. Con Wi-Fi guardado
 no pregunta nada. CANCELAR reinicia al juego. Pantalla en modo liviano (bsp_display_modo_liviano) para que quepa el
-Wi-Fi. NO COMPILADO con ESP-IDF al entregar el zip (el usuario pidió solo el zip; aquí no hay ESP-IDF completo):
+Wi-Fi. Pantallas en `ota_pantalla.inc`; vista previa en el PC: `make mascota_ota && ./mascota_ota carpeta` (cmake con
+-DLVGL_DIR). ota.c pasó `-fsyntax-only` con el compilador xtensa y los encabezados de ESP-IDF 5.5.6 (sdkconfig.h a
+mano en /tmp/chk), pero NO COMPILADO del todo con ESP-IDF al entregar el zip (el usuario pidió solo el zip; aquí no hay ESP-IDF completo):
 revisar la primera compilación. Ni la pantalla del modo Wi-Fi ni la memoria están probadas en la placa.
 Sin publicar en orbepet-firmware (el usuario avisa cuándo). Commits locales sin subir desde 1.0.12.
 
