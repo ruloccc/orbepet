@@ -15,10 +15,12 @@ y revisa que quepa en ota_1. Con una etiqueta `v<versión>` además publica. Ver
 `gh api repos/ruloccc/orbepet/actions/runs` (gh funciona por el proxy aunque `gh auth status` diga que no).
 El usuario también puede compilar y grabar con cable con el probador, como siempre.
 
-**Publicar una versión:** subir `FW_VERSION` en `firmware/main/version.h` (y `FW_NOMBRE`), sección en README,
-commit, `git tag v1.0.10 && git push origin v1.0.10`. Sin el secreto `ORBEPET_FIRMWARE_TOKEN` el paso de publicar
-no hace nada: entonces bajar el artefacto de la ejecución y subir mascota.bin + version.json a orbepet-firmware a mano
-(push directo a su main) y crear la Release.
+**Publicar una versión = subir el número:** cambiar `FW_VERSION` en `firmware/main/version.h` (y `FW_NOMBRE`),
+sección en README, commit y push a main. La compilación ve que es más nueva que la publicada y la publica.
+(Desde aquí NO se pueden empujar etiquetas ni bajar artefactos: el proxy lo bloquea.) Sin el secreto
+`ORBEPET_FIRMWARE_TOKEN` la deja en la rama `compilados` del repo privado: `git fetch origin compilados` y copiar
+mascota.bin + version.json al main de orbepet-firmware (push normal, eso sí se puede).
+Tamaño: 1.0.09 = 7.871.744 bytes de 7.995.392 en ota_1 (98 %). core, ui.c y la red van con -Os para caber.
 
 ---
 

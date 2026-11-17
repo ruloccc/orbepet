@@ -828,10 +828,11 @@ Al arrancar con una versión distinta a la anterior dice «¡VERSIÓN x!». Por 
   **con cable** una vez (`idf.py flash`, el botón Instalar del probador). Las siguientes ya llegan por el aire.
 - Se revisa que el archivo sea un programa de este proyecto («mascota») antes de borrar nada.
 
-**Publicar una versión:** subir `FW_VERSION` en version.h, commit a `main` del repositorio privado `ruloccc/orbepet`
-y etiqueta `v<versión>` (ej. `v1.0.10`). GitHub Actions (`.github/workflows/firmware.yml`) compila con ESP-IDF
-v5.5, revisa que quepa en ota_1 (0x7A0000) y publica en `ruloccc/orbepet-firmware` (necesita el secreto
-`ORBEPET_FIRMWARE_TOKEN`; sin él deja el `.bin` como artefacto de la ejecución).
+**Publicar una versión:** subir `FW_VERSION` en version.h (y `FW_NOMBRE`) y hacer commit a `main` del repositorio
+privado `ruloccc/orbepet`. GitHub Actions (`.github/workflows/firmware.yml`) compila con ESP-IDF v5.5, revisa que quepa
+en ota_1 (0x7A0000) y, si la versión es más nueva que la publicada, la publica en `ruloccc/orbepet-firmware`
+(necesita el secreto `ORBEPET_FIRMWARE_TOKEN`; sin él la deja en la rama `compilados` y hay que copiarla a mano).
+Tamaño: para caber con el Wi-Fi, el motor (core), ui.c y la red se compilan con -Os (ver firmware/CMakeLists.txt).
 
 ## Firmware 108 (la partida no cambia: sigue en la versión 42)
 Pedidos del 17-nov (14:26).

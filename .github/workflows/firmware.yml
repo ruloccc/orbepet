@@ -1,10 +1,9 @@
-# Compila el firmware del orbe en la nube y, con una etiqueta v1.0.10 (por ejemplo), lo publica para que el orbe
-# se actualice solo por Wi-Fi.
+# Compila el firmware del orbe en la nube y lo publica para que el orbe se actualice solo por Wi-Fi.
 #
-#   - Cada cambio que llega a «main»: compila y revisa que quepa (no publica nada).
-#   - Etiqueta «v<versión>» (tiene que ser igual a FW_VERSION de firmware/main/version.h): además PUBLICA en el
-#     repositorio público ruloccc/orbepet-firmware: mascota.bin + version.json (lo que lee el orbe) y una
-#     «Release» con los archivos para grabar por cable.
+#   - Cada cambio que llega a «main»: compila y revisa que quepa en ota_1.
+#   - Si FW_VERSION (firmware/main/version.h) es MÁS NUEVA que la publicada, además la PUBLICA en el repositorio
+#     público ruloccc/orbepet-firmware: mascota.bin + version.json (lo que lee el orbe) y una «Release» con los
+#     archivos para grabar por cable. O sea: subir el número de versión = publicar. (También con «Run workflow».)
 #
 # Para publicar hace falta el secreto ORBEPET_FIRMWARE_TOKEN (un token con permiso de escribir en orbepet-firmware).
 # Sin él, la compilación igual queda como «artefacto» descargable de esta ejecución.
@@ -57,6 +56,19 @@ jobs:
           path: firmware
           command: idf.py build && (idf.py size-components > build/tamanos.txt 2>&1 || true)
 
+      - name: ¿Es más nueva que la publicada?
+        id: pub
+        run: |
+          codigo() { echo "$1" | awk -F. '{ if (NF==3) print $1*10000+$2*100+$3; else print -1 }'; }
+          P=$(curl -sfL "https://raw.githubusercontent.com/ruloccc/orbepet-firmware/main/version.json?n=$RANDOM" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' || true)
+          V="${{ steps.ver.outputs.version }}"
+          echo "publicada: ${P:-ninguna} · esta: $V" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(codigo "$V")" -gt "$(codigo "${P:-0.0.0}")" ]; then
+            echo "publicar=true" >> "$GITHUB_OUTPUT"; echo "→ se publica" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "publicar=false" >> "$GITHUB_OUTPUT"; echo "→ no se publica (para publicar, sube FW_VERSION)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Revisar que quepa en la ranura más chica (ota_1)
         run: |
           T=$(stat -c %s firmware/build/mascota.bin)
@@ -87,8 +99,8 @@ jobs:
           path: salida/
           retention-days: 30
 
-      - name: Guardar lo compilado en la rama «compilados» de este repositorio (solo con etiqueta v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Guardar lo compilado en la rama «compilados» de este repositorio
+        if: steps.pub.outputs.publicar == 'true'
         run: |
           # una sola versión a la vez (sin historia): así el repositorio no crece. Claude la lee desde aquí si hace falta
           # publicar a mano (cuando no está el secreto ORBEPET_FIRMWARE_TOKEN).
@@ -99,7 +111,7 @@ jobs:
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" compilados
 
       - name: Publicar en ruloccc/orbepet-firmware
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.pub.outputs.publicar == 'true'
         env:
           TOKEN: ${{ secrets.ORBEPET_FIRMWARE_TOKEN }}
           V: ${{ steps.ver.outputs.version }}
