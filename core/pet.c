@@ -2317,6 +2317,13 @@ static void nacer(pet_t *p, uint32_t t)
     sonar(p, SND_ALEGRE, t);
 }
 
+void pet_egg_start(pet_t *p, uint32_t ahora)
+{
+    if (p->etapa != STAGE_HUEVO) return;
+    p->eclosion = ahora + PET_HUEVO_SEGUNDOS;
+    p->nacimiento = p->eclosion;
+}
+
 void pet_hatch(pet_t *p, uint32_t ahora)
 {
     if (p->etapa != STAGE_HUEVO) return;
@@ -4285,7 +4292,9 @@ void pet_update(pet_t *p, uint32_t ahora)
         if (t >= p->clima_hasta) nuevo_clima(p, t);
         if (p->juguetes_puestos) guardar_juguetes_viejos(p, t);
         if (p->etapa == STAGE_HUEVO) {
-            if (t >= p->eclosion) nacer(p, p->eclosion);
+            /* (1.0.10) un huevo que todavía no llega al prado (sin especie elegida: el primer inicio) no nace solo:
+             * su cuenta de 5 minutos empieza al llegar (pet_egg_start). Los huevos de familia ya traen aspecto_ok. */
+            if (t >= p->eclosion && p->aspecto_ok) nacer(p, p->eclosion);
             continue;
         }
         paso(p, t, (float)dt, vivo);

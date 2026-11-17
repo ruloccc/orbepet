@@ -1,7 +1,7 @@
 # PARTE — estado del trabajo (17-nov-2026, 16:30)
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.09** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
+Versión en curso: **1.0.10** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
 Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
@@ -20,7 +20,7 @@ sección en README, commit y push a main. La compilación ve que es más nueva q
 (Desde aquí NO se pueden empujar etiquetas ni bajar artefactos: el proxy lo bloquea.) Sin el secreto
 `ORBEPET_FIRMWARE_TOKEN` la deja en la rama `compilados` del repo privado: `git fetch origin compilados` y copiar
 mascota.bin + version.json al main de orbepet-firmware (push normal, eso sí se puede).
-Tamaño: 1.0.09 = 7.871.744 bytes de 7.995.392 en ota_1 (98 %). core, ui.c y la red van con -Os para caber.
+Tamaño: ranuras de 0x7D0000 (8.192.000 bytes) desde la 1.0.10; el juego con -O2, solo red/BT con -Os.
 
 ---
 
@@ -38,6 +38,14 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 ---
 
 ## 2. Qué se hizo en las últimas versiones
+
+**1.0.10 (huevo de 5 minutos; juego igual de rápido)** — se graba CON CABLE (cambia la tabla de particiones)
+- El usuario NO quiere que nada quede más lento: el juego (core, ui.c, art.c, LVGL) va con -O2 como siempre. El
+  espacio para el Wi-Fi salió de igualar ota_0/ota_1 a 0x7D0000 (0x20000 y 0x7F0000). Solo red y BT con -Os.
+  Si algún día no cabe: lo grande es el arte (5,5 MB de .rodata en libmain); la salida de fondo es llevarlo a su
+  propia partición (no hay más espacio para ranuras: deben quedar antes de los 16 MB).
+- Primer huevo: 5 min reales (pet_egg_start al llegar al prado, UI_ACCION_HUEVO_EMPIEZA 187). Sin aspecto_ok el
+  huevo no nace solo (pet_update). Prueba en test_core; en el simulador: sim_quick_huevo + sim_huevo_elegido.
 
 **1.0.09 (actualizar por Wi-Fi; número de versión)** — se graba CON CABLE una vez (trae el arranque con vuelta atrás)
 - `firmware/main/version.h`: FW_VERSION/FW_NOMBRE, único lugar. CMake la pone en esp_app_desc (PROJECT_VER).
@@ -92,7 +100,7 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 
 ## 3. Qué falta (en orden)
 
-0. **Probar la 1.0.09 en la placa**: grabar con cable, ver Ajustes → Versión, entrar a ACTUALIZAR, conectar el
+0. **Probar la 1.0.10 en la placa** (la 1.0.09 no alcanzó a grabarse): grabar con cable, ver Ajustes → Versión, entrar a ACTUALIZAR, conectar el
    celular a ORBEPET-XXXX, poner el Wi-Fi de la casa, «Buscar» (debe decir «¡ESTÁS AL DÍA!»), y después publicar
    una 1.0.10 de prueba para ver que llega sola. Revisar que el programa siga cabiendo (lo dice la compilación).
 1. **Probar en la placa todo lo del 102 al 108.** Nada de eso se ha probado salvo lo que el usuario vio: Pochi

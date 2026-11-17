@@ -564,6 +564,7 @@ EXPORT(sim_frame) int sim_frame(uint32_t dt_ms)
         case UI_ACCION_NIEBLA: pet_fog_clear(&s_pet, t); log_linea(t, "despejaste la niebla", 0, 0); break;
         case UI_ACCION_COLOR: pet_set_color(&s_pet, arg); break;
         case UI_ACCION_ECLOSIONAR: pet_hatch(&s_pet, t); break;
+        case UI_ACCION_HUEVO_EMPIEZA: pet_egg_start(&s_pet, t); break; /* (1.0.10) */
             case UI_ACCION_HABILIDAD: pet_ability_use(&s_pet, arg & 1, t); break;
         case UI_ACCION_BALLENA: log_linea(t, pet_whale_ride(&s_pet, arg, t) ? "paseo en la ballena: trajo polvo de estrellas" : "paseo en la ballena por el firmamento", 0, 0); break;
         case UI_ACCION_BAILE:        case UI_ACCION_EVOLUCION: if (arg) pet_evo_accept(&s_pet, t); else pet_evo_defer(&s_pet); log_linea(t, arg ? "decidiste que crezca" : "todavia no: lo puedes hacer en Ajustes", 0, 0); break;
@@ -1283,6 +1284,9 @@ EXPORT(sim_quick) void sim_quick(int edad)
     ui_set_clock_doubtful(false);
 }
 EXPORT(sim_close_panel) void sim_close_panel(void) { ui_close_panel(); }
+/* (1.0.10, pruebas) como sim_quick pero con el huevo SIN elegir y sin nombre: el primer inicio de verdad desde la elección del huevo */
+EXPORT(sim_huevo_elegido) void sim_huevo_elegido(int e) { ui_test_huevo_elegido(e); }
+EXPORT(sim_quick_huevo) void sim_quick_huevo(int edad) { sim_quick(edad); s_pet.aspecto_ok = 0; s_pet.nombre[0] = 0; s_pet.eclosion = (uint32_t)s_reloj + 1; }
 EXPORT(sim_trip) void sim_trip(int tipo) { ui_demo_trip(&s_pet, tipo); }
 EXPORT(sim_reserve_preview) void sim_reserve_preview(void) { ui_show_reserve(); }
 /* la alarma i suena en un minuto (una sola vez) */

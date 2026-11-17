@@ -1,6 +1,6 @@
 # Compila el firmware del orbe en la nube y lo publica para que el orbe se actualice solo por Wi-Fi.
 #
-#   - Cada cambio que llega a «main»: compila y revisa que quepa en ota_1.
+#   - Cada cambio que llega a «main»: compila y revisa que quepa en una ranura (0x7D0000).
 #   - Si FW_VERSION (firmware/main/version.h) es MÁS NUEVA que la publicada, además la PUBLICA en el repositorio
 #     público ruloccc/orbepet-firmware: mascota.bin + version.json (lo que lee el orbe) y una «Release» con los
 #     archivos para grabar por cable. O sea: subir el número de versión = publicar. (También con «Run workflow».)
@@ -69,14 +69,14 @@ jobs:
             echo "publicar=false" >> "$GITHUB_OUTPUT"; echo "→ no se publica (para publicar, sube FW_VERSION)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Revisar que quepa en la ranura más chica (ota_1)
+      - name: Revisar que quepa en una ranura del programa (0x7D0000)
         run: |
           T=$(stat -c %s firmware/build/mascota.bin)
-          MAX=$((0x7A0000))
+          MAX=$((0x7D0000))
           echo "mascota.bin: $T bytes de $MAX ($(( T * 100 / MAX ))%)" | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"; head -45 firmware/build/tamanos.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true; echo '```' >> "$GITHUB_STEP_SUMMARY"
           head -60 firmware/build/tamanos.txt 2>/dev/null || true
-          [ "$T" -le "$MAX" ] || { echo "::error::el programa ($T bytes) no cabe en ota_1 ($MAX bytes)"; exit 1; }
+          [ "$T" -le "$MAX" ] || { echo "::error::el programa ($T bytes) no cabe en la ranura ($MAX bytes)"; exit 1; }
 
       - name: Juntar los archivos
         run: |

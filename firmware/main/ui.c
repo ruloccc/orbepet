@@ -685,10 +685,11 @@ static void inicio_huevo(void);
 static int s_asp_gen, s_inicio_cfg;
 /* (107) el primer huevo se abre A LA VISTA: antes se llamaba a ECLOSIONAR en el mismo instante en que se ponía
  * el reloj, así que el huevo nunca llegaba a verse en el prado. Ahora llega, se mece, se le abren las grietas y
- * recién entonces nace; después viene el nombre. */
+ * recién entonces nace; después viene el nombre.
+ * (1.0.10) Como se acordó al comienzo, tarda 5 MINUTOS (PET_HUEVO_SEGUNDOS, la cuenta es del motor: pet_egg_start
+ * al llegar al prado) y no 9 segundos. Cada caricia le da calor y lo adelanta (PET_HUEVO_CALOR_S), como a todos. */
 static uint32_t s_nace_desde, s_nace_fin;
 static int s_nace_paso;
-#define NACE_MS 9000
 static void panel_rincon(void);
 static void panel_semilla(int parcela);
 static void panel_foto(void);
@@ -14003,22 +14004,27 @@ void ui_update(const pet_t *p, uint32_t utc)
         s_asp_listo = false; s_asp_enviado = true;
         accion(UI_ACCION_ASPECTO, s_asp_e);
         accion(UI_ACCION_GENERO, s_asp_gen);
+        accion(UI_ACCION_HUEVO_EMPIEZA, 0); /* (1.0.10) desde aquí cuenta sus 5 minutos */
         s_nace_desde = s_ms ? s_ms : 1; s_nace_paso = 0;   /* (107) y se abre a la vista, no al instante */
         globo(ICO_HUEVO, "TU HUEVO LLEGÓ AL PRADO", 2800);
     }
-    else if (s_nace_desde && p->etapa == STAGE_HUEVO) { /* (107) el ratito en que el huevo se mece, se raja y se abre */
-        if ((int32_t)(s_ms - s_nace_desde) >= NACE_MS) {
-            const int hx = (int)s_mascota.x, hy = cabeza_y(&s_mascota);
-            s_nace_desde = 0;
-            accion(UI_ACCION_ECLOSIONAR, 0);
-            for (int i = 0; i < 8; i++) flotar(ICO_ESTRELLA, NULL, 0, hx - 70 + i * 20, hy + 26, (uint32_t)i * 110);
-            mascota_modo(M_SALTA, 1600);
-            globo(ICO_CORAZON, "¡HOLA!", 2600);
-            s_nace_fin = s_ms + 2600;   /* el nombre espera a que se vea quién salió */
-        } else if (s_nace_paso == 0 && (int32_t)(s_ms - s_nace_desde) >= NACE_MS / 2) {
+    else if (s_nace_desde && p->etapa == STAGE_HUEVO) { /* (1.0.10) los 5 minutos: se mece, se raja; las caricias le dan calor */
+        const uint32_t r = pet_hatch_remaining(p, utc);
+        if (s_nace_paso == 0 && (int32_t)(s_ms - s_nace_desde) >= 4000) {
             s_nace_paso = 1;
+            globo(ICO_HUEVO, "NACERÁ EN UNOS 5 MINUTOS. ACARÍCIALO PARA DARLE CALOR", 4500);
+        } else if (s_nace_paso == 1 && r <= PET_HUEVO_SEGUNDOS / 2) {
+            s_nace_paso = 2;
             globo(ICO_HUEVO, "¡ALGO SE MUEVE ADENTRO!", 2600);
         }
+    }
+    else if (s_nace_desde && p->etapa != STAGE_HUEVO) { /* (1.0.10) el motor dice que nació: ahora se abre a la vista */
+        const int hx = (int)s_mascota.x, hy = cabeza_y(&s_mascota);
+        s_nace_desde = 0;
+        for (int i = 0; i < 8; i++) flotar(ICO_ESTRELLA, NULL, 0, hx - 70 + i * 20, hy + 26, (uint32_t)i * 110);
+        mascota_modo(M_SALTA, 1600);
+        globo(ICO_CORAZON, "¡HOLA!", 2600);
+        s_nace_fin = s_ms + 2600;   /* el nombre espera a que se vea quién salió */
     }
     else if (s_inicio_cfg && !s_asp_listo && p->etapa != STAGE_HUEVO && s_panel == PANEL_NINGUNO && !s_bienv_activa &&
              (!s_nace_fin || (int32_t)(s_ms - s_nace_fin) >= 0)) { /* nombre → color → modo, antes de verla en el prado */
@@ -14093,11 +14099,7 @@ void ui_update(const pet_t *p, uint32_t utc)
     c->pose.enferma = p->enferma != 0;
     if (p->etapa == STAGE_HUEVO) {
         uint32_t r = pet_hatch_remaining(p, utc);
-        c->grietas = r > 200 ? 0 : (r > 100 ? 1 : (r > 30 ? 2 : 3));
-        if (s_nace_desde) { /* (107) el primer huevo: las grietas van con la cuenta de la animación, no con el reloj */
-            const uint32_t e = s_ms - s_nace_desde;
-            c->grietas = e < NACE_MS / 3 ? 0 : (e < NACE_MS * 2 / 3 ? 1 : (e < NACE_MS - 1800 ? 2 : 3));
-        }
+        c->grietas = r > 200 ? 0 : (r > 100 ? 1 : (r > 30 ? 2 : 3)); /* (1.0.10) el primer huevo también: con su reloj de 5 min */
     }
 
     /* visita que ya estaba al encender */
@@ -16984,6 +16986,8 @@ int ui_test_panel(int k)
     lv_obj_update_layout(lv_screen_active());
     return 1;
 }
+/* (1.0.10, pruebas) como si recién se hubiera elegido el huevo y el género en el primer inicio: el huevo va a llegar al prado */
+void ui_test_huevo_elegido(int especie) { bienvenida_fin(); s_asp_e = especie; s_asp_listo = true; s_asp_gen = 0; s_inicio_cfg = 1; s_libro_inicio = false; cerrar_panel(); }
 const char *ui_test_panel_name(int k) { return k >= 0 && k < PRUEBA_PANELES ? PRUEBA_NOMBRE[k] : "?"; }
 
 static bool area_cruza(const lv_area_t *a, const lv_area_t *b) { return a->x1 <= b->x2 && b->x1 <= a->x2 && a->y1 <= b->y2 && b->y1 <= a->y2; }

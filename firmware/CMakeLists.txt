@@ -22,12 +22,8 @@ foreach(_c mbedtls lwip wpa_supplicant bt esp_netif esp_http_server esp_http_cli
         target_compile_options(${_lib} PRIVATE -Os)
     endif()
 endforeach()
-# El motor del juego (core) y la lógica de la interfaz (ui.c) también: con el Wi-Fi el programa se pasaba de ota_1. Lo que
-# dibuja (LVGL, art.c, la pantalla) sigue rápido. Si en la placa la interfaz se notara más lenta, quitar la línea de ui.c.
-idf_component_get_property(_core core COMPONENT_LIB)
-target_compile_options(${_core} PRIVATE -Os)
-idf_component_get_property(_main main COMPONENT_LIB)
-set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/main/ui.c" TARGET_DIRECTORY ${_main} PROPERTIES COMPILE_OPTIONS "-Os")
+# (1.0.10) el juego (core, ui.c, art.c), LVGL y la pantalla siguen con -O2, igual de rápidos que antes: el espacio para el
+# Wi-Fi salió de igualar las dos ranuras (partitions.csv), no de achicar el juego.
 foreach(_t mbedtls mbedcrypto mbedx509) # (las librerías de verdad de mbedTLS)
     if(TARGET ${_t})
         target_compile_options(${_t} PRIVATE -Os)

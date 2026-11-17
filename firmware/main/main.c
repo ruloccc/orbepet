@@ -2094,6 +2094,7 @@ void app_main(void)
             case UI_ACCION_NIEBLA: pet_fog_clear(&s_pet, t); break;
             case UI_ACCION_COLOR: pet_set_color(&s_pet, m.arg); break;
             case UI_ACCION_ECLOSIONAR: pet_hatch(&s_pet, t); break;
+            case UI_ACCION_HUEVO_EMPIEZA: pet_egg_start(&s_pet, t); break; /* (1.0.10) */
             case UI_ACCION_HABILIDAD: pet_ability_use(&s_pet, m.arg & 1, t); break;
             case UI_ACCION_BALLENA: pet_whale_ride(&s_pet, m.arg, t); break;
             case UI_ACCION_EVOLUCION: if (m.arg) pet_evo_accept(&s_pet, t); else pet_evo_defer(&s_pet); break;

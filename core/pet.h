@@ -1837,6 +1837,9 @@ void pet_init(pet_t *p, const char *nombre, uint8_t especie, uint32_t ahora, uin
 /* El huevo nace a los PET_HUEVO_SEGUNDOS; acariciarlo lo adelanta.
  * pet_hatch lo hace nacer ya (pruebas). */
 void pet_hatch(pet_t *p, uint32_t ahora);
+/* (1.0.10) el primer huevo llega al prado: desde AHORA cuenta sus PET_HUEVO_SEGUNDOS (5 min) para nacer
+ * (antes de poner el reloj la hora no sirve para contar) */
+void pet_egg_start(pet_t *p, uint32_t ahora);
 bool pet_is_egg(const pet_t *p);
 uint32_t pet_hatch_remaining(const pet_t *p, uint32_t ahora);
 void pet_set_name(pet_t *p, const char *nombre);

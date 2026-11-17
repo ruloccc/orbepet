@@ -807,6 +807,21 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.10 — el huevo tarda 5 minutos; el juego igual de rápido (se graba CON CABLE: cambia la tabla de particiones)
+
+**El primer huevo vuelve a tardar 5 minutos**, como se acordó al comienzo (el 107 lo había dejado en 9 segundos).
+Cuando llega al prado empieza su cuenta (`pet_egg_start`, `PET_HUEVO_SEGUNDOS` = 300): a los 4 s avisa «NACERÁ EN UNOS
+5 MINUTOS. ACARÍCIALO PARA DARLE CALOR», a la mitad «¡ALGO SE MUEVE ADENTRO!», las grietas van con su reloj y al nacer
+saltan las estrellitas y dice «¡HOLA!»; después el nombre. Cada caricia lo adelanta 15 s (como a todos los huevos).
+En el motor, un huevo que todavía no llega al prado (sin especie elegida) ya no nace solo: antes, si el inicio tomaba
+más de 5 minutos, podía nacer antes de verse.
+
+**El juego vuelve a la velocidad de siempre:** la 1.0.09 había compilado el motor y ui.c en modo «ocupar poco» (-Os)
+para que el Wi-Fi cupiera. Ahora todo el juego va con -O2 como en el 108 y el espacio sale de **igualar las dos
+ranuras del programa**: ota_0 y ota_1 de 0x7D0000 cada una (antes 8 MB y 7,6 MB; las dos tienen que quedar antes de los
+16 MB). La partida (nvs), los recursos, las fotos y el coredump no se mueven. Solo la red y el Bluetooth siguen con -Os
+(no se nota: no dibujan nada). Como cambia la tabla, esta versión se graba **con cable** (por Wi-Fi nunca cambia).
+
 ## Versión 1.0.09 — actualizar por Wi-Fi (antes «firmware 109»; la partida no cambia: sigue en la versión 42)
 
 Desde aquí las versiones se llaman **1.0.09, 1.0.10, 1.0.11…** El número vive en un solo lugar:
@@ -832,7 +847,7 @@ Al arrancar con una versión distinta a la anterior dice «¡VERSIÓN x!». Por 
 privado `ruloccc/orbepet`. GitHub Actions (`.github/workflows/firmware.yml`) compila con ESP-IDF v5.5, revisa que quepa
 en ota_1 (0x7A0000) y, si la versión es más nueva que la publicada, la publica en `ruloccc/orbepet-firmware`
 (necesita el secreto `ORBEPET_FIRMWARE_TOKEN`; sin él la deja en la rama `compilados` y hay que copiarla a mano).
-Tamaño: para caber con el Wi-Fi, el motor (core), ui.c y la red se compilan con -Os (ver firmware/CMakeLists.txt).
+Tamaño: desde la 1.0.10 cada ranura es de 0x7D0000; solo la red y el Bluetooth van con -Os.
 
 ## Firmware 108 (la partida no cambia: sigue en la versión 42)
 Pedidos del 17-nov (14:26).

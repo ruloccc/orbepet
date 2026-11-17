@@ -6,8 +6,11 @@
 nvs,      data, nvs,     0x9000,  0x10000,
 otadata,  data, ota,     0x19000, 0x2000,
 phy_init, data, phy,     0x1b000, 0x1000,
-ota_0,    app,  ota_0,   0x20000, 8M,
-ota_1,    app,  ota_1,   0x820000, 0x7A0000,
+# (1.0.10) las dos ranuras del programa, IGUALES (antes 8 MB y 7,6 MB): lo que se actualiza por Wi-Fi tiene que caber en
+# la más chica. Las dos tienen que quedar antes de los 16 MB (como el coredump); la partida (nvs), los recursos y las
+# fotos no se mueven. Este cambio solo se puede grabar CON CABLE (por Wi-Fi nunca cambia la tabla).
+ota_0,    app,  ota_0,   0x20000, 0x7D0000,
+ota_1,    app,  ota_1,   0x7F0000, 0x7D0000,
 coredump, data, coredump, 0xFC0000, 0x40000,
 recursos, data, spiffs,  0x1020000, 6M,
 fotos,    data, spiffs,  0x1620000, 6M,

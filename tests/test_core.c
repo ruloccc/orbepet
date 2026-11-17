@@ -340,6 +340,14 @@ static void test_huevo(void)
     pet_update(&p, T0 + 2 * 60);
     CHECK(pet_is_egg(&p), "a los 2 min sigue en el huevo");
     pet_update(&p, T0 + PET_HUEVO_SEGUNDOS + 60);
+    CHECK(pet_is_egg(&p), "(1.0.10) sin llegar al prado (sin especie elegida) no nace solo");
+    { const uint32_t tl = T0 + PET_HUEVO_SEGUNDOS + 60; /* llega al prado: desde ahí cuenta sus 5 minutos */
+      CHECK(pet_choose_look(&p, 0, -1, 0, tl, 12345u), "elige cómo será");
+      pet_egg_start(&p, tl);
+      CHECK(pet_hatch_remaining(&p, tl) == PET_HUEVO_SEGUNDOS, "(1.0.10) al llegar le quedan 5 minutos: %u", (unsigned)pet_hatch_remaining(&p, tl));
+      pet_update(&p, tl + 4 * 60);
+      CHECK(pet_is_egg(&p), "(1.0.10) a los 4 min de llegar sigue en el huevo");
+      pet_update(&p, tl + PET_HUEVO_SEGUNDOS + 60); }
     CHECK(!pet_is_egg(&p) && p.etapa == STAGE_BEBE, "nace como bebe");
     CHECK(p.necesidad[NEED_SACIEDAD] >= 65, "dentro del huevo no le baja el hambre");
     pet_set_name(&p, "ÑandúFeliz");
