@@ -1,7 +1,7 @@
 # PARTE — estado del trabajo (17-nov-2026, 16:30)
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.13** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
+Versión en curso: **1.0.14** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
 Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
@@ -38,6 +38,11 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 ---
 
 ## 2. Qué se hizo en las últimas versiones
+
+**1.0.14 (más memoria libre)** — pánicos en la 1.0.12: fopen → lock_init → sin RAM interna (135 B) → abort. El Wi-Fi
+fija ~6,5 KB de RAM interna. Se pasaron ~20 KB de estáticos a la PSRAM (s_pet, textos, animales, etc.). Ver en el
+registro «ARRANQUE listo: ... RAM interna» (antes ~12 KB) y los «vivo: RAM interna» durante el juego (antes 1-7 KB).
+Modo Wi-Fi de la 1.0.13 (entrar: 124 KB; Wi-Fi gastó 55 KB en la 1.0.11; pantalla normal 70 KB, liviana ~42 KB).
 
 **1.0.13 (Wi-Fi desde el orbe)** — pedido del usuario: nada de celular. Modo Wi-Fi con pantalla propia: lista de
 redes → teclado (minúsculas/mayúsculas/símbolos) → conecta → aviso con 5 s → descarga → reinicio. Con Wi-Fi guardado

@@ -807,6 +807,17 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.14 — más memoria libre (el juego se caía al quedarse sin RAM interna)
+
+- **Los dos pánicos de la 1.0.12** (al darle comida y al sacar una piedra brillante del cofre) son el mismo:
+  `fopen("/res/m0.bin")` → newlib crea un candado → no hay RAM interna (quedaban 135 bytes) → `abort()`.
+  El código del Wi-Fi ocupa ~6,5 KB de RAM interna fija (net80211, pp, esp_wifi, coexist) aunque esté apagado, y el
+  juego ya andaba con 1-7 KB libres.
+- **Arreglo:** ~20 KB de variables grandes pasan a la PSRAM (`EXT_RAM_BSS_ATTR`): la partida `s_pet` (main.c), los
+  textos de los paneles, animales, chispas, globos, flotantes, ambiente, lecturas, poses de las zonas (ui.c y .inc) y
+  los búferes de íconos propios y degradados (art.c). Nada de eso se usa desde interrupciones.
+- Incluye todo lo de la 1.0.13 (el Wi-Fi se configura en el orbe).
+
 ## Versión 1.0.13 — el Wi-Fi se configura en el orbe (sin celular)
 
 - **ACTUALIZAR** (Ajustes → Versión) reinicia en el **modo Wi-Fi**, que ahora tiene pantalla propia (`ota.c`):

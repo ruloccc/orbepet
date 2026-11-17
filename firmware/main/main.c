@@ -81,7 +81,7 @@ typedef struct {
     int32_t arg; /* la fecha de nacimiento va empaquetada (AAAAMMDD) */
 } accion_msg_t;
 
-static pet_t s_pet;
+static EXT_RAM_BSS_ATTR pet_t s_pet; /* (1.0.14) en la PSRAM: 4 KB menos de RAM interna (con el Wi-Fi la interna se acababa y fopen/locks abortaban) */
 static QueueHandle_t s_acciones;
 static volatile bool s_guardar_ext; /* un comando del probador cambió la partida: guardarla pronto */
 static lv_display_t *s_disp;

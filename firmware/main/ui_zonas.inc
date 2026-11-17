@@ -22,7 +22,7 @@ static lv_obj_t *s_zo_txt_img, *s_zo_vivo[4]; /* lo que se mueve en el fondo de 
 static int s_zj_pant = -1; /* la pantalla del juego que está abierto (o -1) */
 #define ZO_PANT_CASITA 5
 static lv_obj_t *s_zo_capa, *s_zo_fondo, *s_zo_pet, *s_zo_txt, *s_zo_salir, *s_zo_marca[4];
-static art_img_t s_zo_art[14], s_zo_txt_art; /* 0..6 las poses (6: el otro paso al caminar), y +7 mirando al otro lado */
+static EXT_RAM_BSS_ATTR art_img_t s_zo_art[14], s_zo_txt_art; /* 0..6 las poses (6: el otro paso al caminar), y +7 mirando al otro lado */
 static bool s_esc_hay; /* hay algo escondido hoy en la casita */
 static void esc_anunciar(int zz); /* (101b) la hoja que avisa lo escondido de hoy */
 /* dónde se camina en la casita */

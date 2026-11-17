@@ -439,7 +439,7 @@ static uint32_t s_tuto_fin;
 /* una lectura: si el texto no cabe en una vista, se parte en hojas y al tocar la pantalla sigue con el resto */
 static art_icono_t s_lect_ico;
 static int s_lect_fin_sig; /* dónde empieza la hoja siguiente */
-static char s_lect_de[96], s_lect_tit[96], s_lect_cuerpo[640];
+static EXT_RAM_BSS_ATTR char s_lect_de[96], s_lect_tit[96], s_lect_cuerpo[640];
 static int s_lect_ini; /* dónde empieza la hoja que se ve (en s_lect_cuerpo) */
 static void panel_lectura_hoja(void);
 static bool s_fin_libro7; /* la historia del rito: al terminar el cierre, aparece la última página del Libro */
@@ -1252,7 +1252,7 @@ static void animar_cita(void)
 #define N_ONDAS 12
 #define N_CHISPAS 30
 static struct { lv_obj_t *o; uint32_t t0, dur; int x, y, r; bool plano, vivo; } s_onda[N_ONDAS];
-static struct { lv_obj_t *o; float x, y, vx, vy; uint32_t t0, dur; bool vivo; } s_chi[N_CHISPAS];
+static EXT_RAM_BSS_ATTR struct { lv_obj_t *o; float x, y, vx, vy; uint32_t t0, dur; bool vivo; } s_chi[N_CHISPAS];
 static void onda(int x, int y, uint32_t color, int rmax, bool plano, uint32_t retraso_ms)
 {
     for (int i = 0; i < N_ONDAS; i++) {
@@ -2304,7 +2304,7 @@ void ui_demo_dragon(void) { if (!s_sim_on) cristales_empezar(); s_sim_ronda = 2;
 #define FIE_FUEGOS 6
 static int s_fie_n, s_fie_toques, s_fie_cri_n;
 static uint32_t s_fie_t0, s_fie_dur;
-static criatura_t s_fie_amigo[FIE_AMIGOS];
+static EXT_RAM_BSS_ATTR criatura_t s_fie_amigo[FIE_AMIGOS];
 static bool s_fie_creados;
 static lv_obj_t *s_fie_capa, *s_fie_velo, *s_fie_cosa[FIE_COSAS], *s_fie_gorro[FIE_AMIGOS + 1], *s_fie_cri[3], *s_fie_fuego[FIE_FUEGOS];
 static uint32_t s_fie_fuego_t[FIE_FUEGOS];

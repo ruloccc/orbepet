@@ -3178,7 +3178,7 @@ const art_icono_info_t *art_icono_info(art_icono_t ico)
     if ((unsigned)ico >= ICO_COUNT) return NULL;
     /* los objetos: su ficha sale del catálogo */
     static EXT_RAM_BSS_ATTR art_icono_info_t obj[ART_OBJETOS];
-    static char ids[ART_OBJETOS][12];
+    static EXT_RAM_BSS_ATTR char ids[ART_OBJETOS][12]; /* (1.0.14) en la PSRAM */
     static const char *const GRUPO[OCAT_COUNT] = {"obj_tierra", "obj_flora", "obj_espiritu", "obj_antiguo", "obj_artefacto"};
     int id = ico - ICO_OBJ0;
     if (!obj[id].id) {
@@ -3201,7 +3201,7 @@ static EXT_RAM_BSS_ATTR struct { ico_cache_t c; uint16_t ico; } s_obj_cache[OBJ_
 static int s_obj_turno;
 
 /* íconos que cambiaste en el editor (ya con su contorno): 24x24, o 12x12 si vienen del editor antiguo */
-static uint32_t *s_propio[ICO_COUNT];
+static EXT_RAM_BSS_ATTR uint32_t *s_propio[ICO_COUNT];
 static uint8_t s_propio_lado[ICO_COUNT];
 
 /* el de fábrica con k pixeles reales por pixel del dibujo (de 12*k de lado), con su contorno fino */
@@ -6146,7 +6146,7 @@ static bool fd_rapido(uint16_t *dst, int escena, int estacion, int nublado, art_
         palt[i] = fd_tinte_color(palg[i], nublado);
     }
     const bool brillo = per == PERIODO_ATARDECER && escena != 4; /* el resplandor cálido de la esquina izquierda */
-    static uint8_t gr_r[2800], gr_g[2800];
+    static EXT_RAM_BSS_ATTR uint8_t gr_r[2800], gr_g[2800];
     static bool gr_listo;
     if (brillo && !gr_listo) {
         for (int k = 0; k < 2800; k++) {
@@ -6510,7 +6510,7 @@ const lv_image_dsc_t *art_fondo(art_periodo_t periodo, uint32_t decor, art_estac
 
 /* ---- fondos de pantalla como foto: paleta + LZSS en la flash; se descomprimen al abrir la pantalla y se sueltan al cerrarla ---- */
 #define PANT_MAX 16 /* (v97) 8 → 16: las pantallas de los juegos de los lugares secretos */
-static struct { lv_image_dsc_t dsc; void *px; } s_pant[PANT_MAX];
+static EXT_RAM_BSS_ATTR struct { lv_image_dsc_t dsc; void *px; } s_pant[PANT_MAX];
 static uint32_t s_pant_clave[PANT_MAX];
 /* (v97) la interfaz dice qué pantalla está en uso (la del lugar secreto o del juego de ahora): esa no se suelta para hacer lugar */
 static bool (*s_pant_en_uso)(int id);

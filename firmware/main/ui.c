@@ -53,7 +53,7 @@ static const pet_t *s_pet;
 /* niña o niño: cambia las marcas {a} {la} {lo} {ella} {guardiana} de un texto (ver pet_gender_text) */
 static const char *gtxt(const char *s)
 {
-    static char buf[4][700];
+    static EXT_RAM_BSS_ATTR char buf[4][700]; /* (1.0.14) en la PSRAM: la RAM interna no alcanza */
     static int k;
     if (!s || !strchr(s, '{')) return s;
     k = (k + 1) & 3;
@@ -713,7 +713,7 @@ typedef struct {
     art_img_t texto;
     bool usado;
 } flotante_t;
-static flotante_t s_flot[N_FLOTANTES];
+static EXT_RAM_BSS_ATTR flotante_t s_flot[N_FLOTANTES];
 
 static void anim_y(void *o, int32_t v) { lv_obj_set_style_translate_y((lv_obj_t *)o, v, 0); }
 static void anim_opa(void *o, int32_t v) { lv_obj_set_style_opa((lv_obj_t *)o, (lv_opa_t)v, 0); }
@@ -780,7 +780,7 @@ static bool po_globo_visible(void); /* ui_pochi.inc */
 static bool po_activo(void);        /* ui_pochi.inc: Pochi está de visita */
 static bool s_po_bypass;            /* una respuesta a Pochi: esa sí se dice */
 typedef struct { int ico; char t[220]; uint32_t ms; } globo_pend_t;
-static globo_pend_t s_gpend[4];
+static EXT_RAM_BSS_ATTR globo_pend_t s_gpend[4];
 static int s_gpend_n;
 static void globo(int ico, const char *texto, uint32_t ms)
 {
@@ -1267,7 +1267,7 @@ static bool s_fuente_grande, s_texto_l;
 static int fuente_escala(int escala) { return s_fuente_grande && s_texto_l && escala == 2 ? 3 : escala; }
 /* (v96) la letra va un 5 % más grande. Después de armar un panel se revisa cada texto: si así se sale de la cajita o del
  * botón donde va (o del panel), se vuelve a pintar del tamaño de antes (pixel exacto). Por eso se guarda con qué se pintó. */
-static struct { char *s; uint32_t color; int16_t ancho; int8_t escala; bool centrado; lv_obj_t *img; } s_ptxt_info[N_PTXT];
+static EXT_RAM_BSS_ATTR struct { char *s; uint32_t color; int16_t ancho; int8_t escala; bool centrado; lv_obj_t *img; } s_ptxt_info[N_PTXT];
 static bool s_txt_revisar;
 static void texto_pintar(int k, lv_obj_t *img, const char *s, uint32_t color, int escala, int ancho, bool centrado)
 {
@@ -15502,7 +15502,7 @@ typedef struct {
     uint32_t visto_desde; /* desde cuándo está a la vista (para contarlo como visto juntos) */
     bool contado, espejo;
 } animal_vista_t;
-static animal_vista_t s_ani[ANIMAL_COUNT];
+static EXT_RAM_BSS_ATTR animal_vista_t s_ani[ANIMAL_COUNT];
 #define N_RASTRO 8
 static lv_obj_t *s_rastro[N_RASTRO];
 static float s_rastro_x[N_RASTRO], s_rastro_y[N_RASTRO];
@@ -16962,7 +16962,7 @@ int ui_test_panel(int k)
     case 78: panel_crismenu(); break;
     case 79: panel_canciones(); break;
     case 80: { /* el cuaderno lleno: cinco canciones de prueba (en una copia: no toca la partida) */
-        static pet_t copia;
+        static EXT_RAM_BSS_ATTR pet_t copia;
         const pet_t *orig = s_pet;
         copia = *s_pet;
         static const uint8_t N[12] = {PET_CANCION_NOTA(0, 2), PET_CANCION_NOTA(1, 2), PET_CANCION_NOTA(2, 4), PET_CANCION_NOTA(1, 1), PET_CANCION_NOTA(3, 2), PET_CANCION_NOTA(5, 2),
