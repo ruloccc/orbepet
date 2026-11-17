@@ -18,7 +18,7 @@ El usuario también puede compilar y grabar con cable con el probador, como siem
 **Publicar una versión = subir el número:** cambiar `FW_VERSION` en `firmware/main/version.h` (y `FW_NOMBRE`),
 sección en README, commit y push a main. La compilación ve que es más nueva que la publicada y la publica.
 (Desde aquí NO se pueden empujar etiquetas ni bajar artefactos: el proxy lo bloquea.) Sin el secreto
-`ORBEPET_FIRMWARE_TOKEN` la deja en la rama `compilados` del repo privado: `git fetch origin compilados` y copiar
+`ORBEPET_FIRMWARE_TOKEN` la deja en la rama `compilados` del repo privado: `git fetch origin +refs/heads/compilados:refs/remotes/origin/compilados` (con «+»: la rama se reescribe) y copiar
 mascota.bin + version.json al main de orbepet-firmware (push normal, eso sí se puede).
 Tamaño: ranuras de 0x7D0000 (8.192.000 bytes) desde la 1.0.10; el juego con -O2, solo red/BT con -Os.
 
