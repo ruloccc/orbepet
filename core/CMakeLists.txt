@@ -1,0 +1,11 @@
+# El motor se compila igual como componente de ESP-IDF o como biblioteca de PC.
+if(ESP_PLATFORM)
+    idf_component_register(SRCS "pet.c" "sfx.c" "foto.c" "objetos.c" INCLUDE_DIRS ".")
+else()
+    add_library(pet_core STATIC pet.c sfx.c foto.c objetos.c)
+    target_include_directories(pet_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    if(NOT MSVC)
+        target_link_libraries(pet_core PUBLIC m)
+        target_compile_options(pet_core PRIVATE -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion)
+    endif()
+endif()

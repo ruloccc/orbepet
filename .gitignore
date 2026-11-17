@@ -1,0 +1,13 @@
+# lo que se genera al compilar (no va al repositorio)
+build/
+firmware/build/
+firmware/managed_components/
+firmware/sdkconfig
+firmware/sdkconfig.old
+__pycache__/
+*.pyc
+# el simulador compilado (sale de sh sim/web/build.sh)
+sim/web/mascota.wasm
+sim/web/simulador.html
+sim/web/simulador_reloj.html
+_ultimo_zip.txt

@@ -1,0 +1,1 @@
+Documento de todos los textos del juego (v99). Orden: extraer.py (desde src: python3 herramientas/textos/extraer.py core/*.c core/*.h core/*.inc firmware/main/*.c firmware/main/*.h firmware/main/ui_*.inc), clasificar.py, armar.py, docx_gen.py. Usan /tmp/textos como carpeta de trabajo.

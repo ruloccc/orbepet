@@ -1,0 +1,94 @@
+# Waveshare ESP32-S3-Touch-AMOLED-1.75C: ESP32-S3R8, 32 MB flash, 8 MB PSRAM octal
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# los avisos del compilador no detienen la compilación
+CONFIG_COMPILER_DISABLE_DEFAULT_ERRORS=y
+
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# baja a 80 MHz con la pantalla apagada (sin luz de sueño: solo ajuste de frecuencia)
+CONFIG_PM_ENABLE=y
+# (v100) sueño ligero automático con la pantalla apagada (batería, etapa 3)
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
+CONFIG_FREERTOS_IDLE_TIME_BEFORE_SLEEP=3
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+
+# pantalla: la cola SPI de 10 reservaba 10 búferes internos y se acababa la RAM
+CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16
+# reserva interna solo para DMA (copias de la pantalla), que malloc() normal no puede gastar
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+# Los datos de solo lectura (3,5 MB de arte) se quedan en la flash: copiarlos a la PSRAM dejaba solo ~1,4 MB libres y las pantallas pesadas
+# (historias, finales) la agotaban y se comían la RAM interna. El código sí va a la PSRAM.
+CONFIG_SPIRAM_RODATA=n
+CONFIG_SPIRAM_XIP_FROM_PSRAM=n
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+# v89: líneas de caché de 64 B (las imágenes viven en la PSRAM). v90: el tamaño vuelve a 32 KB: con 64 KB la RAM interna bajaba de 44 KB a 10 KB y el micrófono ya no podía abrirse
+CONFIG_ESP32S3_DATA_CACHE_32KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+CONFIG_FREERTOS_HZ=1000
+
+# consola por el USB nativo (Type-C)
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# LVGL (igual que los ejemplos oficiales de Waveshare)
+CONFIG_LV_COLOR_DEPTH_16=y
+CONFIG_LV_USE_CLIB_MALLOC=y
+CONFIG_LV_USE_CLIB_STRING=y
+CONFIG_LV_USE_CLIB_SPRINTF=y
+CONFIG_LV_DEF_REFR_PERIOD=30
+# LVGL sin hilos propios: dibuja en la misma tarea, igual que el simulador (con hilos se colgaba en lv_draw_add_task)
+# v89: LVGL con FreeRTOS y dos unidades de dibujo: dibuja con los dos núcleos (lo recomienda el adaptador de Espressif)
+CONFIG_LV_OS_FREERTOS=y
+CONFIG_LV_OBJ_STYLE_CACHE=y
+CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
+CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_USE_PERF_MONITOR=n
+# las sombras se calculaban de nuevo en cada franja de pantalla: se guardan en memoria
+CONFIG_LV_DRAW_SW_SHADOW_CACHE_SIZE=64
+# dibujar ocupa la CPU casi siempre: no avisar por la tarea inactiva del núcleo 0
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+# fotos: capturar la pantalla
+CONFIG_LV_USE_SNAPSHOT=y
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+
+# Bluetooth LE solo para encontrar amigos cercanos (anunciar + escuchar, sin conexiones)
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_CONTROLLER_ONLY=n
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
+
+# La tarea principal (la lógica del juego) en el núcleo 1: LVGL (siempre ocupada) está en el núcleo 0 y no la dejaba correr
+CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1=y
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Si LVGL se queda sin memoria que reinicie (y deje el motivo en el log) en vez de colgar la pantalla para siempre
+CONFIG_LV_USE_ASSERT_MALLOC=n
+CONFIG_LV_USE_ASSERT_NULL=n
+
+# informe del fallo (pánico) guardado en la flash: al reiniciar se anota dónde ocurrió (la partición "coredump" tiene que quedar
+# dentro de los primeros 16 MB: más allá el arranque no puede leerla y da el error flash_mmap)
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+
+# (v101, sueño profundo de noche) despertar rápido: sin la prueba de 8 MB de PSRAM en cada arranque (~0,5-1 s) y sin volver a
+# verificar el programa al salir del sueño profundo (despierta cada 5 s a mirar si apretaron PWR o enchufaron el cable)
+CONFIG_SPIRAM_MEMTEST=n
+CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP=y

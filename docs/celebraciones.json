@@ -1,0 +1,24 @@
+{
+  "max": 16,
+  "reglas": [
+    {"id": 0, "nombre": "fija", "campos": ["mes", "dia"]},
+    {"id": 1, "nombre": "nesimo", "campos": ["mes", "dia (1-4, 5 = el último)", "semana (0 domingo..6 sábado)"]},
+    {"id": 2, "nombre": "primavera", "campos": []}
+  ],
+  "decoraciones": [
+    {"id": 1, "nombre": "Halloween", "icono": "ICO_CALABAZA"},
+    {"id": 2, "nombre": "Navidad", "icono": "ICO_ARBOL_NAVIDAD"},
+    {"id": 3, "nombre": "Año Nuevo", "icono": "ICO_FUEGOS"},
+    {"id": 4, "nombre": "Amor", "icono": "ICO_CORAZON"},
+    {"id": 5, "nombre": "Primavera", "icono": "ICO_FLOR"},
+    {"id": 6, "nombre": "Fiestas", "icono": "ICO_BANDERINES"}
+  ],
+  "fabrica": [
+    {"regla": 0, "mes": 12, "dia": 31, "semana": 0, "dias": 2, "deco": 3, "nombre": "Año Nuevo", "saludo": "¡FELIZ AÑO NUEVO!"},
+    {"regla": 0, "mes": 2, "dia": 14, "semana": 0, "dias": 1, "deco": 4, "nombre": "San Valentín", "saludo": "¡FELIZ DÍA DEL AMOR!"},
+    {"regla": 2, "mes": 0, "dia": 0, "semana": 0, "dias": 1, "deco": 5, "nombre": "el primer día de primavera", "saludo": "¡LLEGÓ LA PRIMAVERA!"},
+    {"regla": 0, "mes": 9, "dia": 18, "semana": 0, "dias": 2, "deco": 6, "nombre": "Fiestas Patrias", "saludo": "¡FELICES FIESTAS PATRIAS!"},
+    {"regla": 0, "mes": 10, "dia": 31, "semana": 0, "dias": 1, "deco": 1, "nombre": "Halloween", "saludo": "¡FELIZ HALLOWEEN! ¿DULCE O TRUCO?"},
+    {"regla": 0, "mes": 12, "dia": 24, "semana": 0, "dias": 2, "deco": 2, "nombre": "Navidad", "saludo": "¡FELIZ NAVIDAD!"}
+  ]
+}

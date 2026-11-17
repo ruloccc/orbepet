@@ -1,0 +1,11 @@
+## Dependencias que el gestor de componentes de ESP-IDF descarga solo al compilar.
+## El BSP oficial de Waveshare para la 1.75C trae la pantalla CO5300, el táctil CST9217,
+## el audio ES8311 y el adaptador de LVGL (esp_lvgl_adapter).
+dependencies:
+  idf:
+    version: ">=5.5,<6.0"
+  # el BSP de la placa va como copia local en components/ (franjas de pantalla más chicas);
+  # sus propias dependencias las descarga el gestor desde components/*/idf_component.yml
+  lvgl/lvgl:
+    version: "9.4.*"
+    public: true

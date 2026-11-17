@@ -1,0 +1,1426 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Editor Mascota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* El editor: un taller. A la izquierda las secciones, al centro lo que editas, y arriba siempre
+   se ve si el reloj está conectado por el cable. Mismo lenguaje visual que el simulador. */
+:root {
+  --bench: #E9ECEF; --panel: #FFFFFF; --panel-2: #F5F6F8; --ink: #17191E; --ink-soft: #5B616C; --line: #D4D8DE;
+  --accent: #B86E00; --accent-bg: #FFF1D6; --accent-ink: #FFFFFF; --accent-fill: #C27A0E;
+  --ok: #1E8A4C; --ok-bg: #E2F4E8; --warn: #B86E00; --bad: #C2372B; --bad-bg: #FBE7E5;
+  --cell-a: #F3F0EA; --cell-b: #E6E1D8; --grass: #7FC46A;
+  --console-bg: #14161A; --console-fg: #C9D1D9; --console-dim: #7D8590;
+  --f-display: "Chakra Petch", "Rajdhani", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bench: #101216; --panel: #191C22; --panel-2: #20242B; --ink: #E8EAEE; --ink-soft: #9AA1AC; --line: #2B3038;
+  --accent: #FFB020; --accent-bg: #3A2A08; --accent-ink: #17191E; --accent-fill: #FFB020;
+  --ok: #6BD38A; --ok-bg: #12301D; --warn: #FFB020; --bad: #FF6B5E; --bad-bg: #3A1512;
+  --cell-a: #2A2E35; --cell-b: #23272D; --grass: #3F7A35; --console-bg: #0A0B0D; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bench: #101216; --panel: #191C22; --panel-2: #20242B; --ink: #E8EAEE; --ink-soft: #9AA1AC; --line: #2B3038;
+  --accent: #FFB020; --accent-bg: #3A2A08; --accent-ink: #17191E; --accent-fill: #FFB020;
+  --ok: #6BD38A; --ok-bg: #12301D; --warn: #FFB020; --bad: #FF6B5E; --bad-bg: #3A1512;
+  --cell-a: #2A2E35; --cell-b: #23272D; --grass: #3F7A35; --console-bg: #0A0B0D; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bench); color: var(--ink); font: 15px/1.5 var(--f-body); min-height: 100vh; }
+button, input, select { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- barra superior ---------- */
+.top { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+  padding: 12px max(16px, env(safe-area-inset-left)) 12px max(16px, env(safe-area-inset-left));
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+.top h1 { font: 600 22px/1 var(--f-display); margin: 0; letter-spacing: .01em; }
+.top .sp { flex: 1; }
+.estado { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--f-mono); color: var(--ink-soft);
+  padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; }
+.estado i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-soft); }
+.estado.on { color: var(--ok); border-color: currentColor; } .estado.on i { background: var(--ok); }
+.estado.ocupado i { background: var(--warn); animation: lat 1s infinite; }
+@keyframes lat { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .estado.ocupado i { animation: none; } }
+
+/* ---------- botones ---------- */
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 13px; cursor: pointer;
+  font-weight: 500; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.pri { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--accent-ink); }
+.btn.pri:hover:not(:disabled) { filter: brightness(1.06); }
+.btn.mal { color: var(--bad); }
+.btn.chico { padding: 4px 9px; font-size: 13px; }
+.btn[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+
+/* ---------- disposición ---------- */
+.app { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: calc(100vh - 60px); }
+nav { border-right: 1px solid var(--line); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; background: var(--panel-2); }
+nav button { text-align: left; border: 0; background: transparent; padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; font-weight: 500; }
+nav button canvas { width: 28px; height: 28px; padding: 2px; border-radius: 6px; background: #F3F0EA; image-rendering: pixelated; }
+nav button:hover { background: var(--panel); }
+nav button[aria-current="true"] { background: var(--accent-bg); color: var(--accent); }
+nav .n { margin-left: auto; font: 500 11px var(--f-mono); color: var(--ink-soft); }
+main { padding: 22px max(16px, 2vw) 40px; min-width: 0; }
+section[hidden] { display: none; }
+h2 { font: 600 24px/1.15 var(--f-display); margin: 0 0 4px; }
+.sub { color: var(--ink-soft); margin: 0 0 18px; max-width: 70ch; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h3 { font: 600 12px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.muted { color: var(--ink-soft); font-size: 13px; }
+.aviso { padding: 10px 14px; border-radius: 10px; background: var(--accent-bg); color: var(--ink); font-size: 14px; margin-bottom: 16px; }
+.aviso.mal { background: var(--bad-bg); }
+.aviso.bien { background: var(--ok-bg); }
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; }
+  nav button { white-space: nowrap; }
+  nav .n { display: none; }
+}
+
+/* ---------- inicio ---------- */
+.pasos { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 18px; }
+.paso b { display: block; font: 600 15px var(--f-display); margin-bottom: 4px; }
+.paso .num { font: 600 12px var(--f-mono); color: var(--accent); }
+.datos-reloj { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+.datos-reloj dt { color: var(--ink-soft); } .datos-reloj dd { margin: 0; font-weight: 500; }
+.consola { background: var(--console-bg); color: var(--console-fg); font: 12px/1.5 var(--f-mono); padding: 10px 12px;
+  border-radius: 10px; height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+.consola .tx { color: #7FB8FF; } .consola .dim { color: var(--console-dim); }
+details summary { cursor: pointer; color: var(--ink-soft); font-size: 14px; margin: 14px 0 8px; }
+
+/* ---------- íconos ---------- */
+.iconos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: 18px; align-items: start; }
+@media (max-width: 1080px) { .iconos { grid-template-columns: minmax(0, 1fr); } }
+.buscar { width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 12px; }
+.grupo-t { font: 600 12px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); margin: 14px 0 6px; }
+.rejilla { display: flex; flex-wrap: wrap; gap: 6px; }
+.ico { position: relative; width: 54px; height: 54px; border-radius: 10px; border: 1px solid var(--line); background: #F3F0EA;
+  display: grid; place-items: center; cursor: pointer; padding: 0; }
+.ico canvas { width: 36px; height: 36px; image-rendering: pixelated; }
+.ico:hover { border-color: var(--accent); }
+.ico[aria-pressed="true"] { border: 2px solid var(--accent); background: #FFE7B8; }
+.ico .marca { position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-fill); }
+.ico .marca.reloj { background: var(--ok); left: 3px; right: auto; }
+.editor-ico { position: sticky; top: 76px; display: grid; gap: 12px; }
+.lienzo-caja { display: grid; place-items: center; background: var(--panel-2); border-radius: 10px; padding: 12px; }
+#lienzo { width: min(384px, 100%); aspect-ratio: 1; image-rendering: pixelated; cursor: crosshair; touch-action: none; border-radius: 4px; }
+.herr { display: flex; gap: 6px; flex-wrap: wrap; }
+.paleta { display: flex; flex-wrap: wrap; gap: 5px; }
+.paleta button { width: 26px; height: 26px; border-radius: 6px; border: 2px solid var(--line); cursor: pointer; padding: 0; }
+.paleta button[aria-pressed="true"] { border-color: var(--ink); box-shadow: 0 0 0 2px var(--panel) inset; }
+.paleta .transp { background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 10px 10px; }
+.vistas { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.vista { border-radius: 8px; padding: 8px; display: grid; place-items: center; }
+.vista canvas { image-rendering: pixelated; display: block; }
+.vista.claro { background: #FFF8E8; } .vista.oscuro { background: #2E3448; } .vista.pasto { background: #7FC46A; }
+.ficha b { font: 600 18px var(--f-display); } .ficha p { margin: 2px 0; font-size: 14px; color: var(--ink-soft); }
+
+/* ---------- sonidos ---------- */
+.sonidos { display: grid; gap: 10px; }
+.son { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; padding: 12px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.son .t b { font-weight: 600; } .son .t .sig { display: block; font-size: 13px; color: var(--ink-soft); }
+.son .acc { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.son.propio { border-color: var(--accent); }
+.son .edit { grid-column: 1 / -1; display: grid; gap: 10px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.onda { width: 100%; height: 70px; background: var(--panel-2); border-radius: 8px; display: block; }
+.rangos { display: grid; grid-template-columns: max-content minmax(0, 1fr) 70px; gap: 6px 10px; align-items: center; font-size: 13px; }
+.rangos input[type=range] { width: 100%; accent-color: var(--accent); }
+.etq { font: 500 11px var(--f-mono); padding: 2px 8px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); }
+.etq.ok { background: var(--ok-bg); color: var(--ok); }
+
+/* ---------- celebraciones ---------- */
+.cels { display: grid; gap: 10px; }
+.cel { display: grid; gap: 12px; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.cel .f1 { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(170px, .8fr); }
+.cel .f2 { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.cel .f2 label { width: 150px; } .cel .f2 label.corto { width: 90px; }
+@media (max-width: 760px) { .cel .f1 { grid-template-columns: minmax(0, 1fr); } .cel .f2 label { width: calc(50% - 5px); } }
+.cel label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-soft); }
+.cel input, .cel select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 14px; color: var(--ink); width: 100%; }
+.cel .prox { font-size: 13px; color: var(--ink-soft); margin-left: auto; padding-bottom: 8px; }
+.cel.mala .prox { color: var(--bad); font-weight: 500; }
+.cel [data-quitar] { margin-bottom: 2px; }
+.cel .deco { display: flex; gap: 8px; align-items: center; }
+.cel .deco canvas { width: 32px; height: 32px; padding: 2px; border-radius: 6px; background: #F3F0EA; image-rendering: pixelated; flex: none; }
+.cel.mala { border-color: var(--bad); }
+
+/* ---------- fotos ---------- */
+.fotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.foto { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; gap: 8px; }
+.foto canvas { width: 100%; aspect-ratio: 1; border-radius: 50%; background: #000; display: block; }
+.barra { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; } .barra i { display: block; height: 100%; background: var(--accent-fill); width: 0; }
+
+.formato { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; padding: 12px 16px; margin: 0 0 18px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; max-width: 760px; }
+.formato dt { color: var(--ink-soft); } .formato dd { margin: 0; }
+.formato b { font-weight: 600; }
+
+/* ---------- criaturas ---------- */
+.criaturas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 440px); gap: 18px; align-items: start; }
+@media (max-width: 1080px) { .criaturas { grid-template-columns: minmax(0, 1fr); } }
+.especies { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.especie { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.especie input { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 600; width: 100%; }
+.etapas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.etapa { position: relative; border: 1px solid var(--line); border-radius: 10px; background: #CFEFBE; padding: 4px 0 2px; cursor: pointer; display: grid; justify-items: center; gap: 2px; font-size: 11px; color: #3A4A34; }
+.etapa canvas { width: 60px; height: 60px; image-rendering: pixelated; }
+.etapa[aria-pressed="true"] { border: 2px solid var(--accent); background: #FFE7B8; }
+.etapa .marca { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-fill); }
+.etapa .marca.reloj { background: var(--ok); left: 4px; right: auto; }
+#lienzo-c { width: min(420px, 100%); aspect-ratio: 1; image-rendering: pixelated; cursor: crosshair; touch-action: none; border-radius: 4px; }
+.prev-cri { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.prev-cri .vista { background: #9ED87A; }
+.prev-cri .vista.noche { background: #2E3448; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chips .btn { padding: 3px 9px; font-size: 12px; }
+.ayuda { font-size: 13px; color: var(--ink-soft); margin: 0; }
+
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--panel);
+  padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 50; max-width: min(560px, calc(100vw - 32px)); box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
+.toast[hidden] { display: none; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Editor de la mascota</h1>
+  <span class="estado" id="estado" role="status"><i></i><span id="estado-t">Sin reloj</span></span>
+  <span class="sp"></span>
+  <button class="btn" id="paquete-abrir" title="Abrir un paquete de cambios guardado (.mascotapack)">Abrir paquete…</button>
+  <button class="btn" id="paquete-guardar" title="Guardar todos tus íconos y sonidos en un archivo, para otro reloj o para después">Guardar paquete</button>
+  <button class="btn pri" id="conectar">Conectar el reloj</button>
+  <input type="file" id="f-paquete" accept=".mascotapack,.json" hidden>
+</header>
+
+<div class="app">
+  <nav aria-label="Secciones">
+    <button data-s="inicio" aria-current="true"><canvas data-ico="ICO_AJUSTES"></canvas>Reloj</button>
+    <button data-s="iconos"><canvas data-ico="ICO_CARA_FELIZ"></canvas>Íconos<span class="n" id="n-iconos"></span></button>
+    <button data-s="criaturas"><canvas data-cri="1"></canvas>Criaturas<span class="n" id="n-criaturas"></span></button>
+    <button data-s="sonidos"><canvas data-ico="ICO_NOTA"></canvas>Sonidos<span class="n" id="n-sonidos"></span></button>
+    <button data-s="ambiente"><canvas data-ico="ICO_PARLANTE"></canvas>Sonido de fondo<span class="n" id="n-ambiente"></span></button>
+    <button data-s="fiestas"><canvas data-ico="ICO_BANDERINES"></canvas>Celebraciones</button>
+    <button data-s="respaldos"><canvas data-ico="ICO_RESPALDO"></canvas>Respaldos</button>
+    <button data-s="fotos"><canvas data-ico="ICO_CAMARA"></canvas>Fotos</button>
+  </nav>
+  <main>
+    <!-- ================= RELOJ ================= -->
+    <section id="s-inicio">
+      <h2>Tu reloj</h2>
+      <p class="sub">Con este editor cambias cómo se ven los íconos y cómo suena tu mascota, eliges las celebraciones, guardas respaldos y bajas las fotos. Todo se puede preparar sin el reloj; para mandarlo, conéctalo con el cable.</p>
+      <div class="aviso mal" id="sin-serial" hidden>Este navegador no puede hablar con el reloj por el cable. Abre el editor con <b>Microsoft Edge</b> o <b>Google Chrome</b> (el instalador ya lo abre con Edge).</div>
+      <div class="pasos">
+        <div class="card paso"><span class="num">1</span><b>Conecta el cable</b>Del reloj al computador, con un cable USB‑C que sirva para datos.</div>
+        <div class="card paso"><span class="num">2</span><b>Toca «Conectar el reloj»</b>Elige el puerto que dice <i>USB JTAG/serial</i> (o «Dispositivo serie USB»).</div>
+        <div class="card paso"><span class="num">3</span><b>Edita y manda</b>Cada sección tiene su botón «Enviar al reloj». Los cambios se ven y se oyen al tiro.</div>
+      </div>
+      <div class="card" id="info-reloj">
+        <h3>Conectado</h3>
+        <dl class="datos-reloj">
+          <dt>Mascota</dt><dd id="r-nombre">—</dd>
+          <dt>Versión de partida</dt><dd id="r-version">—</dd>
+          <dt>Cambios en el reloj</dt><dd id="r-cambios">—</dd>
+        </dl>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="mandar-todo" disabled>Mandar todos mis cambios al reloj</button>
+          <button class="btn" id="releer" disabled>Volver a leer el reloj</button>
+        </div>
+      </div>
+      <details>
+        <summary>Monitor del cable (para ver qué pasa)</summary>
+        <div class="consola" id="consola" aria-live="off"></div>
+      </details>
+    </section>
+
+    <!-- ================= ÍCONOS ================= -->
+    <section id="s-iconos" hidden>
+      <h2>Íconos</h2>
+      <p class="sub">Cada ícono es un dibujo de 24 × 24 puntos. Cambia el que quieras: el reloj lo usa en todos los lugares donde aparece (botones, pensamientos, el diario…). Puedes volver al original cuando quieras. Consejo: haz la forma con la <b>punta gruesa</b> (pinta de a 2 × 2, como los dibujos de antes) y los detalles con la fina.</p>
+      <div class="iconos">
+        <div class="card">
+          <input class="buscar" id="buscar" type="search" placeholder="Buscar un ícono (por ejemplo: pelota, lluvia, corona)…" aria-label="Buscar un ícono">
+          <div id="lista-iconos"></div>
+        </div>
+        <div class="card editor-ico">
+          <div class="ficha"><b id="i-nombre">—</b><p id="i-sig"></p><p id="i-uso"></p></div>
+          <div class="lienzo-caja"><canvas id="lienzo" width="24" height="24" aria-label="Dibujo del ícono, 24 por 24 puntos"></canvas></div>
+          <div class="herr" role="toolbar" aria-label="Herramientas">
+            <button class="btn chico" data-h="lapiz" aria-pressed="true">Lápiz</button>
+            <button class="btn chico" data-h="goma" aria-pressed="false">Goma</button>
+            <button class="btn chico" data-h="balde" aria-pressed="false">Rellenar</button>
+            <button class="btn chico" data-h="gotero" aria-pressed="false">Gotero</button>
+            <button class="btn chico" id="deshacer" title="Deshacer (Ctrl+Z)">Deshacer</button>
+            <button class="btn chico" id="contorno" title="Pone un borde oscuro alrededor, como los íconos de fábrica">Contorno</button>
+            <button class="btn chico" id="espejo" title="Dar vuelta de izquierda a derecha">Dar vuelta</button>
+          </div>
+          <div class="herr" role="group" aria-label="Cómo pinta">
+            <button class="btn chico" id="i-grueso" aria-pressed="true" title="Pinta de a 2 × 2 puntos: rápido para las formas grandes. Apágala para los detalles finos.">Punta gruesa</button>
+            <button class="btn chico" id="i-parejo" aria-pressed="false" title="Lo que pintas a un lado aparece igual al otro lado">Pintar parejo</button>
+          </div>
+          <div>
+            <div class="paleta" id="paleta" aria-label="Colores"></div>
+            <div class="row" style="margin-top:8px"><label class="muted">Otro color <input type="color" id="color" value="#f0506e"></label></div>
+          </div>
+          <div class="vistas" aria-label="Cómo se ve">
+            <div class="vista claro"><canvas id="v1" width="24" height="24"></canvas></div>
+            <div class="vista claro"><canvas id="v2" width="36" height="36"></canvas></div>
+            <div class="vista oscuro"><canvas id="v3" width="48" height="48"></canvas></div>
+            <div class="vista pasto"><canvas id="v4" width="48" height="48"></canvas></div>
+          </div>
+          <div class="row">
+            <button class="btn pri" id="i-enviar" disabled>Enviar al reloj</button>
+            <button class="btn" id="i-original">Volver al original</button>
+          </div>
+          <div class="row">
+            <button class="btn chico" id="i-png">Exportar PNG</button>
+            <button class="btn chico" id="i-png-abrir">Importar imagen…</button>
+            <input type="file" id="f-png" accept="image/*" hidden>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CRIATURAS ================= -->
+    <section id="s-criaturas" hidden>
+      <h2>Criaturas</h2>
+      <p class="sub">Dibuja otra forma para cualquiera de las 8 especies, en cada etapa (bebé, cría y adulta). Solo dibujas el cuerpo: los ojos, la boca, las caras de cada emoción, las patitas, la ropa y los saltitos al caminar se los pone el reloj, igual que a las de fábrica. Cuando empieces una mascota nueva, podrás elegir entre todas, con tus dibujos.</p>
+      <div class="criaturas">
+        <div class="especies" id="lista-especies"></div>
+        <div class="card editor-ico">
+          <div class="ficha"><b id="k-titulo">—</b><p id="k-sub"></p></div>
+          <div class="lienzo-caja"><canvas id="lienzo-c" width="30" height="30" aria-label="Dibujo del cuerpo, 30 por 30 puntos"></canvas></div>
+          <div class="herr" role="toolbar" aria-label="Herramientas">
+            <button class="btn chico" data-hc="lapiz" aria-pressed="true">Lápiz</button>
+            <button class="btn chico" data-hc="goma" aria-pressed="false">Goma</button>
+            <button class="btn chico" data-hc="balde" aria-pressed="false">Rellenar</button>
+            <button class="btn chico" data-hc="gotero" aria-pressed="false">Gotero</button>
+            <button class="btn chico" data-hc="ojos" aria-pressed="false" title="Toca donde va el ojo izquierdo">Poner los ojos</button>
+            <button class="btn chico" id="k-deshacer">Deshacer</button>
+            <button class="btn chico" id="k-espejo" title="Copia la mitad izquierda en la derecha, para que quede pareja">Simetría</button>
+            <button class="btn chico" id="k-borrar">Borrar todo</button>
+          </div>
+          <div class="herr" role="group" aria-label="Cómo pinta">
+            <button class="btn chico" id="k-grueso" aria-pressed="true" title="Pinta de a 2 × 2 puntos: rápido para las formas grandes. Apágala para los detalles finos.">Punta gruesa</button>
+            <button class="btn chico" id="k-parejo" aria-pressed="true" title="Lo que pintas a un lado aparece igual al otro lado (casi todas las criaturas son parejas)">Pintar parejo</button>
+          </div>
+          <div><div class="paleta" id="paleta-c" aria-label="Colores"></div>
+            <div class="row" style="margin-top:8px"><label class="muted">Otro color <input type="color" id="color-c" value="#7cc8ff"></label></div></div>
+          <div class="rangos">
+            <span>Ojos separados</span><input type="range" min="4" max="15" step="1" id="k-sep"><output id="k-sep-o"></output>
+          </div>
+          <label class="muted"><input type="checkbox" id="k-patitas"> Con patitas que caminan (déjalo sin marcar si flota, como una nube)</label>
+          <p class="ayuda">El borde oscuro (fino) se pone solo. Deja libres las filas de abajo para las patitas. Los dibujos son de 30 × 30 puntos; los que hiciste antes en 20 × 20 se agrandaron solos para que puedas afinarlos.</p>
+          <div class="prev-cri" aria-label="Cómo se mueve">
+            <div class="vista"><canvas id="cv1" width="60" height="60"></canvas></div>
+            <div class="vista"><canvas id="cv2" width="80" height="80"></canvas></div>
+            <div class="vista noche"><canvas id="cv3" width="60" height="60"></canvas></div>
+          </div>
+          <div class="chips" id="k-caras" role="group" aria-label="Cara"></div>
+          <div class="chips" role="group" aria-label="Cómo está">
+            <button class="btn chico" data-pos="0" aria-pressed="true">Parada</button>
+            <button class="btn chico" data-pos="1" aria-pressed="false">Orgullosa</button>
+            <button class="btn chico" data-pos="-1" aria-pressed="false">Encogida</button>
+            <button class="btn chico" data-pos="-2" aria-pressed="false">Echada</button>
+            <button class="btn chico" id="k-camina" aria-pressed="true">Caminando</button>
+          </div>
+          <div class="row">
+            <button class="btn pri" id="k-enviar" disabled>Enviar al reloj</button>
+            <button class="btn" id="k-original">Volver al original</button>
+          </div>
+          <div class="row">
+            <button class="btn chico" id="k-png">Exportar PNG</button>
+            <button class="btn chico" id="k-png-abrir">Importar imagen…</button>
+            <input type="file" id="f-png-c" accept="image/*" hidden>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SONIDOS ================= -->
+    <section id="s-sonidos" hidden>
+      <h2>Sonidos</h2>
+      <p class="sub">Escucha cómo suena cada cosa y cámbiala por un sonido tuyo: un archivo o grábalo con el micrófono. El parlante del reloj es chico: los sonidos agudos y claros se oyen mejor que los graves.</p>
+      <dl class="formato">
+        <dt>Formatos</dt><dd><b>WAV, MP3, OGG, M4A/AAC, FLAC o WEBM</b> (lo que el navegador sepa abrir), o grabar con el micrófono</dd>
+        <dt>Largo máximo</dt><dd><b>8,5 segundos</b>. Si es más largo, eliges qué parte usar (lo demás se recorta)</dd>
+        <dt>Archivo</dt><dd>Hasta <b>20 MB</b></dd>
+        <dt>En el reloj</dt><dd>Se convierte a <b>16 kHz, mono, 16 bits</b> (unos 32 KB por segundo): estéreo y otras calidades se ajustan solas</dd>
+      </dl>
+      <div id="lista-sonidos"></div>
+    </section>
+
+    <!-- ================= AMBIENTE ================= -->
+    <section id="s-ambiente" hidden>
+      <h2>Sonido de fondo</h2>
+      <p class="sub">Los bucles que suenan bajito según dónde está y el clima. Se repiten sin parar: el editor funde el final con el comienzo para que no se note el corte.</p>
+      <dl class="formato">
+        <dt>Formatos</dt><dd><b>WAV, MP3, OGG, M4A/AAC, FLAC o WEBM</b>, o grabar con el micrófono</dd>
+        <dt>Largo máximo</dt><dd><b>8 segundos</b> por bucle (lo demás se recorta)</dd>
+        <dt>Archivo</dt><dd>Hasta <b>20 MB</b></dd>
+        <dt>En el reloj</dt><dd>Se convierte a <b>16 kHz, mono, 16 bits</b></dd>
+      </dl>
+      <div id="lista-ambiente"></div>
+    </section>
+
+    <!-- ================= CELEBRACIONES ================= -->
+    <section id="s-fiestas" hidden>
+      <h2>Celebraciones</h2>
+      <p class="sub">Los días especiales que celebra. Puedes cambiar la fecha de las Fiestas Patrias o agregar otras (hasta 16), cada una con una de las decoraciones que ya existen.</p>
+      <div class="row" style="margin-bottom:14px">
+        <button class="btn" id="c-traer" disabled>Traer las del reloj</button>
+        <button class="btn" id="c-agregar">Agregar una celebración</button>
+        <button class="btn" id="c-fabrica">Volver a las de fábrica</button>
+        <span class="sp" style="flex:1"></span>
+        <button class="btn pri" id="c-enviar" disabled>Enviar al reloj</button>
+      </div>
+      <div class="cels" id="lista-cels"></div>
+    </section>
+
+    <!-- ================= RESPALDOS ================= -->
+    <section id="s-respaldos" hidden>
+      <h2>Respaldos</h2>
+      <p class="sub">Un respaldo guarda a tu mascota completa: quién es, lo que aprendió, sus recuerdos, el diario, el álbum y las colecciones. Sirve para tenerla segura en el computador o pasarla a otro reloj (o al simulador).</p>
+      <div class="pasos">
+        <div class="card"><h3>Guardar</h3><p class="muted">Baja una copia de la mascota que está en el reloj.</p><button class="btn pri" id="b-guardar" disabled>Guardar un respaldo</button></div>
+        <div class="card"><h3>Traer</h3><p class="muted">Manda un respaldo al reloj. En el reloj aparece la pregunta «¿Traer a…?» y hay que confirmar ahí.</p><button class="btn" id="b-traer" disabled>Traer un respaldo…</button><input type="file" id="f-respaldo" accept=".mascota,.txt" hidden></div>
+      </div>
+      <div class="aviso" id="b-aviso" hidden></div>
+    </section>
+
+    <!-- ================= FOTOS ================= -->
+    <section id="s-fotos" hidden>
+      <h2>Fotos</h2>
+      <p class="sub">Las fotos que le sacaste en el reloj (Más → libro → cámara). Bájalas al computador como imágenes PNG.</p>
+      <div class="row" style="margin-bottom:14px">
+        <button class="btn pri" id="f-ver" disabled>Ver las fotos del reloj</button>
+        <button class="btn" id="f-todas" disabled>Guardar todas</button>
+        <span class="muted" id="f-estado"></span>
+      </div>
+      <div class="fotos" id="lista-fotos"></div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+__DATOS_JS__
+</script>
+<script>
+"use strict";
+/* ================= utilidades ================= */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const b64aBytes = (s) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+const bytesAb64 = (u) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = (u) => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC_T[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+function toast(t, ms = 3200) { const e = $("#toast"); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, ms); }
+function guardarLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sin lugar o bloqueado: queda en memoria */ } }
+function leerLocal(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+function bajar(nombre, datos, tipo = "application/octet-stream") {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(datos instanceof Blob ? datos : new Blob([datos], { type: tipo }));
+  a.download = nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+const sinTildes = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/* ================= íconos: píxeles ================= */
+const L = DATOS.icono_lado;
+const ICO = DATOS.iconos.map((i) => ({ ...i, fab: b64aBytes(i.px) }));
+const ICO_ID = Object.fromEntries(ICO.map((i) => [i.id, i]));
+let propiosIco = leerLocal("ed_iconos", {});        /* n -> base64 RGBA de tus dibujos (24x24) */
+/* los dibujos del editor antiguo (íconos de 12x12 y cuerpos de 20x20) se agrandan a la grilla de ahora */
+function agrandar(px, de, a) {
+  const o = new Uint8Array(a * a * 4);
+  for (let y = 0; y < a; y++) for (let x = 0; x < a; x++) { const j = (Math.floor(y * de / a) * de + Math.floor(x * de / a)) * 4; o.set(px.subarray(j, j + 4), (y * a + x) * 4); }
+  return o;
+}
+function icoAlDia(b64) { const u = b64aBytes(b64), de = Math.round(Math.sqrt(u.length / 4)); return de === L ? b64 : bytesAb64(agrandar(u, de, L)); }
+function icosAlDia(o) { for (const k of Object.keys(o)) o[k] = icoAlDia(o[k]); return o; }
+icosAlDia(propiosIco);
+let enRelojIco = new Set(), enRelojSnd = new Set(), enRelojAmb = new Set(), enRelojCri = new Set(), enRelojNom = new Set();
+const pxDe = (n) => propiosIco[n] ? b64aBytes(propiosIco[n]) : ICO[n].fab;
+/* como se ve en el reloj: el dibujo ampliado a W x W puntos de pantalla */
+function pintarIcoW(cv, px, W) {
+  cv.width = W; cv.height = W; const c = cv.getContext("2d"), im = c.createImageData(W, W);
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { const j = (Math.floor(y * L / W) * L + Math.floor(x * L / W)) * 4; if (px[j + 3] >= 128) im.data.set([px[j], px[j + 1], px[j + 2], 255], (y * W + x) * 4); }
+  c.putImageData(im, 0, 0);
+}
+function pintarIco(cv, px, esc) {
+  cv.width = L * esc; cv.height = L * esc; const c = cv.getContext("2d"); c.clearRect(0, 0, cv.width, cv.height);
+  for (let i = 0; i < L * L; i++) { if (px[i * 4 + 3] < 128) continue; c.fillStyle = `rgb(${px[i * 4]},${px[i * 4 + 1]},${px[i * 4 + 2]})`; c.fillRect((i % L) * esc, Math.floor(i / L) * esc, esc, esc); }
+}
+$$("nav canvas[data-ico]").forEach((c) => { const i = ICO_ID[c.dataset.ico]; if (i) pintarIco(c, i.fab, 1); });
+
+/* ================= el cable: Web Serial ================= */
+const reloj = { puerto: null, lector: null, escritor: null, lineas: [], esperando: [], conectado: false, nombre: "", version: 0 };
+const consola = $("#consola");
+function log(t, cls) { const d = document.createElement("div"); if (cls) d.className = cls; d.textContent = t.length > 220 ? t.slice(0, 220) + "…" : t; consola.appendChild(d); while (consola.childNodes.length > 400) consola.firstChild.remove(); consola.scrollTop = consola.scrollHeight; }
+function estado(t, clase) { $("#estado-t").textContent = t; $("#estado").className = "estado " + (clase || ""); }
+function alLlegar(linea) {
+  log(linea, linea.startsWith("MASCOTA") ? "" : "dim");
+  if (!linea.startsWith("MASCOTA ")) return;
+  const w = reloj.esperando[0];
+  if (w && w.acepta(linea)) { if (w.listo(linea)) { reloj.esperando.shift(); clearTimeout(w.t); w.ok(w.res); } }
+}
+async function leerSiempre() {
+  const dec = new TextDecoder(); let resto = "";
+  while (reloj.puerto && reloj.puerto.readable) {
+    reloj.lector = reloj.puerto.readable.getReader();
+    try {
+      for (;;) {
+        const { value, done } = await reloj.lector.read(); if (done) break;
+        resto += dec.decode(value, { stream: true });
+        let k; while ((k = resto.indexOf("\n")) >= 0) { const l = resto.slice(0, k).replace(/\r$/, ""); resto = resto.slice(k + 1); if (l) alLlegar(l); }
+      }
+    } catch (e) { log("(se cortó la lectura: " + e.message + ")", "dim"); } finally { try { reloj.lector.releaseLock(); } catch (e) {} }
+    if (!reloj.conectado) break;
+    await espera(200);
+  }
+}
+/* manda una línea y espera las respuestas "MASCOTA ...": acepta(l) dice si es para esta orden, listo(l) si ya terminó */
+let cola = Promise.resolve();
+function orden(texto, { acepta = () => true, listo = () => true, juntar = false, ms = 6000 } = {}) {
+  const p = cola.then(() => new Promise(async (ok, mal) => {
+    if (!reloj.conectado) return mal(new Error("El reloj no está conectado"));
+    const w = { acepta, listo: (l) => { if (juntar) w.res.push(l); else w.res = l; return listo(l); }, ok, res: juntar ? [] : null };
+    w.t = setTimeout(() => { const i = reloj.esperando.indexOf(w); if (i >= 0) reloj.esperando.splice(i, 1); mal(new Error("El reloj no respondió")); }, ms);
+    reloj.esperando.push(w);
+    log(texto.length > 120 ? texto.slice(0, 120) + "…" : texto, "tx");
+    try { await reloj.escritor.write(new TextEncoder().encode(texto + "\n")); } catch (e) { clearTimeout(w.t); reloj.esperando.splice(reloj.esperando.indexOf(w), 1); mal(e); }
+  }));
+  cola = p.catch(() => {});
+  return p;
+}
+const respuestaOK = (l) => { if (l.startsWith("MASCOTA ERROR")) throw new Error(l.slice(14) || "error"); return l; };
+
+async function conectar() {
+  if (reloj.conectado) { await desconectar(); return; }
+  if (!("serial" in navigator)) { $("#sin-serial").hidden = false; toast("Abre el editor con Edge o Chrome para conectar el reloj."); return; }
+  try {
+    reloj.puerto = await navigator.serial.requestPort();
+    estado("Conectando…", "ocupado");
+    await reloj.puerto.open({ baudRate: 115200, bufferSize: 65536 });
+    try { await reloj.puerto.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch (e) {} /* que no se reinicie */
+    reloj.escritor = reloj.puerto.writable.getWriter();
+    reloj.conectado = true;
+    leerSiempre();
+    await espera(300);
+    const hola = await orden("MASCOTA HOLA", { acepta: (l) => l.startsWith("MASCOTA OK") || l.startsWith("MASCOTA ERROR"), ms: 4000 });
+    const m = hola.match(/^MASCOTA OK (\d+) ?(.*)$/);
+    reloj.version = m ? +m[1] : 0; reloj.nombre = m ? m[2] : "";
+    let horaPuesta = false; /* le pasa la hora y la zona del computador (por si se le acabó la pila, o cambió el horario de verano) */
+    try {
+      const hr = await orden(`MASCOTA HORA ${Math.floor(Date.now() / 1000)} ${-new Date().getTimezoneOffset() * 60}`,
+        { acepta: (l) => l.startsWith("MASCOTA HORA") || l.startsWith("MASCOTA ERROR"), ms: 2500 });
+      horaPuesta = /^MASCOTA HORA OK 1/.test(hr);
+    } catch (e) {} /* un reloj con el programa anterior no lo conoce */
+    await leerCambios();
+    estado("Conectado" + (reloj.nombre ? " · " + reloj.nombre : ""), "on");
+    $("#conectar").textContent = "Desconectar";
+    actualizarBotones();
+    if (reloj.version && reloj.version !== DATOS.version_partida)
+      toast(`El reloj tiene otra versión del programa (${reloj.version}); este editor es para la ${DATOS.version_partida}. Los respaldos podrían no servir.`, 7000);
+    else toast(horaPuesta ? "¡Reloj conectado! Le puse la hora del computador." : "¡Reloj conectado!");
+  } catch (e) {
+    if (e.name === "NotFoundError") { estado("Sin reloj"); return; } /* cerró la ventana sin elegir */
+    toast("No se pudo conectar: " + e.message, 6000);
+    await desconectar();
+  }
+}
+async function desconectar() {
+  reloj.conectado = false;
+  try { reloj.lector && await reloj.lector.cancel(); } catch (e) {}
+  try { reloj.escritor && reloj.escritor.releaseLock(); } catch (e) {}
+  try { reloj.puerto && await reloj.puerto.close(); } catch (e) {}
+  reloj.puerto = null; reloj.escritor = null; reloj.esperando = [];
+  estado("Sin reloj"); $("#conectar").textContent = "Conectar el reloj";
+  $("#r-nombre").textContent = "—"; $("#r-version").textContent = "—"; $("#r-cambios").textContent = "—";
+  enRelojIco.clear(); enRelojSnd.clear(); enRelojAmb.clear(); enRelojCri.clear(); enRelojNom.clear();
+  actualizarBotones(); pintarListaIconos(); pintarSonidos(); pintarEspecies();
+}
+async function leerCambios() {
+  const l = await orden("MASCOTA CAMBIOS", { acepta: (x) => x.startsWith("MASCOTA CAMBIOS") || x.startsWith("MASCOTA ERROR") });
+  const m = l.match(/^MASCOTA CAMBIOS I(.*?) S(.*?) A(.*?)(?: C(.*?))?(?: N(.*))?$/);
+  const nums = (s) => new Set((s || "").trim().split(/\s+/).filter(Boolean).map(Number));
+  enRelojIco = nums(m && m[1]); enRelojSnd = nums(m && m[2]); enRelojAmb = nums(m && m[3]);
+  enRelojCri = new Set([...nums(m && m[4])].map((v) => `${Math.floor(v / 10)}-${v % 10}`)); enRelojNom = nums(m && m[5]);
+  $("#r-nombre").textContent = reloj.nombre || "(todavía sin nombre)";
+  $("#r-version").textContent = reloj.version + (reloj.version === DATOS.version_partida ? "" : `  (este editor: ${DATOS.version_partida})`);
+  $("#r-cambios").textContent = `${enRelojIco.size} íconos, ${enRelojCri.size} criaturas, ${enRelojSnd.size} sonidos y ${enRelojAmb.size} sonidos de fondo`;
+  pintarListaIconos(); pintarSonidos(); pintarEspecies();
+}
+function actualizarBotones() {
+  const c = reloj.conectado;
+  for (const id of ["#i-enviar", "#k-enviar", "#mandar-todo", "#releer", "#c-traer", "#c-enviar", "#b-guardar", "#b-traer", "#f-ver"]) $(id).disabled = !c;
+  $$(".enviar-son").forEach((b) => b.disabled = !c);
+  $("#f-todas").disabled = !c || !fotos.length;
+}
+$("#conectar").addEventListener("click", conectar);
+$("#releer").addEventListener("click", () => leerCambios().catch((e) => toast(e.message)));
+if (!("serial" in navigator)) $("#sin-serial").hidden = false;
+if ("serial" in navigator) navigator.serial.addEventListener("disconnect", (e) => { if (reloj.puerto && e.target === reloj.puerto) { toast("Se desconectó el reloj."); desconectar(); } });
+
+/* ================= navegación ================= */
+function ir(s) {
+  $$("nav button").forEach((b) => b.setAttribute("aria-current", b.dataset.s === s));
+  $$("main section").forEach((x) => x.hidden = x.id !== "s-" + s);
+  if (s === "criaturas") setTimeout(() => { try { refrescarC(); } catch (e) {} }, 0);
+  try { sessionStorage.setItem("ed_seccion", s); } catch (e) {}
+}
+$$("nav button").forEach((b) => b.addEventListener("click", () => ir(b.dataset.s)));
+try { const s = sessionStorage.getItem("ed_seccion"); if (s) ir(s); } catch (e) {}
+
+/* ================= íconos ================= */
+let icoGrueso = true, icoParejo = false;
+let actual = 0, dibujo = new Uint8Array(L * L * 4), historia = [], herramienta = "lapiz", colorActual = [240, 80, 110, 255];
+function pintarListaIconos() {
+  const q = sinTildes($("#buscar").value.trim());
+  const caja = $("#lista-iconos"); caja.innerHTML = "";
+  for (const [g, titulo] of DATOS.grupos_iconos) {
+    const de = ICO.filter((i) => i.grupo === g && (!q || sinTildes(i.nombre + " " + i.significado).includes(q)));
+    if (!de.length) continue;
+    const t = document.createElement("div"); t.className = "grupo-t"; t.textContent = titulo; caja.appendChild(t);
+    const r = document.createElement("div"); r.className = "rejilla";
+    for (const i of de) {
+      const b = document.createElement("button"); b.className = "ico"; b.title = `${i.nombre}: ${i.significado}`; b.setAttribute("aria-pressed", i.n === actual);
+      b.setAttribute("aria-label", i.nombre);
+      const cv = document.createElement("canvas"); pintarIco(cv, pxDe(i.n), 2); b.appendChild(cv);
+      if (propiosIco[i.n]) { const m = document.createElement("span"); m.className = "marca"; m.title = "Lo cambiaste"; b.appendChild(m); }
+      if (enRelojIco.has(i.n)) { const m = document.createElement("span"); m.className = "marca reloj"; m.title = "En el reloj está cambiado"; b.appendChild(m); }
+      b.addEventListener("click", () => elegirIcono(i.n));
+      r.appendChild(b);
+    }
+    caja.appendChild(r);
+  }
+  $("#n-iconos").textContent = Object.keys(propiosIco).length || "";
+}
+function elegirIcono(n) {
+  actual = n; dibujo = new Uint8Array(pxDe(n)); historia = [];
+  $("#i-nombre").textContent = ICO[n].nombre; $("#i-sig").textContent = ICO[n].significado; $("#i-uso").textContent = "Aparece en: " + ICO[n].uso;
+  pintarPaleta(); refrescarLienzo(); pintarListaIconos();
+}
+function refrescarLienzo() {
+  const cv = $("#lienzo"), c = cv.getContext("2d"); const E = 16; cv.width = L * E; cv.height = L * E;
+  for (let y = 0; y < L; y++) for (let x = 0; x < L; x++) {
+    const i = (y * L + x) * 4;
+    c.fillStyle = (x + y) % 2 ? "#E6E1D8" : "#F3F0EA";
+    c.fillRect(x * E, y * E, E, E);
+    if (dibujo[i + 3] >= 128) { c.fillStyle = `rgb(${dibujo[i]},${dibujo[i + 1]},${dibujo[i + 2]})`; c.fillRect(x * E, y * E, E, E); }
+  }
+  c.strokeStyle = "rgba(0,0,0,.08)"; c.lineWidth = 1;
+  for (let k = 1; k < L; k++) { c.strokeStyle = k % 2 ? "rgba(0,0,0,.05)" : "rgba(0,0,0,.12)"; c.beginPath(); c.moveTo(k * E + .5, 0); c.lineTo(k * E + .5, L * E); c.moveTo(0, k * E + .5); c.lineTo(L * E, k * E + .5); c.stroke(); }
+  if (icoParejo) { c.strokeStyle = "rgba(192,64,90,.45)"; c.lineWidth = 2; c.beginPath(); c.moveTo(L * E / 2, 0); c.lineTo(L * E / 2, L * E); c.stroke(); c.lineWidth = 1; }
+  /* como en el reloj: chico (24), mediano (36) y grande (48 puntos) */
+  pintarIcoW($("#v1"), dibujo, 24); pintarIcoW($("#v2"), dibujo, 36); pintarIcoW($("#v3"), dibujo, 48); pintarIcoW($("#v4"), dibujo, 48);
+}
+function pintarPaleta() {
+  const set = new Map();
+  for (let i = 0; i < L * L; i++) if (ICO[actual].fab[i * 4 + 3] >= 128 || dibujo[i * 4 + 3] >= 128) {
+    for (const px of [ICO[actual].fab, dibujo]) if (px[i * 4 + 3] >= 128) { const k = (px[i * 4] << 16) | (px[i * 4 + 1] << 8) | px[i * 4 + 2]; set.set(k, 1); }
+  }
+  const base = [0x2A2238, 0xFFFFFF, 0xF0506E, 0xFF9A3C, 0xFFD45C, 0x5DBB63, 0x4DA6FF, 0xB48CFF, 0x8B5E3C, 0x9A96B0];
+  for (const k of base) set.set(k, 1);
+  const p = $("#paleta"); p.innerHTML = "";
+  const tr = document.createElement("button"); tr.className = "transp"; tr.title = "Transparente (borrar)"; tr.setAttribute("aria-label", "Transparente");
+  tr.addEventListener("click", () => { herramientaSet("goma"); }); p.appendChild(tr);
+  for (const k of [...set.keys()].slice(0, 22)) {
+    const b = document.createElement("button"); const hex = "#" + k.toString(16).padStart(6, "0");
+    b.style.background = hex; b.title = hex; b.setAttribute("aria-label", "Color " + hex);
+    b.setAttribute("aria-pressed", colorActual[0] === (k >> 16) && colorActual[1] === ((k >> 8) & 255) && colorActual[2] === (k & 255));
+    b.addEventListener("click", () => { colorActual = [k >> 16, (k >> 8) & 255, k & 255, 255]; $("#color").value = hex; if (herramienta === "goma" || herramienta === "gotero") herramientaSet("lapiz"); pintarPaleta(); });
+    p.appendChild(b);
+  }
+}
+function herramientaSet(h) { herramienta = h; $$("[data-h]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.h === h)); }
+$$("[data-h]").forEach((b) => b.addEventListener("click", () => herramientaSet(b.dataset.h)));
+$("#color").addEventListener("input", (e) => { const v = e.target.value; colorActual = [parseInt(v.slice(1, 3), 16), parseInt(v.slice(3, 5), 16), parseInt(v.slice(5, 7), 16), 255]; if (herramienta !== "balde") herramientaSet("lapiz"); pintarPaleta(); });
+function recordar() { historia.push(new Uint8Array(dibujo)); if (historia.length > 60) historia.shift(); }
+function cambiado() {
+  const igual = dibujo.every((v, i) => v === ICO[actual].fab[i] || (ICO[actual].fab[i - (i % 4) + 3] < 128 && dibujo[i - (i % 4) + 3] < 128));
+  if (igual) delete propiosIco[actual]; else propiosIco[actual] = bytesAb64(dibujo);
+  guardarLocal("ed_iconos", propiosIco); refrescarLienzo(); clearTimeout(cambiado.t); cambiado.t = setTimeout(pintarListaIconos, 250);
+}
+/* la punta: un punto, o un bloque de 2 x 2 (alineado, como los pixeles de antes); "parejo" lo repite en espejo */
+function celdas(x, y, n, grueso, parejo) {
+  const xs = grueso ? [x & ~1, (x & ~1) + 1] : [x], ys = grueso ? [y & ~1, (y & ~1) + 1] : [y], out = [];
+  for (const a of xs) for (const b of ys) { out.push([a, b]); if (parejo) out.push([n - 1 - a, b]); }
+  return out.filter(([a, b]) => a >= 0 && b >= 0 && a < n && b < n);
+}
+for (const [id, set] of [["#i-grueso", (v) => icoGrueso = v], ["#i-parejo", (v) => icoParejo = v]])
+  $(id).addEventListener("click", (e) => { const b = e.currentTarget, v = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", v); set(v); refrescarLienzo(); });
+function punto(x, y) {
+  if (x < 0 || y < 0 || x >= L || y >= L) return;
+  const i = (y * L + x) * 4;
+  if (herramienta === "gotero") { if (dibujo[i + 3] >= 128) { colorActual = [dibujo[i], dibujo[i + 1], dibujo[i + 2], 255]; $("#color").value = "#" + colorActual.slice(0, 3).map((v) => v.toString(16).padStart(2, "0")).join(""); herramientaSet("lapiz"); pintarPaleta(); } return; }
+  if (herramienta === "balde") {
+    const obj = dibujo.slice(i, i + 4), nuevo = colorActual; const mismo = (j) => dibujo[j + 3] < 128 && obj[3] < 128 || (dibujo[j] === obj[0] && dibujo[j + 1] === obj[1] && dibujo[j + 2] === obj[2] && dibujo[j + 3] === obj[3]);
+    if (obj[0] === nuevo[0] && obj[1] === nuevo[1] && obj[2] === nuevo[2] && obj[3] >= 128) return;
+    const pila = [[x, y]], visto = new Set();
+    while (pila.length) { const [a, b] = pila.pop(); if (a < 0 || b < 0 || a >= L || b >= L) continue; const j = (b * L + a) * 4; if (visto.has(j) || !mismo(j)) continue; visto.add(j);
+      dibujo.set(nuevo, j); pila.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]); }
+    return;
+  }
+  for (const [a, b] of celdas(x, y, L, icoGrueso, icoParejo)) dibujo.set(herramienta === "goma" ? [0, 0, 0, 0] : colorActual, (b * L + a) * 4);
+}
+(() => {
+  const cv = $("#lienzo"); let pintando = false;
+  const xy = (e) => { const r = cv.getBoundingClientRect(); return [Math.floor((e.clientX - r.left) / r.width * L), Math.floor((e.clientY - r.top) / r.height * L)]; };
+  cv.addEventListener("pointerdown", (e) => { pintando = true; cv.setPointerCapture(e.pointerId); recordar(); punto(...xy(e)); cambiado(); });
+  cv.addEventListener("pointermove", (e) => { if (!pintando || herramienta === "balde" || herramienta === "gotero") return; punto(...xy(e)); cambiado(); });
+  cv.addEventListener("pointerup", () => { pintando = false; });
+  cv.addEventListener("contextmenu", (e) => e.preventDefault());
+})();
+function deshacer() { if (!historia.length) return; dibujo = historia.pop(); cambiado(); }
+$("#deshacer").addEventListener("click", deshacer);
+document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "z" && !$("#s-iconos").hidden) { e.preventDefault(); deshacer(); } });
+$("#contorno").addEventListener("click", () => {
+  recordar(); const c = new Uint8Array(dibujo), K = [0x2A, 0x22, 0x38, 255];
+  for (let y = 0; y < L; y++) for (let x = 0; x < L; x++) {
+    const i = (y * L + x) * 4; if (c[i + 3] >= 128) continue;
+    const v = (a, b) => a >= 0 && b >= 0 && a < L && b < L && c[(b * L + a) * 4 + 3] >= 128;
+    if (v(x - 1, y) || v(x + 1, y) || v(x, y - 1) || v(x, y + 1)) dibujo.set(K, i);
+  }
+  cambiado();
+});
+$("#espejo").addEventListener("click", () => { recordar(); const c = new Uint8Array(dibujo); for (let y = 0; y < L; y++) for (let x = 0; x < L; x++) dibujo.set(c.subarray((y * L + L - 1 - x) * 4, (y * L + L - x) * 4), (y * L + x) * 4); cambiado(); });
+$("#i-original").addEventListener("click", async () => {
+  recordar(); dibujo = new Uint8Array(ICO[actual].fab); cambiado();
+  if (reloj.conectado && enRelojIco.has(actual)) {
+    try { respuestaOK(await orden(`MASCOTA ICONO ${actual} FABRICA`, { acepta: (l) => /^MASCOTA (OK|ERROR)/.test(l) })); enRelojIco.delete(actual); pintarListaIconos(); toast("En el reloj volvió el original."); }
+    catch (e) { toast("No se pudo: " + e.message); }
+  }
+});
+async function enviarIcono(n) {
+  const px = pxDe(n);
+  if (!propiosIco[n]) { respuestaOK(await orden(`MASCOTA ICONO ${n} FABRICA`, { acepta: (l) => /^MASCOTA (OK|ERROR)/.test(l) })); enRelojIco.delete(n); return; }
+  respuestaOK(await orden(`MASCOTA ICONO ${n} ${bytesAb64(px)}`, { acepta: (l) => /^MASCOTA (OK|ERROR)/.test(l) }));
+  enRelojIco.add(n);
+}
+$("#i-enviar").addEventListener("click", async () => {
+  try { await enviarIcono(actual); pintarListaIconos(); toast(propiosIco[actual] ? "¡Listo! Ya está en el reloj." : "Quedó el original en el reloj."); }
+  catch (e) { toast("No se pudo enviar: " + e.message, 5000); }
+});
+$("#i-png").addEventListener("click", () => {
+  const cv = document.createElement("canvas"); pintarIco(cv, dibujo, 1);
+  cv.toBlob((b) => bajar(ICO[actual].id.toLowerCase().replace("ico_", "") + ".png", b), "image/png");
+});
+$("#i-png-abrir").addEventListener("click", () => $("#f-png").click());
+$("#f-png").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const img = await createImageBitmap(f); const cv = document.createElement("canvas"); cv.width = L; cv.height = L;
+  const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.drawImage(img, 0, 0, L, L);
+  const d = c.getImageData(0, 0, L, L).data; recordar();
+  for (let i = 0; i < L * L * 4; i += 4) dibujo.set(d[i + 3] < 128 ? [0, 0, 0, 0] : [d[i], d[i + 1], d[i + 2], 255], i);
+  cambiado(); toast(img.width === L ? "Imagen cargada." : `La imagen era de ${img.width} × ${img.height}: quedó de ${L} × ${L}.`);
+});
+$("#buscar").addEventListener("input", () => pintarListaIconos());
+
+/* ================= criaturas ================= */
+/* El reloj dibuja la cara, las patitas, la postura y el saltito encima de tu cuerpo: aquí se hace igual
+   (es una copia de pintar_propia() de art.c) para ver cómo va a quedar antes de mandarlo. */
+const CL = DATOS.criatura_lado;
+const CRI = DATOS.criaturas;
+let propiasCri = leerLocal("ed_criaturas", {});   /* "e-etapa" -> {px: base64 RGBA de 30x30, ojo_x, ojo_y, sep, patitas} */
+function criAlDia(p) {
+  const u = b64aBytes(p.px), de = Math.round(Math.sqrt(u.length / 4)); if (de === CL) return p;
+  const f = CL / de;
+  return { px: bytesAb64(agrandar(u, de, CL)), ojo_x: Math.round(p.ojo_x * f), ojo_y: Math.round(p.ojo_y * f), sep: Math.round(p.sep * f), patitas: p.patitas };
+}
+function crisAlDia(o) { for (const k of Object.keys(o)) o[k] = criAlDia(o[k]); return o; }
+crisAlDia(propiasCri);
+let nombresEsp = leerLocal("ed_nombres", {});     /* especie -> nombre */
+const ETAPA_N = ["", "Bebé", "Cría", "Adulta"];
+const criDe = (e, et) => {
+  const p = propiasCri[`${e}-${et}`], f = CRI[e].etapas[et - 1];
+  const o = p || f;
+  return { px: b64aBytes(o.px), ojo_x: o.ojo_x, ojo_y: o.ojo_y, sep: o.sep, patitas: o.patitas };
+};
+const C_OJO = 0x2A2238, C_BRILLO = 0xFFFFFF, C_MEJ = 0xFF8FA3, C_LAG = 0x7CC8FF, C_DEST = 0xFFF6A8;
+const mezclarC = (a, b, t) => (Math.round(((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * t) << 16) |
+  (Math.round(((a >> 8) & 255) + (((b >> 8) & 255) - ((a >> 8) & 255)) * t) << 8) | Math.round((a & 255) + ((b & 255) - (a & 255)) * t);
+const oscurecerC = (c, f) => mezclarC(c, 0x1A1626, f);
+/* Devuelve los colores (-1 = transparente) de un lienzo de (20k) x (20k) pixeles, como el reloj: k = 1,5
+   a escala 3 (30x30) y 2 a escala 4 (40x40). Cada pixel se ve de 2x2 en pantalla. La cara sigue la grilla
+   de 20x20 de siempre (con ojos redondos y brillo cuando hay detalle) y el contorno es de un pixel fino. */
+function renderCri(cu, o = {}, k = 1.5) {
+  const B = Math.round(Math.sqrt(cu.px.length / 4)), s = B / 20, R = Math.round(20 * k), out = new Int32Array(R * R).fill(-1);
+  const real = (X, Y, c) => { if (X >= 0 && Y >= 0 && X < R && Y < R) out[Y * R + X] = c; };
+  const set = (x, y, c) => { for (let Y = Math.floor(y * k); Y < Math.floor((y + 1) * k); Y++) for (let X = Math.floor(x * k); X < Math.floor((x + 1) * k); X++) real(X, Y, c); };
+  const fino = (x, y, c) => real(Math.floor(x * k), Math.floor(y * k), c);
+  const elipse = (cx, cy, rx, ry, c) => {
+    for (let Y = Math.floor((cy - ry) * k); Y <= Math.ceil((cy + ry) * k); Y++) for (let X = Math.floor((cx - rx) * k); X <= Math.ceil((cx + rx) * k); X++) {
+      const dx = ((X + 0.5) / k - cx) / rx, dy = ((Y + 0.5) / k - cy) / ry; if (dx * dx + dy * dy <= 1) real(X, Y, c);
+    }
+  };
+  const expr = o.expr || "abiertos", frame = o.frame || 0, postura = o.postura || 0, etapa = o.etapa || 3, boca = !!o.boca;
+  let x0 = B, x1 = -1, y0 = B, y1 = -1, sr = 0, sg = 0, sb = 0, n = 0;
+  for (let y = 0; y < B; y++) for (let x = 0; x < B; x++) {
+    const i = (y * B + x) * 4; if (cu.px[i + 3] < 128) continue;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+    sr += cu.px[i]; sg += cu.px[i + 1]; sb += cu.px[i + 2]; n++;
+  }
+  if (!n) return out;
+  const medio = (Math.floor(sr / n) << 16) | (Math.floor(sg / n) << 8) | Math.floor(sb / n);
+  let esy = 1, esx = 1;
+  if (postura === 1) { esy = 1.08; esx = 0.96; } else if (postura === -1) { esy = 0.86; esx = 1.07; } else if (postura === -2) { esy = 0.72; esx = 1.16; }
+  const lx0 = x0 / s, lx1 = (x1 + 1) / s, ly1 = (y1 + 1) / s, cxf = (lx0 + lx1) / 2, base = ly1, dy = frame ? 1 : 0;
+  if (cu.patitas && postura !== -2) {
+    const pa = frame ? 1 : 0; let sep = Math.floor((lx1 - lx0) * 0.3 + 0.5); if (sep < 2) sep = 2;
+    const pc = oscurecerC(medio, 0.35), yu = Math.ceil(base) - 1, fy = yu > 17 ? 18 : yu;
+    for (let q = 0; q < 2; q++) { set(Math.floor(cxf) - sep - 1 + q, fy + pa, pc); set(Math.floor(cxf) + sep - 1 + q, fy + 1 - pa, pc); }
+  }
+  for (let Y = 0; Y < R; Y++) for (let X = 0; X < R; X++) {
+    const x = (X + 0.5) / k, y = (Y + 0.5) / k;
+    const sx = cxf + (x - cxf) / esx, sy = base - (base - (y - dy)) / esy;
+    const ix = Math.floor(sx * s + 0.001), iy = Math.floor(sy * s + 0.001); /* igual que el reloj */
+    if (ix < 0 || iy < 0 || ix >= B || iy >= B) continue;
+    const i = (iy * B + ix) * 4; if (cu.px[i + 3] < 128) continue;
+    out[Y * R + X] = (cu.px[i] << 16) | (cu.px[i + 1] << 8) | cu.px[i + 2];
+  }
+  const fx0 = (cu.ojo_x + 0.5) / s, fx1 = (cu.ojo_x + cu.sep + 0.5) / s, fyo = (cu.ojo_y + 0.5) / s;
+  const ey = Math.floor(base - (base - fyo) * esy + 0.001) + dy;
+  const ex0 = Math.floor(cxf + (fx0 - cxf) * esx + 0.001), ex1 = Math.floor(cxf + (fx1 - cxf) * esx + 0.001);
+  const mx = Math.floor((ex0 + ex1 + 2) / 2) - 1, grande = etapa === 1;
+  const ojo = (x, y) => {
+    if (k > 1 && (expr === "abiertos" || expr === "curioso")) { /* ojo redondo con brillo, como en el reloj */
+      const cx = x + 1, cy = y + (grande ? 1.4 : 1.0), r = grande ? 1.25 : 1.05;
+      elipse(cx, cy, r, r * (grande ? 1.2 : 1.1), C_OJO); fino(cx - r * 0.35, cy - r * 0.55, C_BRILLO); fino(cx + r * 0.35, cy + r * 0.25, 0x6A5A8A);
+      return;
+    }
+    switch (expr) {
+      case "cerrados": set(x, y + 1, C_OJO); set(x + 1, y + 1, C_OJO); break;
+      case "feliz": set(x, y, C_OJO); set(x + 1, y, C_OJO); set(x - 1, y + 1, C_OJO); set(x + 2, y + 1, C_OJO); break;
+      case "mareado": set(x, y, C_OJO); set(x + 1, y + 1, C_OJO); set(x + 1, y, C_OJO); break;
+      case "curioso": set(x, y - 1, C_OJO); set(x + 1, y - 1, C_OJO); set(x, y, C_BRILLO); set(x + 1, y, C_OJO); set(x, y + 1, C_OJO); set(x + 1, y + 1, C_OJO); break;
+      case "miedo": set(x, y, C_BRILLO); set(x + 1, y, C_BRILLO); set(x, y + 1, C_BRILLO); set(x + 1, y + 1, C_OJO); break;
+      case "orgullo": set(x - 1, y, C_OJO); set(x, y, C_OJO); set(x + 1, y, C_OJO); set(x, y + 1, C_OJO); set(x + 1, y + 1, C_OJO); break;
+      case "celos": set(x, y, C_BRILLO); set(x + 1, y, C_OJO); set(x, y + 1, C_BRILLO); set(x + 1, y + 1, C_OJO); break;
+      case "aburrido": set(x, y, C_OJO); set(x + 1, y, C_OJO); set(x, y + 1, C_OJO); break;
+      default:
+        set(x, y, C_BRILLO); set(x + 1, y, C_OJO); set(x, y + 1, C_OJO); set(x + 1, y + 1, C_OJO);
+        if (grande) { set(x, y + 2, C_OJO); set(x + 1, y + 2, C_OJO); set(x + 1, y + 1, C_BRILLO); }
+    }
+  };
+  ojo(ex0, ey); ojo(ex1, ey);
+  if (expr === "enojado" || expr === "celos") { set(ex0 - 1, ey - 2, C_OJO); set(ex0, ey - 1, C_OJO); set(ex1 + 2, ey - 2, C_OJO); set(ex1 + 1, ey - 1, C_OJO); }
+  const dyo = grande ? 1 : 0;
+  if (expr === "triste") { set(ex0, ey + 2 + dyo, C_LAG); set(ex0, ey + 3 + dyo, C_LAG); }
+  if (expr === "miedo") { set(ex1 + 3, ey - 1, C_LAG); set(ex1 + 3, ey, C_LAG); }
+  if (expr === "feliz") { set(ex0 - 1, ey + 2 + dyo, C_MEJ); set(ex1 + 2, ey + 2 + dyo, C_MEJ); }
+  const my = ey + 3 + dyo;
+  if (boca) { set(mx, my, C_OJO); set(mx + 1, my, C_OJO); set(mx, my + 1, C_MEJ); set(mx + 1, my + 1, C_MEJ); }
+  else if (expr === "curioso") set(mx, my, C_OJO);
+  else if (expr === "miedo") { set(mx - 1, my + 1, C_OJO); set(mx, my, C_OJO); set(mx + 1, my + 1, C_OJO); set(mx + 2, my, C_OJO); }
+  else if (expr === "orgullo") { set(mx, my + 1, C_OJO); set(mx + 1, my + 1, C_OJO); set(mx + 2, my, C_OJO); }
+  else if (expr === "aburrido" || expr === "celos") { set(mx, my, C_OJO); set(mx + 1, my, C_OJO); }
+  else if (expr === "triste" || expr === "enojado" || expr === "mareado") { set(mx, my, C_OJO); set(mx + 1, my, C_OJO); set(mx - 1, my + 1, C_OJO); set(mx + 2, my + 1, C_OJO); }
+  else if (etapa === 1) { set(mx, my, C_OJO); set(mx + 1, my, C_OJO); }
+  else { set(mx - 1, my, C_OJO); set(mx, my + 1, C_OJO); set(mx + 1, my + 1, C_OJO); set(mx + 2, my, C_OJO); }
+  /* contorno de un pixel fino */
+  const copia = out.slice(), borde = oscurecerC(medio, 0.6), hay = (x, y) => x >= 0 && y >= 0 && x < R && y < R && copia[y * R + x] >= 0;
+  for (let y = 0; y < R; y++) for (let x = 0; x < R; x++) if (!hay(x, y) && (hay(x - 1, y) || hay(x + 1, y) || hay(x, y - 1) || hay(x, y + 1))) out[y * R + x] = borde;
+  if (expr === "orgullo") { set(2, 5 + dy, C_DEST); set(17, 3 + dy, C_DEST); set(18, 9 - dy, C_DEST); }
+  return out;
+}
+/* px: tamaño de cada pixel en pantalla (2 = como en el reloj) */
+function pintarCri(cv, colores, px, espejo) {
+  const R = Math.round(Math.sqrt(colores.length));
+  cv.width = R * px; cv.height = R * px; const c = cv.getContext("2d"); c.clearRect(0, 0, cv.width, cv.height);
+  for (let i = 0; i < R * R; i++) { const v = colores[i]; if (v < 0) continue; const x = i % R;
+    c.fillStyle = "#" + v.toString(16).padStart(6, "0"); c.fillRect((espejo ? R - 1 - x : x) * px, Math.floor(i / R) * px, px, px); }
+}
+/* el formato del reloj: "CUER", 2, ojo_x, ojo_y, sep, patitas, 0, 0, 0 y los 900 pixeles RGBA (30x30) */
+function cuerpoBytes(cu) {
+  const u = new Uint8Array(DATOS.cuerpo_bytes);
+  u.set([67, 85, 69, 82, 2, cu.ojo_x, cu.ojo_y, cu.sep, cu.patitas ? 1 : 0, 0, 0, 0]); u.set(cu.px, 12);
+  return u;
+}
+/* los mismos márgenes que usa el reloj (art_cuerpo_desde_bytes), en la grilla de 30x30 */
+const OJO_X_MAX = Math.floor(CL * 16 / 20), OJO_Y_MAX = Math.floor(CL * 17 / 20), SEP_MIN = Math.floor(CL * 3 / 20), SEP_MAX = Math.floor(CL * 10 / 20), OJOS_FIN = Math.floor(CL * 18 / 20);
+function errorCuerpo(cu) {
+  let n = 0; for (let i = 3; i < cu.px.length; i += 4) n += cu.px[i] >= 128;
+  if (n < 6) return "Dibuja algo más: está casi vacío";
+  if (cu.ojo_x < 1 || cu.ojo_x > OJO_X_MAX || cu.ojo_y < 1 || cu.ojo_y > OJO_Y_MAX) return "Pon los ojos dentro del dibujo";
+  return "";
+}
+
+let criGrueso = true, criParejo = true;
+let selE = 0, selEt = 3, cdib = null, chist = [], cHerr = "lapiz", cColor = [124, 200, 255, 255], cExpr = "abiertos", cPos = 0, cCamina = true;
+const CARAS = [["abiertos", "Normal"], ["feliz", "Feliz"], ["triste", "Triste"], ["enojado", "Enojada"], ["miedo", "Miedo"], ["curioso", "Curiosa"],
+  ["cerrados", "Dormida"], ["mareado", "Enferma"], ["orgullo", "Orgullosa"], ["celos", "Celosa"], ["aburrido", "Aburrida"], ["boca", "Comiendo"]];
+
+function nombreEsp(e) { return nombresEsp[e] || CRI[e].nombre; }
+function pintarEspecies() {
+  const caja = $("#lista-especies"); if (!caja) return; caja.innerHTML = "";
+  for (const c of CRI) {
+    const d = document.createElement("div"); d.className = "especie";
+    const inp = document.createElement("input"); inp.value = nombresEsp[c.e] || ""; inp.placeholder = c.nombre; inp.maxLength = 12;
+    inp.setAttribute("aria-label", "Nombre de la especie " + c.nombre); inp.title = "El nombre de la especie (se ve al elegir una mascota nueva)";
+    inp.addEventListener("change", () => {
+      const v = inp.value.trim(); if (v && v !== c.nombre) nombresEsp[c.e] = v; else delete nombresEsp[c.e];
+      guardarLocal("ed_nombres", nombresEsp);
+      if (reloj.conectado) enviarNombre(c.e).then(() => toast("El reloj ya tiene el nombre nuevo.")).catch((er) => toast("No se pudo: " + er.message));
+      pintarEspecies();
+    });
+    d.appendChild(inp);
+    const fila = document.createElement("div"); fila.className = "etapas";
+    for (let et = 1; et <= 3; et++) {
+      const b = document.createElement("button"); b.className = "etapa"; b.setAttribute("aria-pressed", c.e === selE && et === selEt);
+      b.title = `${nombreEsp(c.e)} · ${ETAPA_N[et]}`;
+      const cv = document.createElement("canvas"); pintarCri(cv, renderCri(criDe(c.e, et), { expr: "feliz", etapa: et }, 1.5), 2); b.appendChild(cv);
+      b.appendChild(document.createTextNode(ETAPA_N[et]));
+      if (propiasCri[`${c.e}-${et}`]) { const m = document.createElement("span"); m.className = "marca"; m.title = "La dibujaste"; b.appendChild(m); }
+      if (enRelojCri.has(`${c.e}-${et}`)) { const m = document.createElement("span"); m.className = "marca reloj"; m.title = "En el reloj está cambiada"; b.appendChild(m); }
+      b.addEventListener("click", () => elegirCri(c.e, et));
+      fila.appendChild(b);
+    }
+    d.appendChild(fila); caja.appendChild(d);
+  }
+  $("#n-criaturas").textContent = Object.keys(propiasCri).length || "";
+}
+function elegirCri(e, et) {
+  selE = e; selEt = et; const cu = criDe(e, et);
+  cdib = cu; chist = [];
+  $("#k-titulo").textContent = `${nombreEsp(e)} · ${ETAPA_N[et]}`;
+  $("#k-sub").textContent = propiasCri[`${e}-${et}`] ? "La dibujaste tú." : "El dibujo de fábrica: cámbialo como quieras.";
+  $("#k-sep").value = cu.sep; $("#k-patitas").checked = !!cu.patitas;
+  pintarPaletaC(); refrescarC(); pintarEspecies();
+}
+function guardarCri() {
+  const k = `${selE}-${selEt}`, f = CRI[selE].etapas[selEt - 1], fpx = b64aBytes(f.px);
+  const igual = cdib.ojo_x === f.ojo_x && cdib.ojo_y === f.ojo_y && cdib.sep === f.sep && !!cdib.patitas === !!f.patitas &&
+    cdib.px.every((v, i) => v === fpx[i] || (fpx[i - (i % 4) + 3] < 128 && cdib.px[i - (i % 4) + 3] < 128));
+  if (igual) delete propiasCri[k];
+  else propiasCri[k] = { px: bytesAb64(cdib.px), ojo_x: cdib.ojo_x, ojo_y: cdib.ojo_y, sep: cdib.sep, patitas: cdib.patitas ? 1 : 0 };
+  guardarLocal("ed_criaturas", propiasCri);
+  $("#k-sub").textContent = propiasCri[k] ? "La dibujaste tú." : "El dibujo de fábrica: cámbialo como quieras.";
+  clearTimeout(guardarCri.t); guardarCri.t = setTimeout(pintarEspecies, 300);
+}
+function refrescarC() {
+  const cv = $("#lienzo-c"), c = cv.getContext("2d"), E = 14; cv.width = CL * E; cv.height = CL * E;
+  for (let y = 0; y < CL; y++) for (let x = 0; x < CL; x++) {
+    const i = (y * CL + x) * 4;
+    c.fillStyle = (x + y) % 2 ? "#E6E1D8" : "#F3F0EA"; c.fillRect(x * E, y * E, E, E);
+    if (cdib.px[i + 3] >= 128) { c.fillStyle = `rgb(${cdib.px[i]},${cdib.px[i + 1]},${cdib.px[i + 2]})`; c.fillRect(x * E, y * E, E, E); }
+  }
+  for (let k = 1; k < CL; k++) { c.strokeStyle = k % 2 ? "rgba(0,0,0,.05)" : "rgba(0,0,0,.11)"; c.beginPath(); c.moveTo(k * E + .5, 0); c.lineTo(k * E + .5, CL * E); c.moveTo(0, k * E + .5); c.lineTo(CL * E, k * E + .5); c.stroke(); }
+  /* las filas de las patitas */
+  c.fillStyle = "rgba(184,110,0,.10)"; c.fillRect(0, (CL - 2) * E, CL * E, 2 * E);
+  if (criParejo) { c.strokeStyle = "rgba(192,64,90,.45)"; c.lineWidth = 2; c.beginPath(); c.moveTo(CL * E / 2, 0); c.lineTo(CL * E / 2, CL * E); c.stroke(); }
+  /* dónde van los ojos: el reloj los pone en su grilla de 20x20 (cada punto de ella son 1,5 de estos) */
+  c.strokeStyle = "#C0405A"; c.lineWidth = 2;
+  const s = CL / 20, oy = Math.floor((cdib.ojo_y + 0.5) / s) * s;
+  for (const ox of [cdib.ojo_x, cdib.ojo_x + cdib.sep]) { const gx = Math.floor((ox + 0.5) / s) * s; c.strokeRect(gx * E + 1, oy * E + 1, 2 * s * E - 2, 2 * s * E - 2); }
+  c.lineWidth = 1;
+  $("#k-sep-o").textContent = cdib.sep;
+  animarC(true);
+}
+let cFrame = 0;
+function animarC(forzar) {
+  if (!cdib || $("#s-criaturas").hidden) return;
+  const ex = cExpr === "boca" ? "abiertos" : cExpr, o = { expr: ex, boca: cExpr === "boca" && cFrame % 2 === 0, frame: cCamina ? cFrame % 2 : 0, postura: cPos, etapa: selEt };
+  /* como en el reloj: a escala 3 (30x30 a 2 puntos) y a escala 4 (40x40 a 2 puntos) */
+  pintarCri($("#cv1"), renderCri(cdib, o, 1.5), 2, false); pintarCri($("#cv2"), renderCri(cdib, o, 2), 2, cCamina && Math.floor(cFrame / 6) % 2 === 1);
+  pintarCri($("#cv3"), renderCri(cdib, { ...o, expr: "cerrados", frame: 0, postura: -2 }, 1.5), 2, false);
+}
+setInterval(() => { cFrame++; animarC(); }, 260);
+function pintarPaletaC() {
+  const set = new Map();
+  const f = b64aBytes(CRI[selE].etapas[selEt - 1].px);
+  for (const px of [f, cdib.px]) for (let i = 0; i < CL * CL; i++) if (px[i * 4 + 3] >= 128) set.set((px[i * 4] << 16) | (px[i * 4 + 1] << 8) | px[i * 4 + 2], 1);
+  for (const k of [0xFFFFFF, 0xF0506E, 0xFF9A3C, 0xFFD45C, 0x5DBB63, 0x4DA6FF, 0xB48CFF, 0x8B5E3C, 0x9A96B0, 0x2A2238]) set.set(k, 1);
+  const p = $("#paleta-c"); p.innerHTML = "";
+  for (const k of [...set.keys()].slice(0, 26)) {
+    const b = document.createElement("button"), hex = "#" + k.toString(16).padStart(6, "0");
+    b.style.background = hex; b.title = hex; b.setAttribute("aria-label", "Color " + hex);
+    b.setAttribute("aria-pressed", cColor[0] === (k >> 16) && cColor[1] === ((k >> 8) & 255) && cColor[2] === (k & 255));
+    b.addEventListener("click", () => { cColor = [k >> 16, (k >> 8) & 255, k & 255, 255]; $("#color-c").value = hex; if (cHerr !== "lapiz" && cHerr !== "balde") herrC("lapiz"); pintarPaletaC(); });
+    p.appendChild(b);
+  }
+}
+function herrC(h) { cHerr = h; $$("[data-hc]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.hc === h)); }
+$$("[data-hc]").forEach((b) => b.addEventListener("click", () => herrC(b.dataset.hc)));
+$("#color-c").addEventListener("input", (e) => { const v = e.target.value; cColor = [parseInt(v.slice(1, 3), 16), parseInt(v.slice(3, 5), 16), parseInt(v.slice(5, 7), 16), 255]; if (cHerr !== "balde") herrC("lapiz"); pintarPaletaC(); });
+const recordarC = () => { chist.push({ px: new Uint8Array(cdib.px), ojo_x: cdib.ojo_x, ojo_y: cdib.ojo_y, sep: cdib.sep, patitas: cdib.patitas }); if (chist.length > 60) chist.shift(); };
+for (const [id, set] of [["#k-grueso", (v) => criGrueso = v], ["#k-parejo", (v) => criParejo = v]])
+  $(id).addEventListener("click", (e) => { const b = e.currentTarget, v = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", v); set(v); refrescarC(); });
+function puntoC(x, y) {
+  if (x < 0 || y < 0 || x >= CL || y >= CL) return;
+  const i = (y * CL + x) * 4, px = cdib.px;
+  if (cHerr === "ojos") { cdib.ojo_x = Math.max(1, Math.min(OJO_X_MAX, x)); cdib.ojo_y = Math.max(1, Math.min(OJO_Y_MAX, y)); if (cdib.ojo_x + cdib.sep > OJOS_FIN) cdib.sep = Math.max(SEP_MIN, OJOS_FIN - cdib.ojo_x); $("#k-sep").value = cdib.sep; return; }
+  if (cHerr === "gotero") { if (px[i + 3] >= 128) { cColor = [px[i], px[i + 1], px[i + 2], 255]; $("#color-c").value = "#" + cColor.slice(0, 3).map((v) => v.toString(16).padStart(2, "0")).join(""); herrC("lapiz"); pintarPaletaC(); } return; }
+  if (cHerr === "balde") {
+    const obj = px.slice(i, i + 4), mismo = (j) => (px[j + 3] < 128 && obj[3] < 128) || (px[j] === obj[0] && px[j + 1] === obj[1] && px[j + 2] === obj[2] && px[j + 3] === obj[3]);
+    if (obj[3] >= 128 && obj[0] === cColor[0] && obj[1] === cColor[1] && obj[2] === cColor[2]) return;
+    const pila = [[x, y]], visto = new Set();
+    while (pila.length) { const [a, b] = pila.pop(); if (a < 0 || b < 0 || a >= CL || b >= CL) continue; const j = (b * CL + a) * 4; if (visto.has(j) || !mismo(j)) continue; visto.add(j); px.set(cColor, j); pila.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]); }
+    return;
+  }
+  for (const [a, b] of celdas(x, y, CL, criGrueso, criParejo)) px.set(cHerr === "goma" ? [0, 0, 0, 0] : cColor, (b * CL + a) * 4);
+}
+(() => {
+  const cv = $("#lienzo-c"); let pintando = false;
+  const xy = (e) => { const r = cv.getBoundingClientRect(); return [Math.floor((e.clientX - r.left) / r.width * CL), Math.floor((e.clientY - r.top) / r.height * CL)]; };
+  cv.addEventListener("pointerdown", (e) => { pintando = true; cv.setPointerCapture(e.pointerId); recordarC(); puntoC(...xy(e)); guardarCri(); refrescarC(); });
+  cv.addEventListener("pointermove", (e) => { if (!pintando || cHerr === "balde" || cHerr === "gotero") return; puntoC(...xy(e)); guardarCri(); refrescarC(); });
+  cv.addEventListener("pointerup", () => { pintando = false; });
+  cv.addEventListener("contextmenu", (e) => e.preventDefault());
+})();
+$("#k-deshacer").addEventListener("click", () => { if (!chist.length) return; Object.assign(cdib, chist.pop()); $("#k-sep").value = cdib.sep; $("#k-patitas").checked = !!cdib.patitas; guardarCri(); refrescarC(); });
+$("#k-espejo").addEventListener("click", () => { recordarC(); for (let y = 0; y < CL; y++) for (let x = 0; x < CL / 2; x++) cdib.px.set(cdib.px.subarray((y * CL + x) * 4, (y * CL + x) * 4 + 4), (y * CL + CL - 1 - x) * 4); guardarCri(); refrescarC(); });
+$("#k-borrar").addEventListener("click", () => { recordarC(); cdib.px.fill(0); guardarCri(); refrescarC(); });
+$("#k-sep").addEventListener("input", (e) => { recordarC(); cdib.sep = +e.target.value; if (cdib.ojo_x + cdib.sep > OJOS_FIN) cdib.ojo_x = OJOS_FIN - cdib.sep; guardarCri(); refrescarC(); });
+$("#k-patitas").addEventListener("change", (e) => { recordarC(); cdib.patitas = e.target.checked ? 1 : 0; guardarCri(); refrescarC(); });
+(() => {
+  const caja = $("#k-caras");
+  for (const [k, t] of CARAS) { const b = document.createElement("button"); b.className = "btn chico"; b.textContent = t; b.dataset.cara = k; b.setAttribute("aria-pressed", k === cExpr);
+    b.addEventListener("click", () => { cExpr = k; $$("[data-cara]").forEach((o) => o.setAttribute("aria-pressed", o.dataset.cara === k)); animarC(); }); caja.appendChild(b); }
+  $$("[data-pos]").forEach((b) => b.addEventListener("click", () => { cPos = +b.dataset.pos; $$("[data-pos]").forEach((o) => o.setAttribute("aria-pressed", o === b)); animarC(); }));
+  $("#k-camina").addEventListener("click", (e) => { cCamina = !cCamina; e.currentTarget.setAttribute("aria-pressed", cCamina); });
+})();
+async function enviarCri(e, et) {
+  const k = `${e}-${et}`, ok = (l) => /^MASCOTA (OK|ERROR)/.test(l);
+  if (!propiasCri[k]) { respuestaOK(await orden(`MASCOTA CRIATURA ${e} ${et} FABRICA`, { acepta: ok })); enRelojCri.delete(k); return; }
+  const cu = criDe(e, et), err = errorCuerpo(cu); if (err) throw new Error(err);
+  respuestaOK(await orden(`MASCOTA CRIATURA ${e} ${et} ${bytesAb64(cuerpoBytes(cu))}`, { acepta: ok }));
+  enRelojCri.add(k);
+}
+async function enviarNombre(e) {
+  const ok = (l) => /^MASCOTA (OK|ERROR)/.test(l);
+  if (nombresEsp[e]) { respuestaOK(await orden(`MASCOTA ESPECIE ${e} NOMBRE ${nombresEsp[e]}`, { acepta: ok })); enRelojNom.add(e); }
+  else { respuestaOK(await orden(`MASCOTA ESPECIE ${e} FABRICA`, { acepta: ok })); enRelojNom.delete(e); }
+}
+$("#k-enviar").addEventListener("click", async () => {
+  const err = propiasCri[`${selE}-${selEt}`] ? errorCuerpo(cdib) : ""; if (err) { toast(err); return; }
+  try { await enviarCri(selE, selEt); pintarEspecies(); toast(propiasCri[`${selE}-${selEt}`] ? "¡Listo! El reloj ya la dibuja así." : "En el reloj quedó la de fábrica."); }
+  catch (er) { toast("No se pudo enviar: " + er.message, 5000); }
+});
+$("#k-original").addEventListener("click", async () => {
+  recordarC(); delete propiasCri[`${selE}-${selEt}`]; guardarLocal("ed_criaturas", propiasCri); elegirCri(selE, selEt);
+  if (reloj.conectado && enRelojCri.has(`${selE}-${selEt}`)) { try { await enviarCri(selE, selEt); pintarEspecies(); toast("En el reloj volvió la original."); } catch (er) { toast("No se pudo: " + er.message); } }
+});
+$("#k-png").addEventListener("click", () => {
+  const cv = document.createElement("canvas"); cv.width = CL; cv.height = CL; const c = cv.getContext("2d"), im = c.createImageData(CL, CL);
+  im.data.set(cdib.px); c.putImageData(im, 0, 0);
+  cv.toBlob((b) => bajar(`${nombreEsp(selE).toLowerCase()}-${ETAPA_N[selEt].toLowerCase()}.png`.normalize("NFD").replace(/[̀-ͯ]/g, ""), b), "image/png");
+});
+$("#k-png-abrir").addEventListener("click", () => $("#f-png-c").click());
+$("#f-png-c").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const img = await createImageBitmap(f); const cv = document.createElement("canvas"); cv.width = CL; cv.height = CL;
+  const c = cv.getContext("2d"); c.imageSmoothingEnabled = false;
+  const k = Math.min(CL / img.width, CL / img.height), w = Math.round(img.width * k), h = Math.round(img.height * k);
+  c.drawImage(img, Math.floor((CL - w) / 2), CL - 1 - h, w, h);
+  const d = c.getImageData(0, 0, CL, CL).data; recordarC();
+  for (let i = 0; i < CL * CL * 4; i += 4) cdib.px.set(d[i + 3] < 128 ? [0, 0, 0, 0] : [d[i], d[i + 1], d[i + 2], 255], i);
+  guardarCri(); refrescarC(); toast(img.width === CL && img.height === CL ? "Imagen cargada." : `La imagen era de ${img.width} × ${img.height}: se achicó a ${CL} × ${CL} (deja la fila de abajo para las patitas).`);
+});
+(() => { const c = $("nav canvas[data-cri]"); if (c) pintarCri(c, renderCri(criDe(3, 2), { expr: "feliz", etapa: 2 }, 1), 1); })();
+
+/* ================= sonidos ================= */
+const HZ = DATOS.hz;
+let audio = null;
+const ctxAudio = () => { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === "suspended") audio.resume(); return audio; };
+let sonando = null;
+function tocar(pcm) {
+  const a = ctxAudio(); if (sonando) { try { sonando.stop(); } catch (e) {} }
+  if (!pcm.length) return;
+  const b = a.createBuffer(1, pcm.length, HZ), d = b.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) d[i] = pcm[i] / 32768;
+  const s = a.createBufferSource(); s.buffer = b; s.connect(a.destination); s.start(); sonando = s;
+}
+const pcmDe = (b64) => { const u = b64aBytes(b64); return new Int16Array(u.buffer, u.byteOffset, u.byteLength >> 1); };
+const SND = DATOS.sonidos.map((s) => ({ ...s, tipo: "s", fab: pcmDe(s.pcm), max: DATOS.max_seg }));
+const AMB = DATOS.ambientes.map((s) => ({ ...s, tipo: "a", fab: pcmDe(s.pcm), max: DATOS.amb_seg, grupo: "amb" }));
+/* lo tuyo: crudo (16 kHz) + recorte, volumen y empalme; se guarda en memoria y en el paquete */
+const propiosSnd = {}; /* "s12" -> { crudo: Int16Array, ini, fin, vol, empalme } */
+const clave = (x) => x.tipo + x.n;
+function procesar(p, x) {
+  let a = Math.floor(p.ini * HZ), b = Math.min(p.crudo.length, Math.floor(p.fin * HZ));
+  if (b - a > x.max * HZ) b = a + Math.floor(x.max * HZ);
+  if (b <= a) return new Int16Array(0);
+  const n = b - a, out = new Int16Array(n);
+  let pico = 1; for (let i = a; i < b; i++) pico = Math.max(pico, Math.abs(p.crudo[i]));
+  const g = p.vol / 100 * (p.normalizar ? 29000 / pico : 1);
+  const fade = Math.min(Math.floor(0.012 * HZ), n >> 2);
+  for (let i = 0; i < n; i++) {
+    let e = 1; if (!x.tipo || x.tipo === "s") { if (i < fade) e = i / fade; else if (i > n - fade) e = (n - i) / fade; }
+    out[i] = Math.max(-32768, Math.min(32767, Math.round(p.crudo[a + i] * g * e)));
+  }
+  if (x.tipo === "a" && p.empalme) { /* el final se funde con el comienzo: el bucle no se nota */
+    const F = Math.min(Math.floor(0.5 * HZ), n >> 2), m = n - F, o2 = new Int16Array(m);
+    for (let i = 0; i < m; i++) o2[i] = out[i];
+    for (let i = 0; i < F; i++) { const k = i / F; o2[i] = Math.round(out[i] * k + out[m + i] * (1 - k)); }
+    return o2;
+  }
+  return out;
+}
+const MAX_ARCHIVO = 20 * 1024 * 1024;
+let infoAudio = "";
+async function aPcm16k(arrayBuf) {
+  const a = ctxAudio(); const buf = await a.decodeAudioData(arrayBuf.slice(0));
+  infoAudio = `${buf.duration.toFixed(1).replace(".", ",")} s · ${(buf.sampleRate / 1000).toFixed(1).replace(".", ",")} kHz · ${buf.numberOfChannels === 1 ? "mono" : buf.numberOfChannels === 2 ? "estéreo" : buf.numberOfChannels + " canales"}`;
+  const largo = Math.ceil(buf.duration * HZ); if (!largo) throw new Error("vacío");
+  const off = new OfflineAudioContext(1, largo, HZ); const s = off.createBufferSource(); s.buffer = buf; s.connect(off.destination); s.start();
+  const r = await off.startRendering(); const d = r.getChannelData(0); const out = new Int16Array(d.length);
+  for (let i = 0; i < d.length; i++) out[i] = Math.max(-32768, Math.min(32767, Math.round(d[i] * 32767)));
+  return out;
+}
+function dibujarOnda(cv, pcm, ini, fin, total) {
+  const w = cv.clientWidth || 600, h = cv.clientHeight || 70; cv.width = w; cv.height = h;
+  const c = cv.getContext("2d"); c.clearRect(0, 0, w, h);
+  const cs = getComputedStyle(document.body);
+  if (total) { c.fillStyle = cs.getPropertyValue("--accent-bg"); c.fillRect(ini / total * w, 0, (fin - ini) / total * w, h); }
+  c.strokeStyle = cs.getPropertyValue("--accent"); c.beginPath();
+  const paso = Math.max(1, Math.floor(pcm.length / w));
+  for (let x = 0; x < w; x++) { let mx = 0; for (let k = x * paso; k < (x + 1) * paso && k < pcm.length; k++) mx = Math.max(mx, Math.abs(pcm[k])); const v = mx / 32768 * (h / 2 - 2); c.moveTo(x + .5, h / 2 - v); c.lineTo(x + .5, h / 2 + v); }
+  c.stroke();
+}
+function filaSonido(x) {
+  const k = clave(x), p = propiosSnd[k], enReloj = (x.tipo === "s" ? enRelojSnd : enRelojAmb).has(x.n);
+  const d = document.createElement("div"); d.className = "son" + (p ? " propio" : "");
+  d.innerHTML = `<div class="t"><b></b> <span class="etq" hidden>tuyo</span> <span class="etq ok" hidden>en el reloj</span><span class="sig"></span></div>
+    <div class="acc"><button class="btn chico" data-a="orig">▶ Original</button><button class="btn chico" data-a="tuyo" hidden>▶ El tuyo</button>
+    <button class="btn chico" data-a="archivo" title="WAV, MP3, OGG, M4A, FLAC o WEBM · hasta 20 MB · se usan hasta ${x.max} s">Elegir archivo…</button><button class="btn chico" data-a="grabar">● Grabar</button>
+    <button class="btn chico pri enviar-son" data-a="enviar" disabled hidden>Enviar al reloj</button><button class="btn chico mal" data-a="quitar" hidden>Volver al original</button></div>`;
+  $("b", d).textContent = x.nombre;
+  $(".sig", d).textContent = x.tipo === "s" ? `${x.significado}. Suena: ${x.cuando}.` : `Suena: ${x.cuando}.`;
+  $$(".etq", d)[0].hidden = !p; $$(".etq", d)[1].hidden = !enReloj;
+  $('[data-a="tuyo"]', d).hidden = !p; $('[data-a="enviar"]', d).hidden = !p; $('[data-a="enviar"]', d).disabled = !reloj.conectado;
+  $('[data-a="quitar"]', d).hidden = !p && !enReloj;
+  const archivo = document.createElement("input"); archivo.type = "file"; archivo.accept = "audio/*,.wav,.mp3,.ogg,.m4a,.aac,.flac,.webm"; archivo.hidden = true; d.appendChild(archivo);
+  $('[data-a="orig"]', d).addEventListener("click", () => tocar(x.fab));
+  $('[data-a="tuyo"]', d).addEventListener("click", () => tocar(procesar(propiosSnd[k], x)));
+  $('[data-a="archivo"]', d).addEventListener("click", () => archivo.click());
+  archivo.addEventListener("change", async () => {
+    const f = archivo.files[0]; archivo.value = ""; if (!f) return;
+    if (f.size > MAX_ARCHIVO) { toast(`Ese archivo pesa ${(f.size / 1048576).toFixed(0)} MB: el máximo es 20 MB. Usa uno más corto.`, 6000); return; }
+    try {
+      const crudo = await aPcm16k(await f.arrayBuffer());
+      nuevoCrudo(x, crudo);
+      const largo = crudo.length / HZ;
+      toast(`«${f.name}»: ${infoAudio}.` + (largo > x.max ? ` Es más largo que ${String(x.max).replace(".", ",")} s: elige la parte con «Desde» y «Hasta».` : " Listo para el reloj (16 kHz mono)."), 6500);
+    } catch (e) { toast("No pude leer ese archivo de sonido. Prueba con WAV, MP3, OGG, M4A, FLAC o WEBM."); }
+  });
+  $('[data-a="grabar"]', d).addEventListener("click", (e) => grabar(x, e.currentTarget));
+  $('[data-a="enviar"]', d).addEventListener("click", async (e) => {
+    const b = e.currentTarget; b.disabled = true; const t = b.textContent;
+    try { await enviarSonido(x, (q) => b.textContent = `Enviando ${q}%`); toast("¡Listo! El reloj ya lo tiene (suena una vez para que lo oigas)."); pintarSonidos(); }
+    catch (er) { toast("No se pudo enviar: " + er.message, 5000); b.textContent = t; b.disabled = false; }
+  });
+  $('[data-a="quitar"]', d).addEventListener("click", async () => {
+    delete propiosSnd[k];
+    if (reloj.conectado && enReloj) {
+      try { respuestaOK(await orden(`MASCOTA ${x.tipo === "s" ? "SONIDO" : "AMBIENTE"} ${x.n} FABRICA`, { acepta: (l) => /^MASCOTA (OK|ERROR)/.test(l) })); (x.tipo === "s" ? enRelojSnd : enRelojAmb).delete(x.n); toast("En el reloj volvió el original."); }
+      catch (er) { toast("No se pudo: " + er.message); }
+    }
+    pintarSonidos();
+  });
+  if (p) {
+    const ed = document.createElement("div"); ed.className = "edit";
+    const total = p.crudo.length / HZ;
+    ed.innerHTML = `<canvas class="onda" aria-label="Forma de onda"></canvas>
+      <div class="rangos">
+        <span>Desde</span><input type="range" min="0" max="${total.toFixed(2)}" step="0.01" data-r="ini"><output></output>
+        <span>Hasta</span><input type="range" min="0" max="${total.toFixed(2)}" step="0.01" data-r="fin"><output></output>
+        <span>Volumen</span><input type="range" min="20" max="200" step="5" data-r="vol"><output></output>
+      </div>
+      <div class="row"><label class="muted"><input type="checkbox" data-r="normalizar"> Emparejar el volumen (que no suene ni muy bajo ni saturado)</label>
+      ${x.tipo === "a" ? '<label class="muted"><input type="checkbox" data-r="empalme"> Fundir el final con el comienzo</label>' : ""}
+      <span class="muted" data-r="dur"></span></div>`;
+    const cv = $("canvas", ed);
+    const act = () => {
+      if (p.fin < p.ini + 0.05) p.fin = Math.min(total, p.ini + 0.05);
+      $('[data-r="ini"]', ed).value = p.ini; $('[data-r="fin"]', ed).value = p.fin; $('[data-r="vol"]', ed).value = p.vol;
+      const o = $$("output", ed); o[0].textContent = p.ini.toFixed(2) + " s"; o[1].textContent = p.fin.toFixed(2) + " s"; o[2].textContent = p.vol + " %";
+      $('[data-r="normalizar"]', ed).checked = !!p.normalizar; if (x.tipo === "a") $('[data-r="empalme"]', ed).checked = !!p.empalme;
+      const largo = Math.min(p.fin - p.ini, x.max);
+      $('[data-r="dur"]', ed).textContent = `Dura ${largo.toFixed(2)} s` + (p.fin - p.ini > x.max ? ` (se usan los primeros ${x.max} s)` : "");
+      dibujarOnda(cv, p.crudo, p.ini * HZ, p.fin * HZ, p.crudo.length);
+    };
+    $$("input", ed).forEach((i) => i.addEventListener("input", () => {
+      const r = i.dataset.r; if (i.type === "checkbox") p[r] = i.checked; else p[r] = +i.value; act();
+    }));
+    $$("input", ed).forEach((i) => i.addEventListener("change", () => tocar(procesar(p, x))));
+    d.appendChild(ed); requestAnimationFrame(act);
+  }
+  return d;
+}
+function nuevoCrudo(x, crudo) {
+  if (crudo.length < HZ * 0.03) { toast("Quedó demasiado corto."); return; }
+  /* recorta el silencio del comienzo y del final */
+  let a = 0, b = crudo.length; const umbral = 500;
+  while (a < b && Math.abs(crudo[a]) < umbral) a++; while (b > a && Math.abs(crudo[b - 1]) < umbral) b--;
+  const ini = Math.max(0, a / HZ - 0.02), fin = Math.min(crudo.length / HZ, b / HZ + 0.05);
+  propiosSnd[clave(x)] = { crudo, ini, fin: Math.min(fin, ini + x.max), vol: 100, normalizar: true, empalme: x.tipo === "a" };
+  pintarSonidos(); tocar(procesar(propiosSnd[clave(x)], x));
+}
+let grabando = null;
+async function grabar(x, boton) {
+  if (grabando) { grabando.stop(); return; }
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true } });
+    const rec = new MediaRecorder(s), partes = [];
+    rec.ondataavailable = (e) => partes.push(e.data);
+    rec.onstop = async () => {
+      s.getTracks().forEach((t) => t.stop()); clearTimeout(rec.t); grabando = null; boton.textContent = "● Grabar"; boton.removeAttribute("aria-pressed");
+      try { nuevoCrudo(x, await aPcm16k(await new Blob(partes).arrayBuffer())); } catch (e) { toast("No se pudo usar la grabación."); }
+    };
+    rec.start(); grabando = rec; boton.textContent = "■ Parar"; boton.setAttribute("aria-pressed", "true");
+    rec.t = setTimeout(() => rec.state === "recording" && rec.stop(), (x.max + 1) * 1000);
+    toast(`Grabando… (hasta ${x.max} s). Toca «Parar» para terminar.`);
+  } catch (e) { toast("No hay micrófono o no diste permiso para usarlo."); }
+}
+async function enviarSonido(x, avance) {
+  const pcm = procesar(propiosSnd[clave(x)], x);
+  const u = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+  const cmd = `MASCOTA ${x.tipo === "s" ? "SONIDO" : "AMBIENTE"} ${x.n}`, ok = (l) => /^MASCOTA (OK|ERROR)/.test(l);
+  respuestaOK(await orden(`${cmd} INICIO ${u.length}`, { acepta: ok }));
+  const T = 2400;
+  for (let k = 0; k < u.length; k += T) {
+    respuestaOK(await orden(`${cmd} DATOS ${k} ${bytesAb64(u.subarray(k, k + T))}`, { acepta: ok }));
+    avance && avance(Math.round(Math.min(u.length, k + T) / u.length * 100));
+  }
+  respuestaOK(await orden(`${cmd} FIN ${crc32(u).toString(16)}`, { acepta: ok, ms: 15000 }));
+  (x.tipo === "s" ? enRelojSnd : enRelojAmb).add(x.n);
+}
+function pintarSonidos() {
+  const caja = $("#lista-sonidos"); caja.innerHTML = "";
+  for (const [g, titulo] of DATOS.grupos_sonidos) {
+    const de = SND.filter((s) => s.grupo === g); if (!de.length) continue;
+    const t = document.createElement("div"); t.className = "grupo-t"; t.textContent = titulo; caja.appendChild(t);
+    const l = document.createElement("div"); l.className = "sonidos"; de.forEach((s) => l.appendChild(filaSonido(s))); caja.appendChild(l);
+  }
+  const a = $("#lista-ambiente"); a.innerHTML = ""; const l = document.createElement("div"); l.className = "sonidos"; AMB.forEach((s) => l.appendChild(filaSonido(s))); a.appendChild(l);
+  $("#n-sonidos").textContent = Object.keys(propiosSnd).filter((k) => k[0] === "s").length || "";
+  $("#n-ambiente").textContent = Object.keys(propiosSnd).filter((k) => k[0] === "a").length || "";
+}
+
+/* ================= celebraciones ================= */
+let cels = leerLocal("ed_cels", null) || DATOS.celebraciones.map((c) => ({ ...c }));
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const DIAS_S = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const ORD = ["primer", "segundo", "tercer", "cuarto", "último"];
+const diasMes = (m, a) => new Date(Date.UTC(a, m, 0)).getUTCDate();
+const bytesUtf8 = (s) => new TextEncoder().encode(s).length;
+function inicioCel(c, a) {
+  if (c.regla === 0) return new Date(Date.UTC(a, c.mes - 1, Math.min(c.dia, diasMes(c.mes, a))));
+  if (c.regla === 1) { const uno = new Date(Date.UTC(a, c.mes - 1, 1)); let d = 1 + ((c.semana - uno.getUTCDay() + 7) % 7);
+    if (c.dia >= 5) { while (d + 7 <= diasMes(c.mes, a)) d += 7; } else d += 7 * (c.dia - 1); return new Date(Date.UTC(a, c.mes - 1, d)); }
+  return new Date(Date.UTC(a, 8, 22)); /* primavera en el sur */
+}
+function errorCel(c) {
+  if (!c.nombre.trim()) return "Ponle un nombre";
+  if (bytesUtf8(c.nombre) > 31) return "El nombre es muy largo";
+  if (bytesUtf8(c.saludo) > 39) return "El saludo es muy largo";
+  if (c.regla === 0 && (c.dia < 1 || c.dia > diasMes(c.mes, 2024))) return `${MESES[c.mes - 1]} no tiene día ${c.dia}`;
+  if (c.dias < 1 || c.dias > 7) return "Dura de 1 a 7 días";
+  return "";
+}
+function pintarCels() {
+  guardarLocal("ed_cels", cels);
+  const caja = $("#lista-cels"); caja.innerHTML = "";
+  const hoy = new Date(); hoy.setUTCHours(0, 0, 0, 0);
+  cels.forEach((c, i) => {
+    const d = document.createElement("div"); const err = errorCel(c); d.className = "cel" + (err ? " mala" : "");
+    d.innerHTML = `<div class="f1"><label>Nombre (para el diario: «hoy fue …»)<input data-k="nombre" maxlength="31"></label>
+      <label>Saludo del día (el globo)<input data-k="saludo" maxlength="39"></label>
+      <label>Decoración<span class="deco"><canvas></canvas><select data-k="deco">${DATOS.decoraciones.map((o) => `<option value="${o.id}">${o.nombre}</option>`).join("")}</select></span></label></div>
+      <div class="f2"><label>Cuándo<select data-k="regla"><option value="0">Un día fijo</option><option value="1">Un día de la semana del mes</option><option value="2">El primer día de primavera</option></select></label>
+      <label data-solo="01">Mes<select data-k="mes">${MESES.map((m, k) => `<option value="${k + 1}">${m}</option>`).join("")}</select></label>
+      <label data-solo="0" class="corto">Día<input data-k="dia" type="number" min="1" max="31"></label>
+      <label data-solo="1">Cuál<select data-k="dia">${ORD.map((o, k) => `<option value="${k + 1}">el ${o}</option>`).join("")}</select></label>
+      <label data-solo="1">Día de la semana<select data-k="semana">${DIAS_S.map((o, k) => `<option value="${k}">${o}</option>`).join("")}</select></label>
+      <label class="corto">Dura (días)<input data-k="dias" type="number" min="1" max="7"></label>
+      <span class="prox"></span>
+      <button class="btn chico mal" data-quitar>Quitar</button></div>`;
+    $$("[data-k]", d).forEach((el) => {
+      el.value = c[el.dataset.k];
+      el.addEventListener("change", () => { const k = el.dataset.k; c[k] = el.type === "number" || el.tagName === "SELECT" ? +el.value : el.value; pintarCels(); });
+      if (el.tagName === "INPUT" && el.type !== "number") el.addEventListener("input", () => { c[el.dataset.k] = el.value; const e2 = errorCel(c); d.classList.toggle("mala", !!e2); $(".prox", d).textContent = e2 || $(".prox", d).dataset.ok; });
+    });
+    $$("[data-solo]", d).forEach((el) => el.hidden = !el.dataset.solo.includes(String(c.regla)));
+    const deco = DATOS.decoraciones.find((o) => o.id === c.deco) || DATOS.decoraciones[0];
+    pintarIco($(".deco canvas", d), pxDe(deco.icono), 3);
+    let a = hoy.getUTCFullYear(), ini = inicioCel(c, a); if (ini < hoy) ini = inicioCel(c, a + 1);
+    const txt = `Próxima: ${ini.getUTCDate()} de ${MESES[ini.getUTCMonth()]} de ${ini.getUTCFullYear()}`;
+    $(".prox", d).dataset.ok = txt; $(".prox", d).textContent = err || txt;
+    $("[data-quitar]", d).addEventListener("click", () => { cels.splice(i, 1); pintarCels(); });
+    caja.appendChild(d);
+  });
+  $("#c-agregar").disabled = cels.length >= DATOS.max_celebraciones;
+}
+function empaquetarCels() {
+  const n = cels.length, out = new Uint8Array(10 + n * 80), enc = new TextEncoder();
+  out.set([70, 73, 69, 83], 0); out[4] = 1; out[5] = n; /* "FIES", versión, cantidad */
+  cels.forEach((c, i) => {
+    const o = 10 + i * 80; out.set([c.regla, c.mes, c.dia, c.semana, c.dias, c.deco], o);
+    out.set(enc.encode(c.nombre).subarray(0, 31), o + 8); out.set(enc.encode(c.saludo).subarray(0, 39), o + 40);
+  });
+  new DataView(out.buffer).setUint32(6, crc32(out.subarray(10)), true);
+  return out;
+}
+function desempaquetarCels(u) {
+  if (u.length < 10 || String.fromCharCode(...u.subarray(0, 4)) !== "FIES") throw new Error("formato");
+  const n = u[5], dec = new TextDecoder(), s = (a, b) => dec.decode(u.subarray(a, b)).replace(/\0.*$/s, "");
+  const r = []; for (let i = 0; i < n; i++) { const o = 10 + i * 80; r.push({ regla: u[o], mes: u[o + 1], dia: u[o + 2], semana: u[o + 3], dias: u[o + 4], deco: u[o + 5], nombre: s(o + 8, o + 40), saludo: s(o + 40, o + 80) }); }
+  return r;
+}
+$("#c-agregar").addEventListener("click", () => { cels.push({ regla: 0, mes: 1, dia: 1, semana: 0, dias: 1, deco: 6, nombre: "", saludo: "" }); pintarCels(); const u = $$(".cel").pop(); u.scrollIntoView({ behavior: "smooth", block: "center" }); $("input", u).focus(); });
+$("#c-fabrica").addEventListener("click", async () => {
+  cels = DATOS.celebraciones.map((c) => ({ ...c })); pintarCels();
+  if (reloj.conectado) { try { respuestaOK(await orden("MASCOTA FIESTAS FABRICA", { acepta: (l) => /^MASCOTA (OK|ERROR)/.test(l) })); toast("El reloj volvió a las celebraciones de fábrica."); } catch (e) { toast("No se pudo: " + e.message); } }
+});
+$("#c-traer").addEventListener("click", async () => {
+  try { const l = await orden("MASCOTA FIESTAS", { acepta: (x) => x.startsWith("MASCOTA FIESTAS") || x.startsWith("MASCOTA ERROR") }); respuestaOK(l);
+    cels = desempaquetarCels(b64aBytes(l.slice(16).trim())); pintarCels(); toast(`Traje ${cels.length} celebraciones del reloj.`); }
+  catch (e) { toast("No se pudo: " + e.message); }
+});
+$("#c-enviar").addEventListener("click", async () => {
+  const mala = cels.findIndex((c) => errorCel(c)); if (mala >= 0) { toast("Revisa la celebración marcada en rojo: " + errorCel(cels[mala])); return; }
+  try { respuestaOK(await orden("MASCOTA FIESTAS " + bytesAb64(empaquetarCels()), { acepta: (l) => /^MASCOTA (OK|ERROR)/.test(l) })); toast("¡Listo! El reloj ya tiene tus celebraciones."); }
+  catch (e) { toast("No se pudo enviar: " + e.message, 5000); }
+});
+
+/* ================= respaldos ================= */
+$("#b-guardar").addEventListener("click", async () => {
+  try {
+    const l = respuestaOK(await orden("MASCOTA RESPALDO", { acepta: (x) => x.startsWith("MASCOTA RESPALDO") || x.startsWith("MASCOTA ERROR") }));
+    const m = l.match(/^MASCOTA RESPALDO (\d+) (\S+)/); if (!m) throw new Error("respuesta rara");
+    const hoy = new Date(), f = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+    const nombre = sinTildes(reloj.nombre || "mascota").replace(/[^a-z0-9]/g, "") || "mascota";
+    bajar(`${nombre}-${f}.mascota`, `MASCOTA-RESPALDO ${m[1]}\n${m[2]}\n`, "text/plain");
+    aviso("b-aviso", `Guardé el respaldo de ${reloj.nombre || "tu mascota"} en tu carpeta de descargas.`, "bien");
+  } catch (e) { aviso("b-aviso", "No se pudo guardar el respaldo: " + e.message, "mal"); }
+});
+$("#b-traer").addEventListener("click", () => $("#f-respaldo").click());
+$("#f-respaldo").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const t = (await f.text()).trim(); const m = t.match(/^MASCOTA-RESPALDO (\d+)\s+([A-Za-z0-9+/=_-]+)/);
+  const b64 = m ? m[2] : (/^[A-Za-z0-9+/=\s]+$/.test(t) ? t.replace(/\s/g, "") : null);
+  if (!b64) { aviso("b-aviso", "Ese archivo no es un respaldo de la mascota.", "mal"); return; }
+  if (m && (+m[1] > reloj.version || +m[1] < 13)) { aviso("b-aviso", `Ese respaldo es de la versión ${m[1]} y el reloj tiene la ${reloj.version}: no se puede traer.`, "mal"); return; }
+  aviso("b-aviso", "Mira el reloj: pregunta si traer a esta mascota. Confirma ahí (tienes un minuto).", "");
+  try {
+    const r = await orden("MASCOTA RESTAURAR " + b64, { acepta: (l) => /^MASCOTA (RESTAURADA|RECHAZADA|ERROR)/.test(l), ms: 70000 });
+    if (r.startsWith("MASCOTA RESTAURADA")) { aviso("b-aviso", "¡Listo! La mascota ya está en el reloj.", "bien"); }
+    else if (r.startsWith("MASCOTA RECHAZADA")) aviso("b-aviso", "En el reloj se eligió no traerla. No cambió nada.", "");
+    else aviso("b-aviso", "El reloj no aceptó ese respaldo: " + r.slice(14), "mal");
+  } catch (er) { aviso("b-aviso", "No hubo respuesta del reloj: " + er.message, "mal"); }
+});
+function aviso(id, t, clase) { const e = $("#" + id); e.textContent = t; e.className = "aviso " + (clase || ""); e.hidden = false; }
+
+/* ================= fotos ================= */
+let fotos = [];
+function qoiACanvas(q) {
+  const dv = new DataView(q.buffer, q.byteOffset, q.byteLength), w = dv.getUint32(4), h = dv.getUint32(8);
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  const c = cv.getContext("2d"), im = c.createImageData(w, h), px = im.data, idx = new Uint8Array(256);
+  let r = 0, g = 0, b = 0, a = 255, k = 14, run = 0;
+  for (let p = 0; p < w * h * 4; p += 4) {
+    if (run > 0) run--;
+    else { const b1 = q[k++];
+      if (b1 === 0xFE) { r = q[k++]; g = q[k++]; b = q[k++]; } else if (b1 === 0xFF) { r = q[k++]; g = q[k++]; b = q[k++]; a = q[k++]; }
+      else if ((b1 & 0xC0) === 0x00) { const i = b1 * 4; r = idx[i]; g = idx[i + 1]; b = idx[i + 2]; a = idx[i + 3]; }
+      else if ((b1 & 0xC0) === 0x40) { r = (r + ((b1 >> 4) & 3) - 2) & 255; g = (g + ((b1 >> 2) & 3) - 2) & 255; b = (b + (b1 & 3) - 2) & 255; }
+      else if ((b1 & 0xC0) === 0x80) { const b2 = q[k++], vg = (b1 & 0x3F) - 32; r = (r + vg - 8 + ((b2 >> 4) & 15)) & 255; g = (g + vg) & 255; b = (b + vg - 8 + (b2 & 15)) & 255; }
+      else run = b1 & 0x3F;
+      const i = ((r * 3 + g * 5 + b * 7 + a * 11) % 64) * 4; idx[i] = r; idx[i + 1] = g; idx[i + 2] = b; idx[i + 3] = a; }
+    px[p] = r; px[p + 1] = g; px[p + 2] = b; px[p + 3] = a;
+  }
+  c.putImageData(im, 0, 0); return cv;
+}
+async function traerFoto(id, total) {
+  const partes = await orden(`MASCOTA FOTO ${id}`, { acepta: (l) => l.startsWith(`MASCOTA FOTO ${id} `) || l.startsWith("MASCOTA ERROR"), listo: (l) => / FIN$/.test(l) || l.startsWith("MASCOTA ERROR"), juntar: true, ms: 60000 });
+  const u = new Uint8Array(total); let n = 0;
+  for (const l of partes) { if (l.startsWith("MASCOTA ERROR")) throw new Error(l.slice(14)); const m = l.match(/^MASCOTA FOTO \d+ (\d+) (\d+) (\S+)$/); if (!m) continue; const d = b64aBytes(m[3]); u.set(d, +m[2]); n += d.length; }
+  if (n !== total) throw new Error("llegó incompleta");
+  return u;
+}
+$("#f-ver").addEventListener("click", async () => {
+  const caja = $("#lista-fotos"); caja.innerHTML = ""; fotos = [];
+  try {
+    const l = await orden("MASCOTA FOTOS", { acepta: (x) => x.startsWith("MASCOTA FOTOS") || x.startsWith("MASCOTA ERROR") });
+    const lista = l.split(" ").slice(3).map((x) => x.split(":").map(Number));
+    $("#f-estado").textContent = lista.length ? `${lista.length} fotos` : "No hay fotos en el reloj todavía.";
+    for (const [id, bytes] of lista) {
+      const d = document.createElement("div"); d.className = "foto";
+      d.innerHTML = `<div class="barra"><i></i></div><div class="row"><button class="btn chico" data-a="png" disabled>Guardar PNG</button><button class="btn chico mal" data-a="borrar">Borrar</button><span class="muted">${Math.round(bytes / 1024)} KB</span></div>`;
+      caja.appendChild(d);
+      const reg = { id, d, cv: null }; fotos.push(reg);
+      $('[data-a="borrar"]', d).addEventListener("click", async (e) => {
+        if (!e.currentTarget.dataset.seguro) { e.currentTarget.dataset.seguro = 1; e.currentTarget.textContent = "¿Seguro? Toca otra vez"; return; }
+        try { respuestaOK(await orden(`MASCOTA BORRAR FOTO ${id}`, { acepta: (x) => /^MASCOTA (OK|ERROR)/.test(x) })); d.remove(); fotos = fotos.filter((f) => f !== reg); actualizarBotones(); }
+        catch (er) { toast("No se pudo borrar: " + er.message); }
+      });
+      $('[data-a="png"]', d).addEventListener("click", () => reg.cv && reg.cv.toBlob((b) => bajar(`foto-${id}.png`, b), "image/png"));
+    }
+    actualizarBotones();
+    for (const reg of fotos) {
+      const total = +lista.find((x) => x[0] === reg.id)[1]; $(".barra i", reg.d).style.width = "30%";
+      try { const q = await traerFoto(reg.id, total); reg.cv = qoiACanvas(q); reg.d.prepend(reg.cv); $(".barra", reg.d).remove(); $('[data-a="png"]', reg.d).disabled = false; }
+      catch (e) { $(".barra", reg.d).replaceWith(Object.assign(document.createElement("p"), { className: "muted", textContent: "No se pudo traer: " + e.message })); }
+    }
+  } catch (e) { toast("No se pudo: " + e.message); }
+});
+$("#f-todas").addEventListener("click", async () => { for (const r of fotos) if (r.cv) { await new Promise((ok) => r.cv.toBlob((b) => { bajar(`foto-${r.id}.png`, b); ok(); }, "image/png")); await espera(400); } });
+
+/* ================= paquete: todos tus cambios en un archivo ================= */
+$("#paquete-guardar").addEventListener("click", () => {
+  const snd = {}; for (const [k, p] of Object.entries(propiosSnd)) { const x = (k[0] === "s" ? SND : AMB).find((y) => clave(y) === k); const pcm = procesar(p, x); snd[k] = bytesAb64(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength)); }
+  const criaturas = {}; for (const k of Object.keys(propiasCri)) { const [e, et] = k.split("-").map(Number); criaturas[k] = bytesAb64(cuerpoBytes(criDe(e, et))); }
+  const pack = { tipo: "mascota-paquete", version: 3, iconos: propiosIco, criaturas, criaturas_editor: propiasCri, nombres: nombresEsp, sonidos: snd, celebraciones: cels };
+  bajar("mis-cambios.mascotapack", JSON.stringify(pack), "application/json");
+  toast(`Guardé ${Object.keys(propiosIco).length} íconos, ${Object.keys(criaturas).length} criaturas, ${Object.keys(snd).length} sonidos y las celebraciones. Sirve también para el simulador.`, 5000);
+});
+$("#paquete-abrir").addEventListener("click", () => $("#f-paquete").click());
+$("#f-paquete").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const p = JSON.parse(await f.text()); if (p.tipo !== "mascota-paquete") throw new Error("no es un paquete");
+    propiosIco = icosAlDia(p.iconos || {}); guardarLocal("ed_iconos", propiosIco);
+    for (const k of Object.keys(propiosSnd)) delete propiosSnd[k];
+    for (const [k, b64] of Object.entries(p.sonidos || {})) { const crudo = pcmDe(b64); propiosSnd[k] = { crudo, ini: 0, fin: crudo.length / HZ, vol: 100, normalizar: false, empalme: false }; }
+    if (p.celebraciones) { cels = p.celebraciones; pintarCels(); }
+    propiasCri = crisAlDia(p.criaturas_editor || {}); guardarLocal("ed_criaturas", propiasCri);
+    nombresEsp = p.nombres || {}; guardarLocal("ed_nombres", nombresEsp);
+    elegirIcono(actual); pintarSonidos(); elegirCri(selE, selEt);
+    toast(`Abrí el paquete: ${Object.keys(propiosIco).length} íconos, ${Object.keys(propiasCri).length} criaturas y ${Object.keys(propiosSnd).length} sonidos.`);
+  } catch (er) { toast("Ese archivo no es un paquete de la mascota."); }
+});
+$("#mandar-todo").addEventListener("click", async (e) => {
+  const b = e.currentTarget, t = b.textContent; b.disabled = true;
+  try {
+    const ic = Object.keys(propiosIco).map(Number), sn = Object.keys(propiosSnd), cr = Object.keys(propiasCri), no = Object.keys(nombresEsp).map(Number);
+    let k = 0, total = ic.length + sn.length + cr.length + no.length + 1;
+    for (const n of ic) { b.textContent = `Enviando ${++k} de ${total}…`; await enviarIcono(n); }
+    for (const c of cr) { b.textContent = `Enviando ${++k} de ${total}…`; const [e, et] = c.split("-").map(Number); await enviarCri(e, et); }
+    for (const e of no) { b.textContent = `Enviando ${++k} de ${total}…`; await enviarNombre(e); }
+    for (const c of sn) { b.textContent = `Enviando ${++k} de ${total}…`; await enviarSonido((c[0] === "s" ? SND : AMB).find((y) => clave(y) === c)); }
+    b.textContent = `Enviando ${++k} de ${total}…`;
+    if (!cels.some(errorCel)) respuestaOK(await orden("MASCOTA FIESTAS " + bytesAb64(empaquetarCels()), { acepta: (l) => /^MASCOTA (OK|ERROR)/.test(l) }));
+    await leerCambios(); toast("¡Listo! Todos tus cambios están en el reloj.");
+  } catch (er) { toast("Se cortó: " + er.message, 5000); }
+  b.textContent = t; b.disabled = !reloj.conectado;
+});
+
+/* ================= arranque ================= */
+elegirIcono(ICO_ID.ICO_CARA_FELIZ ? ICO_ID.ICO_CARA_FELIZ.n : 0);
+pintarSonidos(); pintarCels(); elegirCri(3, 3); actualizarBotones();
+</script>
+</body>
+</html>

@@ -1,0 +1,996 @@
+<title>Simulador Mascota</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: banco de pruebas — el reloj a la izquierda como pieza física, a la derecha la
+   telemetría del motor y un monitor serie, igual que conectar la placa por USB. */
+:root {
+  --bench: #E9ECEF;        /* mesa de trabajo */
+  --panel: #FFFFFF;
+  --ink: #17191E;
+  --ink-soft: #5B616C;
+  --line: #D4D8DE;
+  --accent: #B86E00;       /* ámbar del primer anillo, oscurecido para texto */
+  --accent-bg: #FFF1D6;
+  --metal-1: #C9CDD3; --metal-2: #8E949C; --metal-3: #5E636B;
+  --console-bg: #14161A; --console-fg: #C9D1D9; --console-dim: #7D8590; --console-ok: #7BD88F; --console-warn: #FFB020;
+  --ok: #1E8A4C; --warn: #B86E00; --bad: #C2372B;
+  --f-display: "Chakra Petch", "Rajdhani", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bench: #101216; --panel: #191C22; --ink: #E8EAEE; --ink-soft: #9AA1AC; --line: #2B3038;
+  --accent: #FFB020; --accent-bg: #3A2A08;
+  --metal-1: #6C727B; --metal-2: #3E434A; --metal-3: #24272C;
+  --console-bg: #0A0B0D; --ok: #6BD38A; --warn: #FFB020; --bad: #FF6B5E;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bench: #101216; --panel: #191C22; --ink: #E8EAEE; --ink-soft: #9AA1AC; --line: #2B3038;
+  --accent: #FFB020; --accent-bg: #3A2A08;
+  --metal-1: #6C727B; --metal-2: #3E434A; --metal-3: #24272C;
+  --console-bg: #0A0B0D; --ok: #6BD38A; --warn: #FFB020; --bad: #FF6B5E;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bench); color: var(--ink); font: 15px/1.5 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.main > *, .bench, .controls { min-width: 0; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+h1 { font: 600 28px/1.1 var(--f-display); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+.sub { color: var(--ink-soft); margin: 4px 0 0; max-width: 62ch; }
+.board { font: 500 12px var(--f-mono); color: var(--ink-soft); letter-spacing: .04em; text-transform: uppercase; }
+
+.main { display: grid; grid-template-columns: minmax(0, 470px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 880px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- el reloj ---------- */
+.bench { display: grid; justify-items: center; gap: 16px; padding-block: 8px; }
+.watch { position: relative; width: min(440px, 100%); aspect-ratio: 1; max-width: 100%; margin-block: 14px 18px; }
+.strap { position: absolute; left: 31%; right: 31%; background: linear-gradient(90deg, var(--metal-3), var(--metal-2) 50%, var(--metal-3));
+  border-radius: 10px; z-index: 0; opacity: .55; }
+.strap.top { top: -14px; height: 40px; } .strap.bot { bottom: -14px; height: 40px; }
+.case { position: absolute; inset: 0; border-radius: 50%; z-index: 1;
+  background: conic-gradient(from 200deg, var(--metal-1), var(--metal-3), var(--metal-1), var(--metal-2), var(--metal-1));
+  box-shadow: 0 18px 40px rgb(0 0 0 / .28), inset 0 0 0 2px rgb(255 255 255 / .15); }
+.glass { position: absolute; inset: 5.5%; z-index: 2; border-radius: 50%; overflow: hidden; background: #000;
+  box-shadow: inset 0 0 0 3px #000, 0 0 0 1px rgb(0 0 0 / .6); }
+/* en el celular la página nunca se corre hacia los lados (deslizar a la izquierda no debe mostrar el panel de estado) */
+html, body { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; touch-action: pan-y; }
+.wrap, .main, .bench, .side, .card, .controls { max-width: 100%; }
+.sel, select, input { max-width: 100%; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer; transition: opacity .35s; }
+.glass.off canvas { opacity: 0; }
+.glass::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: linear-gradient(135deg, rgb(255 255 255 / .09), transparent 40%); }
+.offhint[hidden] { display: none; }
+.offhint { position: absolute; inset: 0; display: grid; place-items: center; color: #6E7480; font: 500 13px var(--f-mono); pointer-events: none; }
+.boot { position: absolute; z-index: 3; right: -14px; top: 50%; transform: translateY(-50%); width: 26px; height: 64px;
+  border-radius: 6px; border: 0; background: linear-gradient(90deg, var(--metal-2), var(--metal-1)); cursor: pointer;
+  box-shadow: 0 2px 6px rgb(0 0 0 / .3); }
+.boot:active { transform: translateY(-50%) translateX(-3px); }
+.boot:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bootlabel { position: absolute; z-index: 3; right: -14px; top: calc(50% + 40px); font: 500 10px var(--f-mono); color: var(--ink-soft); letter-spacing: .08em; }
+
+.clock { font: 600 22px var(--f-display); font-variant-numeric: tabular-nums; text-align: center; }
+.clock small { display: block; font: 400 12px var(--f-mono); color: var(--ink-soft); }
+
+.controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: min(440px, 100%); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lbl { font: 500 11px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); min-width: 74px; }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; color: var(--ink); padding: 6px 11px; font: 500 13px var(--f-mono); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px;
+  font: 500 13px var(--f-body); cursor: pointer; }
+.btn:hover, .seg button:hover { border-color: var(--accent); }
+.btn.warn { color: var(--bad); }
+.sel { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 8px; font: 500 13px var(--f-body); }
+.hint { font-size: 13px; color: var(--ink-soft); margin: 0; }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+.fallo { position: absolute; inset: 18%; display: grid; place-items: center; text-align: center; color: #FFB020; font: 500 13px/1.5 var(--f-mono); }
+
+/* ---------- telemetría ---------- */
+.side { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h2 { font: 600 13px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 12px; }
+.who { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 12px; }
+.who b { font: 600 22px var(--f-display); }
+.who span { color: var(--ink-soft); font-size: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chip { font: 500 12px var(--f-mono); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-soft); }
+.chip.mood { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
+.chip.bad { color: var(--bad); border-color: currentColor; }
+.chip.on { color: var(--ink); }
+.fotos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fotos canvas { width: 72px; height: 72px; border-radius: 50%; cursor: pointer; border: 1px solid var(--line); }
+.needs { display: grid; gap: 7px; }
+.need { display: grid; grid-template-columns: 82px 1fr 34px; gap: 10px; align-items: center; font-size: 13px; }
+.need .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.need .bar i { display: block; height: 100%; border-radius: 4px; transition: width .4s; }
+.need output { font: 500 12px var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.need.low output { color: var(--bad); }
+.traits { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 16px; font-size: 13px; }
+.trait { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding-bottom: 3px; }
+.trait span:last-child { font: 500 12px var(--f-mono); color: var(--ink-soft); }
+
+.console { background: var(--console-bg); color: var(--console-fg); border-radius: 12px; padding: 12px 14px; font: 12.5px/1.55 var(--f-mono);
+  height: 300px; overflow-y: auto; overflow-x: hidden; min-width: 0; }
+.console div { white-space: pre-wrap; word-break: break-word; }
+.console .t { color: var(--console-dim); }
+.console .ev { color: var(--console-ok); }
+.console .snd { color: var(--console-dim); }
+.console .ask { color: var(--console-warn); }
+.conhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.conhead h2 { margin: 0; }
+footer { color: var(--ink-soft); font-size: 13px; max-width: 75ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Simulador de la mascota</h1>
+      <p class="sub">El mismo motor y la misma interfaz del firmware, corriendo en tu navegador. Toca la pantalla con el mouse o el dedo.</p>
+    </div>
+    <div class="board">ESP32‑S3 · AMOLED 1,75" 466×466</div>
+  </header>
+
+  <div class="main">
+    <section class="bench" aria-label="Orbe simulado">
+      <div class="watch">
+        <div class="strap top"></div><div class="strap bot"></div>
+        <div class="case"></div>
+        <div class="glass" id="glass">
+          <canvas id="pantalla" width="466" height="466" aria-label="Pantalla del orbe"></canvas>
+          <div class="offhint" id="offhint" hidden>pantalla apagada · presiona BOOT (o «sacarlo del bolsillo»)</div>
+        </div>
+        <button class="boot" id="boot" aria-label="Botón BOOT"></button>
+        <span class="bootlabel">BOOT</span>
+      </div>
+
+      <div class="clock" id="reloj">--:--<small>hora del orbe (Chile)</small></div>
+
+      <div class="controls">
+        <div class="row"><span class="lbl">Tiempo</span>
+          <div class="seg" role="group" aria-label="Velocidad del tiempo" id="vel">
+            <button data-v="1" aria-pressed="true">real</button>
+            <button data-v="60">1 min/s</button>
+            <button data-v="600">10 min/s</button>
+            <button data-v="3600">1 h/s</button>
+          </div>
+        </div>
+        <div class="row"><span class="lbl">Saltar</span>
+          <button class="btn" data-salto="3600">+1 h</button>
+          <button class="btn" data-salto="28800">+8 h</button>
+          <button class="btn" data-salto="86400">+1 día</button>
+        </div>
+        <div class="row"><span class="lbl">Pantalla</span>
+          <label class="check"><input type="checkbox" id="siempre" checked> Mantener encendida</label>
+          <span class="hint">Desmárcalo para ver el apagado a los 20 s, como en el orbe.</span>
+        </div>
+        <div class="row"><span class="lbl">Sensor</span>
+          <button class="btn" id="sacudir">Sacudir el orbe</button>
+          <button class="btn" id="incl-izq" title="Mantén apretado (o usa las flechas del teclado)">◀ Inclinar</button>
+          <button class="btn" id="incl-der" title="Mantén apretado (o usa las flechas del teclado)">Inclinar ▶</button>
+          <span class="hint">En el orbe lo detecta el acelerómetro. Inclinar: mantén el botón o usa las flechas del teclado (se resbala, la pelota rueda y la canasta se mueve). Sacudir hace caer fruta del árbol.</span>
+        </div>
+        <div class="row"><span class="lbl">Clima</span>
+          <div class="seg" role="group" aria-label="Forzar clima" id="clima">
+            <button data-c="0">sol</button><button data-c="1">nubes</button><button data-c="2">lluvia</button><button data-c="3">viento</button><button data-c="4">nieve</button><button data-c="5">tormenta</button><button data-c="6">frío</button>
+          </div>
+        </div>
+        <div class="row"><span class="lbl">Estación</span>
+          <div class="seg" role="group" aria-label="Estación del año" id="estacion">
+            <button data-e="-1" aria-pressed="true">según fecha</button><button data-e="0">prim.</button><button data-e="1">ver.</button><button data-e="2">otoño</button><button data-e="3">inv.</button>
+          </div>
+        </div>
+        <div class="row"><span class="lbl">Probar</span>
+          <button class="btn" id="nacer">Que nazca ya</button>
+          <button class="btn" id="frase">Mensaje del día</button>
+        </div>
+        <div class="row"><span class="lbl">Finales y Libro</span>
+          <button class="btn" id="fin1" title="Final 1: la deja adulta, en la isla, de noche y con luna llena, con el Corazón: el rito empieza solo (puede tardar unos segundos)">Ver Final 1 (rito)</button>
+          <button class="btn" id="fin2" title="Final 2: el libro que se escribe solo (el Cuidador que se fue a dormir)">Ver Final 2 (libro)</button>
+          <select class="sel" id="libro-sel" aria-label="Página del Libro"><option value="0">Libro 0: prólogo</option><option value="1">Libro 1: nace</option><option value="2">Libro 2: la isla</option><option value="3">Libro 3: una carta</option><option value="4">Libro 4: un secreto</option><option value="5">Libro 5: los cristales</option><option value="6">Libro 6: la melodía</option><option value="7">Libro 7: el Corazón</option></select>
+          <button class="btn" id="rito-hist" title="La historia con que termina el rito: por qué es la Guardiana (toca para seguir), el cierre y la última página del Libro">Ver historia del rito</button>
+          <button class="btn" id="libro-ya" title="Muestra esa página animada del Libro (cierra lo que esté abierto)">Ver página</button>
+        </div>
+        <div class="row"><span class="lbl">La historia (v92)</span>
+          <button class="btn" id="h-dia" title="Suma un día jugado (la historia avanza por días jugados; tope de 2 momentos por día)">+1 día jugado</button>
+          <button class="btn" id="h-semana" title="Suma 7 días jugados y libera el tope de hoy">+1 semana</button>
+          <button class="btn" id="h-tilde" title="Tilde, la urraca, llega de visita a la zona donde está (tócala para su chisme)">Visita de Tilde</button>
+          <button class="btn" id="h-brizna" title="La lleva a la isla y despierta la Abuela Brizna con su próximo recuerdo">Abuela Brizna</button>
+          <button class="btn" id="h-pagina" title="Aparece la próxima página del diario de Peumo">Página de Peumo</button>
+          <button class="btn" id="h-casita" title="Abre la casita escondida de Peumo">Casita de Peumo</button>
+          <button class="btn" id="h-mirador" title="Abre el mirador de las nubes">Mirador</button>
+          <button class="btn" id="h-prisma" title="Un capítulo de Prisma, el dragón de cristal">Capítulo de Prisma</button>
+          <span class="lbl" id="h-estado"></span>
+        </div>
+        <div class="row"><span class="lbl">Novedades (v93)</span>
+          <button class="btn" id="n-libre" title="La lleva a la cueva y abre el modo libre de los cristales">Tocar libre</button>
+          <button class="btn" id="n-componer" title="Abre los cristales directo en componer nuestra canción">Componer</button>
+          <button class="btn" id="n-dragon" title="Despierta al dragón de cristal (reacciona a lo que tocas y cuenta lo del Rey)">Dragón despierto</button>
+          <button class="btn" id="n-propone" title="La próxima pieza (6+ notas y 3 s sin tocar) termina con la propuesta de hacer una canción">Que proponga canción</button>
+          <button class="btn" id="n-escama" title="La próxima pieza es el tercer día tocando: el dragón regala una escama">Escama del dragón</button>
+          <button class="btn" id="n-canciones" title="Abre el cuaderno de canciones">Cuaderno</button>
+          <button class="btn" id="n-hielo" title="Congela el lago (como la bebida helada del norte) y la lleva allá: toca el hoyo para pescar">Lago helado</button>
+          <button class="btn" id="n-pescar" title="Pesca en el hoyo del hielo (con el lago helado)">Pescar en el hielo</button>
+          <button class="btn" id="n-ramitas" title="Le da 3 ramitas y 3 de musgo: alcanza para la casita (Más → rincón)">Ramitas y musgo</button>
+          <button class="btn" id="n-anonuevo" title="31 de diciembre, poco antes de la cuenta regresiva (a las 21:00 en modo niño o infante)">Año Nuevo</button>
+        </div>
+        <div class="row"><span class="lbl">Novedades (v95)</span>
+          <button class="btn" id="v-animal" title="Trae un animal conocido y le cuenta algo del Rey (queda en el Libro)">Que un animal cuente algo</button>
+          <button class="btn" id="v-pagina" title="Le da la página suelta del diario y la abre: se desdobla y muestra la siguiente página">Página suelta</button>
+          <button class="btn" id="v-pochi" title="Llega Pochi: después de comer, charla con ella (una por visita)">Pochi charla</button>
+          <button class="btn" id="v-claro" title="El claro del Rey Peumo (tocar su casa para entrar)">Claro</button>
+          <button class="btn" id="v-casita" title="La casita de Peumo: encender el horno, tender la camita, el gancho y la mesa">Casita</button>
+          <button class="btn" id="v-mirador" title="El mirador de las nubes: la nube que baja, la corona de hojas y la piedra tibia">Mirador</button>
+          <button class="btn" id="v-rito" title="El rito de la Guardiana en su propia pantalla (para verlo; no cambia la partida)">Rito</button>
+          <button class="btn" id="v-verso" title="El segundo final de verdad: Guardiana, nuestra canción, de noche en la cueva">El último verso</button>
+          <button class="btn" id="v-tilde" title="Tilde puede venir ya (de 8 a 20 h, mientras juegas)">Tilde hoy</button>
+        </div>
+        <div class="row"><span class="lbl">Novedades (v96)</span>
+          <button class="btn" id="w-exc-claro" title="Se va solita de excursión al claro (camina al caminito de luciérnagas y desaparece un rato)">Excursión al claro</button>
+          <button class="btn" id="w-exc-mirador" title="Se va solita al mirador a saludar al cóndor (solo de día)">Excursión al mirador</button>
+          <button class="btn" id="w-exc-vuelve" title="Que vuelva ya de la excursión (cuenta qué vio y trae lo escondido de hoy)">Que vuelva</button>
+          <button class="btn" id="w-escondido" title="Vuelve a esconder algo hoy en el claro, la casita y el mirador (brilla; en el claro el chucao avisa)">Esconder de nuevo</button>
+        </div>
+        <div class="row"><span class="lbl">Novedades (v98)</span>
+          <button class="btn" id="w-claro" title="El claro del Rey Peumo: una zona más del mundo (la casa del rey, la poza, las luciérnagas y el chucao)">Claro del rey</button>
+          <button class="btn" id="w-casa" title="Adentro de la casa del rey: el horno, la camita, el gancho y la mesa">Casa del rey</button>
+          <button class="btn" id="w-mirador" title="La cima del cerro, justo sobre la cueva: la piedra tibia, la corona, la nube y el cóndor">Mirador</button>
+          <button class="btn" id="w-nube" title="En el cerro: la nube baja, se suben y suben al mirador (si no está en el cerro, primero va)">Subir en la nube</button>
+          <button class="btn" id="w-jl-1" title="Galletas de Peumo: la receta, el horno (sopla o toca el fuelle) y sacarlas doradas">Galletas</button>
+          <button class="btn" id="w-jl-2" title="Canción de cuna: toca al ritmo y espanta las polillas de la vela">Canción de cuna</button>
+          <button class="btn" id="w-jl-3" title="Salto al cielo: de nube en nube; deja el dedo a un lado para que vaya para allá">Salto al cielo</button>
+          <button class="btn" id="w-jl-4" title="Atrapa hojas: mueve la canasta; las doradas valen más, las piñas pinchan">Atrapa hojas</button>
+          <button class="btn" id="w-jl-5" title="La piedra tibia: ¿cuál está tibia? (cambia cada día; ojo con la lagartija)">Piedra tibia</button>
+        </div>
+        <div class="row"><span class="lbl">Mundo</span>
+          <button class="btn" id="zonas">Abrir todas las zonas</button>
+          <button class="btn" id="vecino">Que venga su amigo</button>
+          <button class="btn" id="cumple">Hoy es mi cumpleaños</button>
+        </div>
+        <div class="row"><span class="lbl">Sorpresas</span>
+          <div class="seg" role="group" aria-label="Que pase algo raro" id="raros">
+            <button data-r="0">arcoíris</button><button data-r="1">estrella fugaz</button><button data-r="2">ciervo</button><button data-r="3">ballena de nubes</button>
+          </div>
+          <button class="btn" id="tesoro">Que huela un tesoro</button>
+          <button class="btn" id="confianza">Más confianza</button>
+          <button class="btn" id="semillas">Darle 3 semillas</button>
+          <button class="btn" id="carta">Que le llegue una carta</button>
+        </div>
+        <div class="row"><span class="lbl">Animales</span>
+          <select class="sel" id="animal-sel" aria-label="Animal"><option value="0">erizo</option><option value="1">ardilla</option><option value="2">conejo</option><option value="3">caracol</option><option value="4">tortuga</option><option value="5">pato</option><option value="6">búho</option><option value="7">topo</option><option value="8">colibrí</option><option value="9">carpintero</option><option value="10">martín pescador</option><option value="11">golondrina</option><option value="12">cisne</option><option value="13">urraca</option><option value="14">cuervo</option><option value="15">garza</option><option value="16">mapache</option><option value="17">murciélago</option><option value="18">nutria</option><option value="19">castor</option><option value="20">ratón de campo</option><option value="21">oso</option><option value="22">ciervo</option><option value="23">tejón</option><option value="24">zorrillo</option><option value="25">gato montés</option><option value="26">lince</option><option value="27">puma</option><option value="28">lagartija</option><option value="29">salamandra</option><option value="30">camaleón</option><option value="31">culebrita</option><option value="32">mariquita</option><option value="33">libélula</option><option value="34">grillo</option><option value="35">hormigas</option><option value="36">escarabajo</option><option value="37">polilla</option></select>
+          <button class="btn" id="animal-ya" title="Aparece ahora (si no es su zona, su hora o su clima, se va al tiro)">Que aparezca</button>
+          <button class="btn" id="enferma" aria-pressed="false">Enfermarla</button>
+        </div>
+        <div class="row"><span class="lbl">Cartas</span>
+          <button class="btn" id="carta-fam">De su mamá</button>
+          <button class="btn" id="carta-via">De una viajera</button>
+        </div>
+        <div class="row"><span class="lbl">Magia</span>
+          <select class="sel" id="cri-sel" aria-label="Criatura"><option value="0">Musguito (prado)</option><option value="1">Lumbre (bosque)</option><option value="2">Ondina (lago)</option><option value="3">Anemoi (colina)</option><option value="4">Cristalino (cueva)</option><option value="5">Marea (isla)</option></select>
+          <button class="btn" id="cri-asoma">Que se asome</button>
+          <button class="btn" id="cri-invita">Que la invite</button>
+          <button class="btn" id="pista" title="Ella comenta una pista de algún secreto que todavía no descubren">Una pista</button>
+        </div>
+        <div class="row"><span class="lbl">Fiestas</span>
+          <select class="sel" id="fiesta-sel" aria-label="Fiesta"><option value="2">Navidad</option><option value="3">Año Nuevo</option><option value="1">Halloween</option><option value="6">Fiestas Patrias (Chile)</option><option value="7">Su cumpleaños</option><option value="8">Día de las Flores Amarillas</option></select>
+          <button class="btn" id="fiesta-ya" title="Se juntan todos en el prado (amigos del barrio y criaturas que ya conoce)">Celebrar ahora</button>
+          <button class="btn" id="pochi0" title="Pochi llega de visita, con hambre">Pochi llega</button>
+          <button class="btn" id="pochi2" title="Pochi se la lleva a pasear por todos los mundos abiertos">Pochi: a pasear</button>
+          <button class="btn" id="pochi3" title="Pochi se despide: debe volver con sus cachorros">Pochi se despide</button>
+          <button class="btn" id="pochi10" title="(fw 102) Pochi viene con Chapi, el cochino amoroso: se revuelca y la abraza">Pochi + Chapi</button>
+          <button class="btn" id="pochi11" title="(fw 102) Pochi viene con Pasita, la más tierna: le trae una florcita">Pochi + Pasita</button>
+          <button class="btn" id="pochi12" title="(fw 102) Pochi viene con Morita, tierna y tímida: se esconde y le da un besito">Pochi + Morita</button>
+          <button class="btn" id="pochi13" title="(fw 102) Pochi viene con Rony, el más loco: juega con una cosita chiquitita">Pochi + Rony</button>
+          <button class="btn" id="pochi14" title="(fw 102) Pochi viene con los cuatro">Pochi + todos</button>
+          <button class="btn" id="pochi15" title="(fw 102) Pochi viene con dos cachorros">Pochi + dos</button>
+          <button class="btn" id="pochi16" title="(fw 102) Dos cachorros y una escena de familia (pillada, ramita, siesta, se esconde, Pochi los lame)">Pochi: familia</button>
+          <button class="btn" id="pochi17" title="(fw 102) Al despedirse, un cachorro se escondió: búscalo y tócalo">Pochi: ¿y el cachorro?</button>
+          <button class="btn" id="pochi60" title="(fw 102) Pochi sola se encuentra con un animal: bichito">Pochi y bichito</button>
+          <button class="btn" id="pochi61" title="(fw 102) Pochi sola se encuentra con un animal: pájaro">Pochi y pájaro</button>
+          <button class="btn" id="pochi62" title="(fw 102) Pochi sola se encuentra con un animal: manso">Pochi y manso</button>
+          <button class="btn" id="pochi63" title="(fw 102) Pochi sola se encuentra con un animal: lento">Pochi y lento</button>
+          <button class="btn" id="pochi64" title="(fw 102) Pochi sola se encuentra con un animal: de agua">Pochi y de agua</button>
+          <button class="btn" id="pochi65" title="(fw 102) Pochi sola se encuentra con un animal: grande">Pochi y grande</button>
+          <button class="btn" id="pochi66" title="(fw 102) Pochi sola se encuentra con un animal: zorrillo">Pochi y zorrillo</button>
+          <button class="btn" id="pochi67" title="(fw 102) Pochi sola se encuentra con un animal: erizo">Pochi y erizo</button>
+          <button class="btn" id="pochi68" title="(fw 102) Pochi sola se encuentra con un animal: urraca">Pochi y urraca</button>
+          <button class="btn" id="pochi69" title="(fw 102) Pochi sola se encuentra con un animal: búho">Pochi y búho</button>
+          <button class="btn" id="pochi70" title="(fw 102) Pochi sola se encuentra con un animal: chucao">Pochi y chucao</button>
+          <button class="btn" id="pochi80" title="(fw 102) Pochi con un cachorro al azar y un animal: bichito">Cachorro y bichito</button>
+          <button class="btn" id="pochi81" title="(fw 102) Pochi con un cachorro al azar y un animal: pájaro">Cachorro y pájaro</button>
+          <button class="btn" id="pochi82" title="(fw 102) Pochi con un cachorro al azar y un animal: manso">Cachorro y manso</button>
+          <button class="btn" id="pochi83" title="(fw 102) Pochi con un cachorro al azar y un animal: lento">Cachorro y lento</button>
+          <button class="btn" id="pochi84" title="(fw 102) Pochi con un cachorro al azar y un animal: de agua">Cachorro y de agua</button>
+          <button class="btn" id="pochi85" title="(fw 102) Pochi con un cachorro al azar y un animal: grande">Cachorro y grande</button>
+          <button class="btn" id="pochi86" title="(fw 102) Pochi con un cachorro al azar y un animal: zorrillo">Cachorro y zorrillo</button>
+          <button class="btn" id="pochi87" title="(fw 102) Pochi con un cachorro al azar y un animal: erizo">Cachorro y erizo</button>
+          <button class="btn" id="pochi88" title="(fw 102) Pochi con un cachorro al azar y un animal: urraca">Cachorro y urraca</button>
+          <button class="btn" id="pochi89" title="(fw 102) Pochi con un cachorro al azar y un animal: búho">Cachorro y búho</button>
+          <button class="btn" id="pochi100" title="(fw 102) Chapi y su animal amigo">Chapi y su amigo</button>
+          <button class="btn" id="pochi101" title="(fw 102) Pasita y su animal amigo">Pasita y su amigo</button>
+          <button class="btn" id="pochi102" title="(fw 102) Morita y su animal amigo">Morita y su amigo</button>
+          <button class="btn" id="pochi103" title="(fw 102) Rony y su animal amigo">Rony y su amigo</button>
+          <button class="btn" id="n104a" title="(fw 104) Encuentras el próximo papelito del bosque (se abre y queda en el Libro)">Papelito: lo encuentras</button>
+          <button class="btn" id="n104b" title="(fw 104) Ella vuelve de su excursión con un papelito y te lo pasa">Papelito: te lo trae</button>
+          <button class="btn" id="n104c" title="(fw 104) Pesca el trocito de hielo (va a la colección de cristales)">Hielo: lo pesca</button>
+          <button class="btn" id="n104d" title="(fw 104) El trocito de hielo se derrite">Hielo: se derrite</button>
+          <button class="btn" id="n104e" title="(fw 104) Paseo de verdad: 1.200 pasos">Paseo corto</button>
+          <button class="btn" id="n104f" title="(fw 104) Paseo de verdad largo: 3.500 pasos (trae algo)">Paseo largo</button>
+          <button class="btn" id="n104g" title="(fw 104) La vuelve muy terca: prueba darle juego mientras escarba, bañarla o despertarla">Muy terca</button>
+          <button class="btn" id="n104h" title="(fw 104) La vuelve dócil (casi nunca dice que no)">Dócil</button>
+          <button class="btn" id="n105a" title="(fw 105) Hace como si no hubiera memoria para el lienzo del fondo: se arma por franjas y los adornos (la casita del prado, el farol, el banco, los senderos) tienen que verse igual" aria-pressed="false">Fondo por franjas</button>
+          <button class="btn" id="toq1" title="(fw 103) Reacción al tocar un animal: saluda">Toque: saluda</button>
+          <button class="btn" id="toq2" title="(fw 103) Reacción al tocar un animal: se enoja">Toque: se enoja</button>
+          <button class="btn" id="toq3" title="(fw 103) Reacción al tocar un animal: la pican">Toque: la pican</button>
+          <button class="btn" id="toq4" title="(fw 103) Reacción al tocar un animal: púas">Toque: púas</button>
+          <button class="btn" id="toq5" title="(fw 103) Reacción al tocar un animal: zorrillo (olor)">Toque: zorrillo (olor)</button>
+          <button class="btn" id="toq6" title="(fw 103) Reacción al tocar un animal: ruge">Toque: ruge</button>
+          <button class="btn" id="toq7" title="(fw 103) Reacción al tocar un animal: se va">Toque: se va</button>
+          <button class="btn" id="pochi20" title="(fw 102) Pochi se rasca el poto en el pasto">Pochi se rasca</button>
+          <button class="btn" id="pochi21" title="(fw 102) Pochi panza arriba (tócala para rascarla; muchos toques: se marea)">Pochi panza arriba</button>
+          <button class="btn" id="pochi30" title="(fw 102) Manía: se roba una ramita (tócala para pillarla)">Pochi: la ramita</button>
+          <button class="btn" id="pochi31" title="(fw 102) Manía: persigue una luciérnaga">Pochi: luciérnaga</button>
+          <button class="btn" id="pochi32" title="(fw 102) Manía: le ladra al cóndor y se esconde">Pochi: el cóndor</button>
+          <button class="btn" id="pochi33" title="(fw 102) Manía: le tiene miedo al agua">Pochi: el agua</button>
+          <button class="btn" id="pochi40" title="(fw 102) Llega y la consuela (como si estuviera triste)">Pochi consuela</button>
+          <button class="btn" id="pochi41" title="(fw 102) Llega mojada y se sacude">Pochi mojada</button>
+          <button class="btn" id="pochi42" title="(fw 102) Llega ofendida (la otra vez no la acompañaste)">Pochi ofendida</button>
+          <button class="btn" id="pochi43" title="(fw 102) Ella duerme: Pochi llega en puntillas y se acurruca">Pochi acurrucada</button>
+          <button class="btn" id="dragaus" title="Alterna si el dragón de la cueva está o no (para probar lo que dice ella y el minijuego)">Dragón: ¿ausente?</button>
+          <button class="btn" id="dragon" title="El final del juego de los cristales de la cueva (el secreto)">Ver el secreto de la cueva</button>
+        </div>
+        <div class="row"><span class="lbl">Creatividad</span>
+          <button class="btn" id="baul">Abrir todo el baúl</button>
+          <button class="btn" id="cargador" aria-pressed="false">Enchufar el cargador</button>
+          <button class="btn" id="paquete" title="Los íconos, criaturas, sonidos y celebraciones que hiciste en el editor de Windows (Guardar paquete)">Traer lo del editor…</button>
+          <input type="file" id="f-paquete" accept=".mascotapack,.json" hidden>
+          <button class="btn" id="paquete-quitar" hidden>Volver a lo de fábrica</button>
+        </div>
+        <div class="row"><span class="lbl">Fotos</span>
+          <div id="fotos" class="fotos"><span class="hint">Sácale fotos en Más → libro → cámara. Toca una para bajarla como PNG.</span></div>
+        </div>
+        <div class="row"><span class="lbl">Respaldo</span>
+          <button class="btn" id="respaldo">Descargar respaldo</button>
+          <button class="btn" id="traer">Traer un respaldo…</button>
+          <input type="file" id="archivo" accept=".mascota,.txt" hidden>
+          <button class="btn" id="sinbateria">Se quedó sin batería</button>
+        </div>
+        <div class="row"><span class="lbl">Bolsillo y alarmas</span>
+          <button class="btn" id="caminar" title="Los pasos que contaría el acelerómetro en el bolsillo: cada 2000 te trae algo del paseo">Caminar 1000 pasos</button>
+          <button class="btn" id="bolsillo" title="Como sacarlo del bolsillo: enciende la pantalla (con la pantalla apagada, tocarla no hace nada)">Sacarlo del bolsillo</button>
+          <button class="btn" id="al-dormir" title="Pone la hora de dormir para dentro de un minuto">Hora de dormir en 1 min</button>
+          <button class="btn" id="al-despertar" title="Pone una alarma para dentro de un minuto (una sola vez)">Alarma en 1 min</button>
+          <button class="btn" id="viaje" title="La despedida cuando una mascota se va de viaje (en el orbe: Más → ajustes → Mis mascotas)">Ver un viaje de despedida</button>
+          <button class="btn" id="reserva" title="Lo que muestra el orbe antes de apagarse para cuidar la hora (en el orbe después duerme hasta que lo cargas)">Pila casi vacía</button>
+        </div>
+        <div class="row"><span class="lbl">La Bolsa</span>
+          <button class="btn" id="obj-uno" title="Como si lo encontrara explorando: te lo trae y vuela a la Bolsa (en el orbe: botón + → Bolsa)">Encontrar un objeto mágico</button>
+          <button class="btn" id="soplar" title="Como soplarle al orbe (el micrófono): despeja la niebla, apaga las velas del pastel, usa un objeto que se sopla, como el diente de león, o llena la vela del bote camino a la isla">Soplar</button>
+          <button class="btn" id="regalo" title="Como si volvieras después de unas horas: te espera con un regalo al azar (piña, hoja gigante, palo, pluma, semilla con alas, piedra o botas con barro)">Volver con regalo</button>
+          <button class="btn" id="niebla" title="Una mañana con niebla: sóplale o bárrela con el dedo">Niebla</button>
+          <button class="btn" id="obj-todos" title="Uno de cada uno de los 149 objetos (el Corazón del Mundo llega solo después), para mirar la Bolsa y el libro">Llenar la Bolsa</button>
+        </div>
+        <div class="row"><span class="lbl">Animales</span>
+          <div class="seg" role="group" aria-label="Traer un animal a la zona" id="fauna">
+            <button data-f="0">mariposa</button><button data-f="1">abeja</button><button data-f="2">pájaro</button><button data-f="3">zorro</button><button data-f="4">rana</button>
+          </div>
+        </div>
+        <p class="hint">Las flechas a los lados de la pantalla llevan a las otras zonas. En el prado, toca un cuadro de tierra para plantar y otra vez para regar. Toca al zorro para espantarlo. En el lago, toca el bote para que salga a pescar. Sobre la mascota: un toque es una palmadita, deslizar el dedo es una caricia, mantenerlo es un abrazo y muchos toques seguidos la marean. Jugar abre el menú: pelota (desliza la pelota para tirarla), escondidas, atrapar frutas y trucos. La comida aparece abajo: arrástrala hasta su boca. Cuando ya son amigos, arrastra el dedo por el pasto y te sigue. Su diario, el álbum y las colecciones están en Más → el libro.</p>
+        <div class="row"><span class="lbl">Amigos</span>
+          <label class="check"><input type="checkbox" id="bot"> Amigo de prueba cerca</label>
+          <button class="btn" id="botinv">Que te invite</button>
+        </div>
+        <p class="hint">Para jugar entre dos mascotas: abre este simulador en otra pestaña y elige allí «otra mascota». En el orbe esto viaja por Bluetooth.</p>
+        <div class="row"><span class="lbl">Pestaña</span>
+          <div class="seg" role="group" aria-label="Qué mascota usa esta pestaña" id="ranura">
+            <button data-r="1">mi mascota</button><button data-r="2">otra mascota</button>
+          </div>
+        </div>
+        <div class="row"><span class="lbl">Sonido</span>
+          <button class="btn" id="sonido" aria-pressed="false">Activar sonido</button>
+        </div>
+        <div class="row"><span class="lbl">Mascota</span>
+          <button class="btn warn" id="nueva" title="Borra esta mascota y las que descansan. Para probar otra sin perder esta: en el orbe, Más → ajustes → Mis mascotas">Borrar todo y empezar de cero</button>
+          <span id="confirmar" hidden><button class="btn warn" id="si">Sí, empezar de cero</button> <button class="btn" id="no">Cancelar</button></span>
+        </div>
+        <p class="hint">Tu mascota se guarda en este navegador y sigue viviendo en tiempo real mientras la página está cerrada.</p>
+      </div>
+    </section>
+
+    <section class="side">
+      <div class="card">
+        <h2>Estado</h2>
+        <div class="who"><b id="nombre">—</b><span id="especie">—</span></div>
+        <p class="hint" id="siente" style="margin:0 0 12px"></p>
+        <div class="chips" id="chips"></div>
+        <div class="needs" id="needs"></div>
+      </div>
+      <div class="card">
+        <h2>Personalidad (cambia según cómo la tratas)</h2>
+        <div class="traits" id="traits"></div>
+      </div>
+      <div>
+        <div class="conhead"><h2 style="font:600 13px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)">Monitor serie</h2>
+          <button class="btn" id="limpiar">Limpiar</button></div>
+        <div class="console" id="consola" role="log" aria-live="polite"></div>
+      </div>
+    </section>
+  </div>
+
+  <footer>Al empezar te pregunta tu edad (menos de 13 años: modo niño, sin textos ni castigos) y el nombre; luego toca el huevo para darle calor. Ya no hay hora ni números en la pantalla: su estado se lee mirándola (cara, orejas, cola, postura y forma de caminar) y en las nubecitas de pensamiento, que muestran qué siente y por qué. Tócala en distintas partes: a cada una le gustan cosas distintas. Si la dejas sola, explora, olfatea, cava, duerme siesta y encuentra frutas, semillas y piedras brillantes, que sirven para decorar su rincón (Más → flor). No muere: si la abandonas te extraña y te recibe feliz al volver.</footer>
+</div>
+
+<script>
+__MOTOR_JS__
+</script>
+<script>
+const WASM_B64 = "__WASM_B64__";
+
+const NECESIDADES = [
+  ["Comida", "#FFB020"], ["Energía", "#4AA8FF"], ["Higiene", "#34D1BF"],
+  ["Diversión", "#FF6FB5"], ["Cariño", "#FF5A5A"], ["Salud", "#5CC97A"],
+  ["Curiosidad", "#B48CFF"], ["Seguridad", "#C08A5A"],
+];
+const RASGOS = ["Glotona", "Juguetona", "Cariñosa", "Tímida", "Pulcra", "Curiosa", "Traviesa"];
+const EMOCION = { feliz: "feliz", tranquila: "tranquila", hambrienta: "hambrienta", somnolienta: "con sueño",
+  sucia: "sucia", aburrida: "aburrida", triste: "triste", enojada: "enojada", enferma: "enferma",
+  enamorada: "cariñosa", dormida: "dormida", curiosa: "curiosa", asustada: "asustada", orgullosa: "orgullosa", celosa: "celosa" };
+const EMOS = ["alegría", "tristeza", "enojo", "miedo", "curiosidad", "aburrimiento", "cansancio", "orgullo", "celos", "cariño"];
+const DESEO = { nada: "nada", comer: "comer", dormir: "dormir", bano: "ducha", jugar: "jugar", carino: "mimos",
+  medicina: "medicina", "jugar sola": "juega sola", descansar: "descansa" };
+const ETAPA = { huevo: "huevo", bebe: "bebé", cria: "cría", adulta: "adulta" };
+const ESPECIE = {};
+const ESTACIONES = { primavera: "primavera", verano: "verano", otono: "otoño", invierno: "invierno" };
+const CLIMAS = { despejado: "despejado", nublado: "nublado", lluvia: "lluvia", viento: "viento", nieve: "nieve", tormenta: "tormenta", frio: "frío" };
+let RANURA = "1";
+try { RANURA = sessionStorage.getItem("mascota-ranura") || "1"; } catch (e) {}
+const CLAVE = RANURA === "1" ? "mascota-sim-v2" : "mascota-sim-v2-otra";
+const ZONA = -3 * 3600;
+
+let motorJS = false, x, mem8, ctx, img, sonidoOn = false, audio = null, velocidad = 1;
+
+function b64(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+function cstr(p) { const m = new Uint8Array(x.memory.buffer); let e = p; while (m[e]) e++; return new TextDecoder().decode(m.subarray(p, e)); }
+
+let borrando = false;
+function guardar() {
+  if (borrando) return;
+  try {
+    x.sim_seal();
+    const bytes = new Uint8Array(x.memory.buffer, x.sim_pet_ptr(), x.sim_pet_size());
+    let s = ""; for (const v of bytes) s += String.fromCharCode(v);
+    const otras = new Uint8Array(x.memory.buffer, x.sim_saved_ptr(), x.sim_saved_size());
+    let o = ""; let alguna = false; for (const v of otras) { o += String.fromCharCode(v); alguna = alguna || v !== 0; }
+    const dv = new Uint8Array(x.memory.buffer, x.sim_device_ptr(), x.sim_device_size());
+    let d = ""; for (const v of dv) d += String.fromCharCode(v);
+    localStorage.setItem(CLAVE, JSON.stringify({ pet: btoa(s), otras: alguna ? btoa(o) : "", disp: btoa(d), v: x.sim_now(), r: Date.now() / 1000, vel: velocidad }));
+  } catch (e) { /* sin almacenamiento: la mascota vive solo en esta pestaña */ }
+}
+
+function cargarGuardada() {
+  try {
+    const d = JSON.parse(localStorage.getItem(CLAVE) || "null");
+    if (!d || !d.pet) return null;
+    return d;
+  } catch (e) { return null; }
+}
+
+/* ---------- consola ---------- */
+const consola = document.getElementById("consola");
+function linea(hora, texto, clase) {
+  const d = document.createElement("div");
+  const t = document.createElement("span"); t.className = "t"; t.textContent = `I (${hora}) mascota: `;
+  const m = document.createElement("span"); m.className = clase || "ev"; m.textContent = texto;
+  d.append(t, m); consola.append(d);
+  while (consola.children.length > 400) consola.firstChild.remove();
+  consola.scrollTop = consola.scrollHeight;
+}
+function horaVirtual() { const t = Math.floor(x.sim_now()) + ZONA; const s = ((t % 86400) + 86400) % 86400;
+  return String(Math.floor(s / 3600)).padStart(2, "0") + ":" + String(Math.floor(s / 60) % 60).padStart(2, "0"); }
+
+function leerLog() {
+  const n = x.sim_log_len(); if (!n) return;
+  const txt = new TextDecoder().decode(new Uint8Array(x.memory.buffer, x.sim_log_ptr(), n));
+  x.sim_log_clear();
+  for (const l of txt.split("\n")) { if (!l) continue; const [h, m] = l.split("|"); linea(h, m, m.startsWith("pide") ? "ask" : "ev"); }
+}
+
+/* ---------- sonidos: el mismo sintetizador en C que usa el reloj ---------- */
+/* lo que trajiste del editor: sonidos propios (PCM 16 kHz) */
+const propios = {};
+/* (v39) limitador suave: varias notas juntas no se saturan (cada una baja según cuántas suenan, y un compresor al final) */
+let sonando = 0, limitador = null; const activos = [];
+function ganNotas() { return sonando < 2 ? 1 : 1.41 / Math.sqrt(sonando + 1); }
+function salida() {
+  if (!limitador) { limitador = audio.createDynamicsCompressor(); limitador.threshold.value = -10; limitador.knee.value = 12; limitador.ratio.value = 6; limitador.attack.value = 0.003; limitador.release.value = 0.15; limitador.connect(audio.destination); }
+  return limitador;
+}
+function tocarPcm(pcm, hz, id) {
+  const buf = audio.createBuffer(1, pcm.length, hz), d = buf.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) d[i] = pcm[i] / 32768;
+  const src = audio.createBufferSource(), g = audio.createGain();
+  g.gain.value = 0.6 * x.sim_volume_for(id) / 100 * ganNotas(); src.buffer = buf; src.connect(g).connect(salida()); src.start();
+  sonando++; activos.push(src); src.onended = () => { sonando--; const i = activos.indexOf(src); if (i >= 0) activos.splice(i, 1); };
+}
+function reproducir(id) {
+  if (audio && propios["s" + id]) { tocarPcm(propios["s" + id], 16000, id); return; }
+  const n = x.sim_sound_render(id); if (!n || !audio) return;
+  const pcm = new Int16Array(x.memory.buffer, x.sim_sound_pcm(), n);
+  const buf = audio.createBuffer(1, n, x.sim_sound_hz()), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = pcm[i] / 32768;
+  const src = audio.createBufferSource(), g = audio.createGain();
+  g.gain.value = 0.6 * x.sim_volume_for(id) / 100 * ganNotas(); src.buffer = buf; src.connect(g).connect(salida()); src.start();
+  sonando++; activos.push(src); src.onended = () => { sonando--; const i = activos.indexOf(src); if (i >= 0) activos.splice(i, 1); };
+}
+function sonidos() {
+  let s;
+  while ((s = x.sim_pop_sound()) >= 0) {
+    if (s === 254) { for (const f of activos) { try { f.stop(); } catch (e) {} } activos.length = 0; continue; } /* (v39) cerraron su globo: se calla */
+    linea(horaVirtual(), "~ sonido: " + cstr(x.sim_name_sound(s)), "snd");
+    if (sonidoOn && audio && velocidad <= 60) reproducir(s);
+  }
+}
+
+/* ---------- panel ---------- */
+const needsEl = document.getElementById("needs");
+const barras = NECESIDADES.map(([nombre, color]) => {
+  const fila = document.createElement("div"); fila.className = "need";
+  fila.innerHTML = `<span>${nombre}</span><span class="bar"><i style="background:${color};width:0"></i></span><output>0</output>`;
+  needsEl.append(fila); return fila;
+});
+const traitsEl = document.getElementById("traits");
+function pintarRasgos() {
+  traitsEl.innerHTML = "";
+  RASGOS.forEach((r, i) => { const d = document.createElement("div"); d.className = "trait"; d.dataset.i = i;
+    d.innerHTML = `<span>${r}</span><span>${Math.round(x.sim_trait(i) * 100)}%</span>`; traitsEl.append(d); });
+}
+function pintarPanel() {
+  barras.forEach((f, i) => { const v = x.sim_need(i); f.querySelector("i").style.width = v.toFixed(1) + "%";
+    f.querySelector("output").textContent = Math.round(v); f.classList.toggle("low", v < 30); });
+  const esp = cstr(x.sim_name_species(x.sim_species()));
+  const fl = x.sim_flags(), chips = [];
+  document.getElementById("nombre").textContent = cstr(x.sim_name()) || "(sin nombre)";
+  document.getElementById("especie").textContent = (fl & 16)
+    ? `huevo de ${ESPECIE[esp] || esp} · nace en ${Math.floor(x.sim_hatch_left() / 60)}:${String(x.sim_hatch_left() % 60).padStart(2, "0")}`
+    : `${ESPECIE[esp] || esp} · ${ETAPA[cstr(x.sim_name_stage(x.sim_stage()))]} · ${x.sim_age().toFixed(1)} días`;
+  document.getElementById("siente").textContent = "«" + cstr(x.sim_feeling()) + "»";
+  if (!(fl & 16)) {
+    chips.push(`<span class="chip mood">${EMOCION[cstr(x.sim_name_mood(x.sim_mood()))]}</span>`);
+    const em = [];
+    for (let i = 0; i < 10; i++) em.push([x.sim_emo(i), i]);
+    em.sort((a, b) => b[0] - a[0]);
+    for (const [v, i] of em.slice(0, 3)) if (v >= 0.2) chips.push(`<span class="chip">${EMOS[i]} ${Math.round(v * 100)}% · ${cstr(x.sim_name_cause(x.sim_emo_cause(i)))}</span>`);
+    chips.push(`<span class="chip on">${cstr(x.sim_name_activity(x.sim_activity()))} en ${cstr(x.sim_name_place(x.sim_place()))}</span>`);
+    const fauna = [0, 1, 2, 3, 4].filter(f => x.sim_fauna(f)).map(f => cstr(x.sim_name_fauna(f)));
+    const zonas = [0, 1, 2, 3, 4, 5].filter(z => x.sim_scene_open(z)).length;
+    chips.push(`<span class="chip on">zona: ${cstr(x.sim_name_scene(x.sim_scene()))} (${zonas}/6 abiertas)</span>`);
+    { const lk = x.sim_look(), mz = (lk >> 3) & 15, co = (lk >> 7) & 7;
+      chips.push(`<span class="chip">${cstr(x.sim_name_species(lk & 7))}${mz ? " con rasgos de " + cstr(x.sim_name_species(mz - 1)) : ""} · color ${cstr(x.sim_name_color(co))}</span>`); }
+    { const am = x.sim_ambient(); chips.push(`<span class="chip">fondo: ${cstr(x.sim_name_ambient(am))}${x.sim_ambient_vol() ? "" : " (apagado)"}</span>`); }
+    if (x.sim_aquarium()) chips.push(`<span class="chip on">modo pecera</span>`);
+    if (fauna.length) chips.push(`<span class="chip">ve: ${fauna.join(", ")}</span>`);
+    if (x.sim_plants()) chips.push(`<span class="chip">jardín: ${x.sim_plants()} plantas</span>`);
+    if (x.sim_neighbor_here()) chips.push(`<span class="chip on">de visita: ${cstr(x.sim_neighbor_name())}</span>`);
+  }
+  chips.push(`<span class="chip">${ESTACIONES[cstr(x.sim_name_season(x.sim_season_now()))]} · ${CLIMAS[cstr(x.sim_name_weather(x.sim_weather_now()))]}</span>`);
+  const w = DESEO[cstr(x.sim_name_want(x.sim_want()))];
+  if (w && w !== "nada") chips.push(`<span class="chip on">quiere: ${w}</span>`);
+  if (fl & 2) chips.push(`<span class="chip bad">enferma</span>`);
+  if (fl & 4) chips.push(`<span class="chip">luz apagada</span>`);
+  if (fl & 8) chips.push(`<span class="chip on">tiene visita</span>`);
+  chips.push(`<span class="chip on">confianza ${Math.round(x.sim_vinculo())} · ${cstr(x.sim_name_bond(x.sim_bond_level()))}</span>`);
+  if (x.sim_skill(0) > 0 || x.sim_skill(1) > 0) chips.push(`<span class="chip">nadar ${Math.round(x.sim_skill(0))}% · trepar ${Math.round(x.sim_skill(1))}%</span>`);
+  if (x.sim_stickers()) chips.push(`<span class="chip">estampitas ×${x.sim_stickers()}</span>`);
+  chips.push(`<span class="chip">modo ${["adulto", "niño", "infante"][x.sim_mode()]}</span>`);
+  chips.push(`<span class="chip">fruta ×${x.sim_item(0)} · miel ×${x.sim_item(1)} · hierba ×${x.sim_item(2)} · semillas ×${x.sim_item(3)} · piedras ×${x.sim_item(4)}</span>`);
+  if (x.sim_stage() === 3) chips.push(`<span class="chip">forma ${["normal", "radiante", "gruñona"][x.sim_form()]}</span>`);
+  document.getElementById("chips").innerHTML = chips.join("");
+  const t = Math.floor(x.sim_now()) + ZONA, d = new Date(t * 1000);
+  const dias = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+  document.getElementById("reloj").innerHTML = `${horaVirtual()}<small>${dias[d.getUTCDay()]} ${d.getUTCDate()}/${d.getUTCMonth() + 1} · hora del orbe (Chile)</small>`;
+}
+
+/* ---------- sonido ambiente: el mismo bucle del reloj, repetido y con fundido ---------- */
+let ambActual = -1, ambFuente = null, ambGanancia = null, ambVol = -1;
+function ambiente() {
+  if (!audio || !sonidoOn || velocidad > 60) { if (ambFuente) { ambFuente.stop(); ambFuente = null; ambActual = -1; } return; }
+  const a = x.sim_ambient(), v = x.sim_ambient_vol();
+  if (a === ambActual && v === ambVol) return;
+  const nivel = v / 100 * 0.75; /* el ambiente tiene su propia barra */
+  if (a === ambActual && ambGanancia) { ambGanancia.gain.setTargetAtTime(nivel, audio.currentTime, 0.3); ambVol = v; return; }
+  if (ambFuente) { const f = ambFuente, g = ambGanancia; g.gain.setTargetAtTime(0, audio.currentTime, 0.25); setTimeout(() => f.stop(), 1500); ambFuente = null; }
+  ambActual = a; ambVol = v;
+  const n = a ? (propios["a" + a] ? propios["a" + a].length : x.sim_ambient_render(a)) : 0;
+  if (!n) return;
+  const pcm = propios["a" + a] || new Int16Array(x.memory.buffer, x.sim_ambient_pcm(), n);
+  const buf = audio.createBuffer(1, n, 16000), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = pcm[i] / 32768;
+  ambFuente = audio.createBufferSource(); ambFuente.buffer = buf; ambFuente.loop = true;
+  ambGanancia = audio.createGain(); ambGanancia.gain.value = 0; ambGanancia.gain.setTargetAtTime(nivel, audio.currentTime, 0.4);
+  ambFuente.connect(ambGanancia).connect(audio.destination); ambFuente.start();
+}
+
+/* ---------- fotos: el reloj las guarda en QOI; aquí se muestran y se bajan como PNG ---------- */
+function qoiACanvas(q) {
+  const dv = new DataView(q.buffer, q.byteOffset, q.byteLength), w = dv.getUint32(4), h = dv.getUint32(8);
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  const c2 = cv.getContext("2d"), im = c2.createImageData(w, h), px = im.data;
+  const idx = new Uint8Array(64 * 4); let r = 0, g = 0, b = 0, a = 255, k = 14, run = 0;
+  for (let p = 0; p < w * h * 4; p += 4) {
+    if (run > 0) run--;
+    else {
+      const b1 = q[k++];
+      if (b1 === 0xFE) { r = q[k++]; g = q[k++]; b = q[k++]; }
+      else if (b1 === 0xFF) { r = q[k++]; g = q[k++]; b = q[k++]; a = q[k++]; }
+      else if ((b1 & 0xC0) === 0x00) { const i = b1 * 4; r = idx[i]; g = idx[i + 1]; b = idx[i + 2]; a = idx[i + 3]; }
+      else if ((b1 & 0xC0) === 0x40) { r = (r + ((b1 >> 4) & 3) - 2) & 255; g = (g + ((b1 >> 2) & 3) - 2) & 255; b = (b + (b1 & 3) - 2) & 255; }
+      else if ((b1 & 0xC0) === 0x80) { const b2 = q[k++], vg = (b1 & 0x3F) - 32; r = (r + vg - 8 + ((b2 >> 4) & 15)) & 255; g = (g + vg) & 255; b = (b + vg - 8 + (b2 & 15)) & 255; }
+      else run = b1 & 0x3F;
+      const i = ((r * 3 + g * 5 + b * 7 + a * 11) % 64) * 4; idx[i] = r; idx[i + 1] = g; idx[i + 2] = b; idx[i + 3] = a;
+    }
+    px[p] = r; px[p + 1] = g; px[p + 2] = b; px[p + 3] = a;
+  }
+  c2.putImageData(im, 0, 0);
+  return cv;
+}
+let fotosVistas = "";
+async function bajarFoto(cv, id) {
+  const blob = await new Promise((ok) => cv.toBlob(ok, "image/png"));
+  const nombre = `${(cstr(x.sim_name()) || "mascota").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "") || "mascota"}-foto-${id}.png`;
+  const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null;
+  if (dl) { try { await dl.save({ filename: nombre, data: blob }); } catch (e) {} return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function pintarFotos() {
+  const n = x.sim_photo_count(); const ids = [];
+  for (let i = n - 1; i >= 0; i--) ids.push(x.sim_photo_id(i));
+  const clave = ids.join(","); if (clave === fotosVistas) return; fotosVistas = clave;
+  const caja = document.getElementById("fotos");
+  if (!n) { caja.innerHTML = '<span class="hint">Sácale fotos en Más → libro → cámara. Toca una para bajarla como PNG.</span>'; return; }
+  caja.innerHTML = "";
+  for (const id of ids) {
+    const len = x.sim_photo_len(id); if (len <= 0) continue;
+    const q = new Uint8Array(x.memory.buffer, x.sim_photo_ptr(id), len).slice();
+    const cv = qoiACanvas(q); cv.title = `Foto ${id} (${Math.round(len / 1024)} KB): tócala para bajarla`;
+    cv.addEventListener("click", () => bajarFoto(cv, id));
+    caja.appendChild(cv);
+  }
+}
+
+/* ---------- bucle ---------- */
+let ultimo = performance.now(), ultimoPanel = 0, ultimoGuardado = 0, ultimoRasgos = 0;
+function cuadro(ahora) {
+  const dt = Math.min(100, ahora - ultimo); ultimo = ahora;
+  const encendida = x.sim_frame(Math.max(1, Math.round(dt)));
+  document.getElementById("glass").classList.toggle("off", !encendida);
+  document.getElementById("offhint").hidden = !!encendida;
+  if (encendida) {
+    const fb = new Uint32Array(x.memory.buffer, x.sim_fb(), 466 * 466), px = img.data;
+    for (let i = 0, j = 0; i < fb.length; i++, j += 4) { const c = fb[i]; px[j] = c >> 16 & 255; px[j + 1] = c >> 8 & 255; px[j + 2] = c & 255; px[j + 3] = 255; }
+    ctx.putImageData(img, 0, 0);
+  }
+  leerLog(); sonidos();
+  if (ahora - ultimoPanel > 250) {
+    pintarPanel(); ambiente(); pintarFotos(); ultimoPanel = ahora;
+    const br = x.sim_brightness ? x.sim_brightness() : 100; /* el brillo elegido, como se vería en la pantalla */
+    document.getElementById("pantalla").style.filter = br >= 100 ? "" : `brightness(${(0.25 + 0.75 * br / 100).toFixed(2)})`;
+  }
+  if (ahora - ultimoRasgos > 3000) { pintarRasgos(); ultimoRasgos = ahora; }
+  if (ahora - ultimoGuardado > 5000) { guardar(); ultimoGuardado = ahora; }
+  requestAnimationFrame(cuadro);
+}
+
+/* ---------- entrada ---------- */
+function conectar() {
+  const cv = document.getElementById("pantalla");
+  let apretado = false;
+  const pos = (e) => { const r = cv.getBoundingClientRect(); return [Math.round((e.clientX - r.left) / r.width * 466), Math.round((e.clientY - r.top) / r.height * 466)]; };
+  cv.addEventListener("pointerdown", (e) => { apretado = true; cv.setPointerCapture(e.pointerId); const [a, b] = pos(e); x.sim_touch(a, b, 1); });
+  cv.addEventListener("pointermove", (e) => { if (apretado) { const [a, b] = pos(e); x.sim_touch(a, b, 1); } });
+  const soltar = (e) => { if (!apretado) return; apretado = false; const [a, b] = pos(e); x.sim_touch(a, b, 0); };
+  cv.addEventListener("pointerup", soltar); cv.addEventListener("pointercancel", soltar);
+  document.getElementById("boot").addEventListener("click", () => x.sim_button());
+  document.getElementById("sacudir").addEventListener("click", () => { x.sim_button(); x.sim_action(7, 0); });
+  /* inclinar el reloj: botones mantenidos, flechas del teclado o el celular de verdad */
+  const incl = { x: 0, y: 0, teclas: { ArrowLeft: [-0.7, 0], ArrowRight: [0.7, 0], ArrowUp: [0, -0.7], ArrowDown: [0, 0.7] } };
+  const aplicarIncl = () => x.sim_tilt(incl.x, incl.y);
+  for (const [id, v] of [["incl-izq", -0.7], ["incl-der", 0.7]]) {
+    const b = document.getElementById(id);
+    const on = e => { e.preventDefault(); incl.x = v; aplicarIncl(); }, off = () => { incl.x = 0; aplicarIncl(); };
+    b.addEventListener("pointerdown", on); b.addEventListener("pointerup", off); b.addEventListener("pointerleave", off);
+  }
+  addEventListener("keydown", e => { const t = incl.teclas[e.key]; if (!t || e.target.tagName === "INPUT") return; e.preventDefault(); if (t[0]) incl.x = t[0]; if (t[1]) incl.y = t[1]; aplicarIncl(); });
+  addEventListener("keyup", e => { const t = incl.teclas[e.key]; if (!t) return; if (t[0]) incl.x = 0; if (t[1]) incl.y = 0; aplicarIncl(); });
+  addEventListener("deviceorientation", e => {
+    if (e.gamma == null || incl.teclas.usadas) return;
+    incl.x = Math.max(-1, Math.min(1, e.gamma / 45)); incl.y = Math.max(-1, Math.min(1, (e.beta - 35) / 45)); aplicarIncl();
+  });
+
+  document.querySelectorAll("#vel button").forEach((b) => b.addEventListener("click", () => {
+    velocidad = +b.dataset.v; x.sim_set_speed(velocidad);
+    document.querySelectorAll("#vel button").forEach((o) => o.setAttribute("aria-pressed", o === b));
+  }));
+  document.querySelectorAll("[data-salto]").forEach((b) => b.addEventListener("click", () => {
+    x.sim_set_now(x.sim_now() + +b.dataset.salto); linea(horaVirtual(), `saltaste ${b.textContent}`, "snd");
+  }));
+  const bs = document.getElementById("sonido");
+  bs.addEventListener("click", () => {
+    if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { bs.textContent = "Sin audio en este navegador"; return; } }
+    sonidoOn = !sonidoOn; audio.resume();
+    bs.textContent = sonidoOn ? "Silenciar" : "Activar sonido"; bs.setAttribute("aria-pressed", sonidoOn);
+    if (sonidoOn) reproducir(1);
+  });
+  const conf = document.getElementById("confirmar"), nueva = document.getElementById("nueva");
+  nueva.addEventListener("click", () => { conf.hidden = false; nueva.hidden = true; });
+  document.getElementById("no").addEventListener("click", () => { conf.hidden = true; nueva.hidden = false; });
+  document.getElementById("si").addEventListener("click", () => {
+    /* de cero de verdad: borra todo lo guardado en el navegador (mascota, amigas, mundo, objetos, fotos, paquete) y recarga */
+    borrando = true;
+    try { for (const k of Object.keys(localStorage)) if (k.startsWith("mascota")) localStorage.removeItem(k); } catch (e) {}
+    try { if (indexedDB.databases) indexedDB.databases().then(l => l.forEach(b => { if (/mascota/i.test(b.name || "")) indexedDB.deleteDatabase(b.name); })); } catch (e) {}
+    setTimeout(() => location.reload(), 150);
+  });
+  document.getElementById("limpiar").addEventListener("click", () => { consola.innerHTML = ""; });
+  document.querySelectorAll("#clima button").forEach((b) => b.addEventListener("click", () => {
+    x.sim_set_weather(+b.dataset.c); linea(horaVirtual(), "forzaste el clima: " + b.textContent + " (2 h)", "snd");
+  }));
+  document.querySelectorAll("#estacion button").forEach((b) => b.addEventListener("click", () => {
+    x.sim_set_season(+b.dataset.e);
+    document.querySelectorAll("#estacion button").forEach((o) => o.setAttribute("aria-pressed", o === b));
+  }));
+  document.getElementById("nacer").addEventListener("click", () => x.sim_hatch());
+  document.getElementById("al-dormir").addEventListener("click", () => x.sim_alarm_soon(0));
+  document.getElementById("bolsillo").addEventListener("click", () => x.sim_button());
+  document.getElementById("caminar").addEventListener("click", () => x.sim_walk(1000));
+  document.getElementById("obj-uno").addEventListener("click", () => x.sim_object(-1));
+  document.getElementById("obj-todos").addEventListener("click", () => x.sim_object(-2));
+  document.getElementById("soplar").addEventListener("click", () => x.sim_blow());
+  document.getElementById("regalo").addEventListener("click", () => x.sim_gift(-1));
+  document.getElementById("niebla").addEventListener("click", () => x.sim_fog());
+  document.getElementById("al-despertar").addEventListener("click", () => x.sim_alarm_soon(1));
+  document.getElementById("viaje").addEventListener("click", () => x.sim_trip(-1));
+  document.getElementById("reserva").addEventListener("click", () => x.sim_reserve_preview());
+  document.getElementById("zonas").addEventListener("click", () => x.sim_open_all());
+  document.getElementById("vecino").addEventListener("click", () => x.sim_neighbor_now());
+  document.getElementById("fin1").addEventListener("click", () => { x.sim_close_panel(); x.sim_set_guardian(0); x.sim_guardian_ready(); setTimeout(() => x.sim_ev_guardiana(), 1200); });
+  document.getElementById("fin2").addEventListener("click", () => { x.sim_close_panel(); x.sim_final_pend(2); });
+  document.getElementById("rito-hist").addEventListener("click", () => { x.sim_close_panel(); x.sim_rito_historia(); });
+  const hEstado = () => { const e = document.getElementById("h-estado"); if (e) e.textContent = "día jugado " + x.sim_days_played() + " · acto " + x.sim_story_act(); };
+  document.getElementById("h-dia").addEventListener("click", () => { x.sim_days_add(1); hEstado(); });
+  document.getElementById("h-semana").addEventListener("click", () => { x.sim_days_add(7); hEstado(); });
+  document.getElementById("h-tilde").addEventListener("click", () => { x.sim_close_panel(); x.sim_tilde(); });
+  document.getElementById("h-brizna").addEventListener("click", () => { x.sim_close_panel(); x.sim_brizna(); });
+  document.getElementById("h-pagina").addEventListener("click", () => { x.sim_close_panel(); x.sim_tilo_page(); });
+  document.getElementById("h-casita").addEventListener("click", () => { x.sim_close_panel(); x.sim_secret_place(0); });
+  document.getElementById("h-mirador").addEventListener("click", () => { x.sim_close_panel(); x.sim_secret_place(1); });
+  document.getElementById("h-prisma").addEventListener("click", () => { x.sim_close_panel(); x.sim_prisma(); });
+  setInterval(hEstado, 3000);
+  document.getElementById("n-libre").addEventListener("click", () => { x.sim_close_panel(); x.sim_libre(0); });
+  document.getElementById("n-componer").addEventListener("click", () => { x.sim_close_panel(); x.sim_libre(1); });
+  document.getElementById("n-dragon").addEventListener("click", () => x.sim_dragon_despierto());
+  document.getElementById("n-propone").addEventListener("click", () => x.sim_proponer_cancion());
+  document.getElementById("n-escama").addEventListener("click", () => x.sim_escama());
+  document.getElementById("n-canciones").addEventListener("click", () => { x.sim_close_panel(); x.sim_test_panel(79); });
+  document.getElementById("n-hielo").addEventListener("click", () => { x.sim_close_panel(); x.sim_lago_helado(); });
+  document.getElementById("n-pescar").addEventListener("click", () => { x.sim_close_panel(); x.sim_lago_helado(); x.sim_pescar_bote(); });
+  document.getElementById("n-ramitas").addEventListener("click", () => x.sim_materiales());
+  document.getElementById("n-anonuevo").addEventListener("click", () => { x.sim_close_panel(); x.sim_ano_nuevo(); });
+  document.getElementById("v-animal").addEventListener("click", () => { x.sim_close_panel(); if (!x.sim_animal_cuenta()) linea(horaVirtual(), "los animales ya contaron todo lo que tocaba", "ev"); });
+  document.getElementById("v-pagina").addEventListener("click", () => { x.sim_close_panel(); x.sim_pagina_suelta(); });
+  document.getElementById("v-pochi").addEventListener("click", () => { x.sim_close_panel(); x.sim_pochi(0); });
+  document.getElementById("v-claro").addEventListener("click", () => { x.sim_close_panel(); x.sim_zona(1); });
+  document.getElementById("v-casita").addEventListener("click", () => { x.sim_close_panel(); x.sim_zona(2); });
+  document.getElementById("v-mirador").addEventListener("click", () => { x.sim_close_panel(); x.sim_zona(3); });
+  document.getElementById("v-rito").addEventListener("click", () => { x.sim_close_panel(); x.sim_rito2(); });
+  document.getElementById("v-verso").addEventListener("click", () => { x.sim_close_panel(); x.sim_verso(); });
+  document.getElementById("v-tilde").addEventListener("click", () => x.sim_tilde_hoy());
+  document.getElementById("w-exc-claro").addEventListener("click", () => { x.sim_close_panel(); x.sim_excursion(0); });
+  document.getElementById("w-exc-mirador").addEventListener("click", () => { x.sim_close_panel(); x.sim_excursion(1); });
+  document.getElementById("w-exc-vuelve").addEventListener("click", () => x.sim_excursion(-1));
+  document.getElementById("w-escondido").addEventListener("click", () => { x.sim_escondido(0); x.sim_escondido(1); x.sim_escondido(2); });
+  document.getElementById("w-nube").addEventListener("click", () => { x.sim_close_panel(); x.sim_nube(); });
+  for (let k = 1; k <= 5; k++) document.getElementById("w-jl-" + k).addEventListener("click", () => { x.sim_close_panel(); x.sim_zona(k <= 2 ? 1 : 3); x.sim_zona_juego(k); });
+  document.getElementById("w-claro").addEventListener("click", () => { x.sim_close_panel(); x.sim_zona(1); });
+  document.getElementById("w-casa").addEventListener("click", () => { x.sim_close_panel(); x.sim_zona(2); });
+  document.getElementById("w-mirador").addEventListener("click", () => { x.sim_close_panel(); x.sim_zona(3); });
+  document.getElementById("libro-ya").addEventListener("click", () => { x.sim_close_panel(); x.sim_libro(+document.getElementById("libro-sel").value); });
+  document.getElementById("cumple").addEventListener("click", () => x.sim_birthday_today());
+  document.querySelectorAll("#raros button").forEach(b => b.addEventListener("click", () => x.sim_rare(+b.dataset.r)));
+  document.getElementById("animal-ya").addEventListener("click", () => x.sim_animal(+document.getElementById("animal-sel").value));
+  document.getElementById("carta-fam").addEventListener("click", () => x.sim_letter_from(1));
+  document.getElementById("carta-via").addEventListener("click", () => x.sim_letter_from(2));
+  document.getElementById("cri-asoma").addEventListener("click", () => x.sim_creature(+document.getElementById("cri-sel").value));
+  document.getElementById("cri-invita").addEventListener("click", () => x.sim_creature_invite(+document.getElementById("cri-sel").value));
+  document.getElementById("pista").addEventListener("click", () => x.sim_hint());
+  document.getElementById("fiesta-ya").addEventListener("click", () => { x.sim_close_panel(); x.sim_fiesta(+document.getElementById("fiesta-sel").value); });
+  [0, 2, 3].forEach(f => document.getElementById("pochi" + f).addEventListener("click", () => x.sim_pochi(f)));
+  { const b = (id, f) => document.getElementById(id).addEventListener("click", f); /* (fw 104) */
+    b("n104a", () => { x.sim_close_panel(); x.sim_papelito(0); });
+    b("n104b", () => { x.sim_close_panel(); x.sim_papelito(1); });
+    b("n104c", () => { x.sim_close_panel(); x.sim_hielo(1); });
+    b("n104d", () => { x.sim_close_panel(); x.sim_hielo(2); });
+    b("n104e", () => { x.sim_close_panel(); x.sim_paseo(1200); });
+    b("n104f", () => { x.sim_close_panel(); x.sim_paseo(3500); });
+    b("n104g", () => { x.sim_terca(1); });
+    b("n104h", () => { x.sim_terca(0); });
+    b("n105a", e => { const t = e.currentTarget || document.getElementById("n105a"); const on = t.getAttribute("aria-pressed") !== "true";
+                      t.setAttribute("aria-pressed", on); t.textContent = on ? "Fondo por franjas: SÍ" : "Fondo por franjas"; x.sim_sin_lienzo(on ? 1 : 0); }); }
+  [1, 2, 3, 4, 5, 6, 7].forEach(r => document.getElementById("toq" + r).addEventListener("click", () => { x.sim_close_panel(); if (r === 5) x.sim_hediondo(1); x.sim_toque(r); }));
+  [10, 11, 12, 13, 14, 15, 16, 17, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 100, 101, 102, 103, 20, 21, 30, 31, 32, 33, 40, 41, 42].forEach(f => document.getElementById("pochi" + f).addEventListener("click", () => { x.sim_close_panel(); x.sim_pochi(f); }));
+  document.getElementById("pochi43").addEventListener("click", () => { x.sim_close_panel(); x.sim_dormir(1); x.sim_pochi(43); });
+  let _da = 0; document.getElementById("dragaus").addEventListener("click", e => { _da = (_da + 1) % 3; x.sim_dragon_absent(_da); e.target.textContent = ["Dragón: según la hora", "Dragón: ausente", "Dragón: presente"][_da]; });
+  document.getElementById("dragon").addEventListener("click", () => x.sim_dragon());
+  document.getElementById("carta").addEventListener("click", () => x.sim_letter_now());
+  document.getElementById("enferma").addEventListener("click", e => { const on = e.currentTarget.getAttribute("aria-pressed") !== "true"; e.currentTarget.setAttribute("aria-pressed", on); x.sim_sick(on ? 1 : 0); });
+  document.getElementById("tesoro").addEventListener("click", () => x.sim_treasure());
+  document.getElementById("respaldo").addEventListener("click", async () => {
+    const txt = cstr(x.sim_backup_export());
+    if (!txt) return;
+    const nombre = (cstr(x.sim_name()) || "mascota").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+    /* publicado en claude.ai: la descarga pasa por la confirmación del visor (solo acepta .txt) */
+    const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null;
+    if (dl) {
+      try { await dl.save({ filename: `${nombre || "mascota"}-respaldo.txt`, data: txt }); } catch (e) {}
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([txt], { type: "text/plain" }));
+    a.download = `${nombre || "mascota"}.mascota`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  const archivo = document.getElementById("archivo");
+  document.getElementById("traer").addEventListener("click", () => archivo.click());
+  archivo.addEventListener("change", async () => {
+    const f = archivo.files[0]; archivo.value = "";
+    if (!f) return;
+    const bytes = new TextEncoder().encode(await f.text());
+    if (bytes.length >= x.sim_backup_buf_size()) return;
+    const m = new Uint8Array(x.memory.buffer, x.sim_backup_buf(), x.sim_backup_buf_size());
+    m.set(bytes); m[bytes.length] = 0;
+    x.sim_backup_offer();
+  });
+  document.getElementById("sinbateria").addEventListener("click", () => x.sim_lose_clock());
+  document.getElementById("baul").addEventListener("click", () => x.sim_unlock_all());
+  /* el paquete del editor: íconos, criaturas, nombres, sonidos y celebraciones */
+  const CLAVE_PAQ = "mascota-sim-paquete";
+  function empaquetarFiestas(cels) {
+    const n = cels.length, out = new Uint8Array(10 + n * 80), enc = new TextEncoder();
+    out.set([70, 73, 69, 83], 0); out[4] = 1; out[5] = n;
+    cels.forEach((c, i) => { const o = 10 + i * 80; out.set([c.regla, c.mes, c.dia, c.semana, c.dias, c.deco], o);
+      out.set(enc.encode(c.nombre).subarray(0, 31), o + 8); out.set(enc.encode(c.saludo).subarray(0, 39), o + 40); });
+    let c = 0xFFFFFFFF; for (const b of out.subarray(10)) { c ^= b; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; }
+    new DataView(out.buffer).setUint32(6, (c ^ 0xFFFFFFFF) >>> 0, true);
+    return out;
+  }
+  function aplicarPaquete(p, avisar) {
+    const buf = () => new Uint8Array(x.memory.buffer, x.sim_pack_buf(), x.sim_pack_buf_size());
+    let ni = 0, nc = 0, nn = 0, ns = 0;
+    for (const [k, v] of Object.entries(p.iconos || {})) { const u = b64(v); buf().set(u); ni += x.sim_pack_icon(+k, u.length); }
+    for (const [k, v] of Object.entries(p.criaturas || {})) { const [e, et] = k.split("-").map(Number); const u = b64(v); buf().set(u); nc += x.sim_pack_body(e, et, u.length); }
+    for (const [k, v] of Object.entries(p.nombres || {})) { const u = new TextEncoder().encode(v).subarray(0, 15); const b = buf(); b.fill(0, 0, 16); b.set(u); x.sim_pack_species_name(+k); nn++; }
+    for (const k of Object.keys(propios)) delete propios[k];
+    for (const [k, v] of Object.entries(p.sonidos || {})) { const u = b64(v); propios[k] = new Int16Array(u.buffer, 0, u.length >> 1); ns++; }
+    if (p.celebraciones) { const u = empaquetarFiestas(p.celebraciones); buf().set(u); x.sim_pack_celebrations(u.length); }
+    ambActual = -1;
+    document.getElementById("paquete-quitar").hidden = false;
+    if (avisar) linea(horaVirtual(), `trajiste lo del editor: ${ni} íconos, ${nc} criaturas, ${nn} nombres y ${ns} sonidos`, "snd");
+  }
+  function quitarPaquete() {
+    for (let i = 0; i < 200; i++) x.sim_pack_icon(i, 0);
+    for (let e = 0; e < 8; e++) { for (let et = 1; et <= 3; et++) x.sim_pack_body(e, et, 0); new Uint8Array(x.memory.buffer, x.sim_pack_buf(), 16).fill(0); x.sim_pack_species_name(e); }
+    for (const k of Object.keys(propios)) delete propios[k];
+    x.sim_pack_celebrations(0); ambActual = -1;
+    try { localStorage.removeItem(CLAVE_PAQ); } catch (e) {}
+    document.getElementById("paquete-quitar").hidden = true;
+    linea(horaVirtual(), "volviste a los íconos, criaturas y sonidos de fábrica", "snd");
+  }
+  try { const g = localStorage.getItem(CLAVE_PAQ); if (g) aplicarPaquete(JSON.parse(g), false); } catch (e) {}
+  document.getElementById("paquete").addEventListener("click", () => document.getElementById("f-paquete").click());
+  document.getElementById("paquete-quitar").addEventListener("click", quitarPaquete);
+  document.getElementById("f-paquete").addEventListener("change", async (ev) => {
+    const f = ev.target.files[0]; ev.target.value = ""; if (!f) return;
+    try {
+      const p = JSON.parse(await f.text());
+      if (p.tipo !== "mascota-paquete") throw new Error("no es un paquete");
+      aplicarPaquete(p, true);
+      try { localStorage.setItem(CLAVE_PAQ, JSON.stringify(p)); } catch (e) { linea(horaVirtual(), "(el paquete es grande: no queda guardado para la próxima vez)", "snd"); }
+    } catch (e) { linea(horaVirtual(), "ese archivo no es un paquete del editor", "snd"); }
+  });
+  const carg = document.getElementById("cargador");
+  carg.addEventListener("click", () => {
+    const on = carg.getAttribute("aria-pressed") !== "true";
+    carg.setAttribute("aria-pressed", on); carg.textContent = on ? "Desenchufar" : "Enchufar el cargador";
+    x.sim_charging(on ? 1 : 0); x.sim_keep_awake(on ? 0 : 1);
+    linea(horaVirtual(), on ? "enchufaste el cargador: sin tocarlo un minuto, pasa a modo pecera" : "desenchufaste el cargador", "snd");
+  });
+  document.getElementById("confianza").addEventListener("click", () => x.sim_bond_add());
+  document.getElementById("semillas").addEventListener("click", () => x.sim_give_seeds(3));
+  document.querySelectorAll("#fauna button").forEach(b => b.addEventListener("click", () => x.sim_spawn(+b.dataset.f)));
+  document.getElementById("frase").addEventListener("click", () => x.sim_phrase_now());
+  const bot = document.getElementById("bot");
+  bot.addEventListener("change", () => x.sim_bot(bot.checked ? 1 : 0));
+  document.getElementById("botinv").addEventListener("click", () => { if (!bot.checked) { bot.checked = true; x.sim_bot(1); } setTimeout(() => x.sim_bot_invite(), 600); });
+  document.querySelectorAll("#ranura button").forEach((b) => {
+    b.setAttribute("aria-pressed", b.dataset.r === RANURA);
+    b.addEventListener("click", () => {
+      if (b.dataset.r === RANURA) return;
+      guardar();
+      try { sessionStorage.setItem("mascota-ranura", b.dataset.r); } catch (e) {}
+      location.reload();
+    });
+  });
+  /* balizas entre pestañas: lo mismo que el reloj emite por Bluetooth */
+  try {
+    const canal = new BroadcastChannel("mascota-amigos");
+    canal.onmessage = (ev) => {
+      const d = ev.data; if (!(d instanceof Uint8Array) || d.length !== x.sim_beacon_size()) return;
+      new Uint8Array(x.memory.buffer, x.sim_beacon_in_ptr(), d.length).set(d);
+      x.sim_beacon_in();
+    };
+    setInterval(() => {
+      const p = x.sim_beacon_out();
+      canal.postMessage(new Uint8Array(x.memory.buffer, p, x.sim_beacon_size()).slice());
+    }, 1000);
+  } catch (e) { /* sin BroadcastChannel: queda el amigo de prueba */ }
+  addEventListener("pagehide", guardar);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) guardar(); });
+}
+
+async function iniciar() {
+  const wasi = { fd_close: () => 0, fd_seek: () => 0, fd_write: () => 0 };
+  try {
+    const { instance } = await WebAssembly.instantiate(b64(WASM_B64), { wasi_snapshot_preview1: wasi });
+    x = instance.exports;
+  } catch (e) {
+    /* algunos navegadores o páginas bloquean WebAssembly: se usa el mismo motor traducido a JavaScript */
+    x = crearMotorJS(wasi);
+    motorJS = true;
+  }
+  if (x._initialize) x._initialize();
+  const g = cargarGuardada(), realAhora = Date.now() / 1000;
+  let vAhora = realAhora, cargada = 0;
+  if (g) {
+    try {
+      const bytes = b64(g.pet);
+      if (bytes.length <= x.sim_pet_size() && bytes.length >= 2000) { new Uint8Array(x.memory.buffer, x.sim_pet_ptr(), bytes.length).set(bytes); cargada = 1; }
+      if (g.otras) { /* las que descansan (de una versión anterior, cada una más corta: se actualizan solas) */
+        const o = b64(g.otras), n = x.sim_saved_size(), uno = n / 3, viejo = o.length / 3;
+        if (o.length === n) new Uint8Array(x.memory.buffer, x.sim_saved_ptr(), n).set(o);
+        else if (Number.isInteger(viejo) && viejo < uno && viejo >= 2000)
+          for (let i = 0; i < 3; i++) new Uint8Array(x.memory.buffer, x.sim_saved_ptr() + i * uno, uno).set(o.subarray(i * viejo, (i + 1) * viejo));
+      }
+      if (g.disp && x.sim_device_ptr) { const d = b64(g.disp); if (d.length <= x.sim_device_size() && d.length >= 4) { new Uint8Array(x.memory.buffer, x.sim_device_ptr(), x.sim_device_size()).fill(0); new Uint8Array(x.memory.buffer, x.sim_device_ptr(), d.length).set(d); x.sim_device_fix(); } }
+      vAhora = Math.max(g.v + (realAhora - g.r), realAhora);
+    } catch (e) { cargada = 0; }
+  }
+  x.sim_init(Math.floor(vAhora), (Math.random() * 4294967295) >>> 0, cargada);
+  x.sim_set_now(vAhora);
+  ctx = document.getElementById("pantalla").getContext("2d"); img = ctx.createImageData(466, 466);
+  pintarRasgos(); conectar();
+  const siempre = document.getElementById("siempre");
+  x.sim_keep_awake(siempre.checked ? 1 : 0);
+  siempre.addEventListener("change", () => x.sim_keep_awake(siempre.checked ? 1 : 0));
+  linea(horaVirtual(), motorJS ? "motor: JavaScript" : "motor: WebAssembly", "snd");
+  requestAnimationFrame(cuadro);
+}
+iniciar().catch((e) => {
+  const d = document.createElement("div"); d.className = "fallo";
+  d.textContent = "No se pudo iniciar el simulador: " + (e && e.message ? e.message : e);
+  document.getElementById("glass").append(d);
+  linea("--:--", "no se pudo iniciar el simulador: " + (e && e.message), "ask");
+});
+</script>

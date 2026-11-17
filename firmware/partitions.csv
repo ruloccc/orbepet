@@ -1,0 +1,13 @@
+# (el coredump va ANTES de los 16 MB: más allá el arranque no puede leerlo -error flash_mmap-. recursos y fotos siguen en el mismo lugar de siempre, así no se pierde nada.)
+# Flash de 32 MB (ficha de la 1.75C): dos particiones de aplicación para actualizar por Wi-Fi (OTA)
+# 8 MB cada una (el programa con sus dibujos pesa unos 6 MB), 6 MB para recursos (íconos y sonidos del editor)
+# y 6 MB para las fotos. NVS de 64 KB: la partida (dos copias) y las celebraciones. Sobran ~4 MB para crecer.
+# Name,   Type, SubType, Offset,  Size
+nvs,      data, nvs,     0x9000,  0x10000,
+otadata,  data, ota,     0x19000, 0x2000,
+phy_init, data, phy,     0x1b000, 0x1000,
+ota_0,    app,  ota_0,   0x20000, 8M,
+ota_1,    app,  ota_1,   0x820000, 0x7A0000,
+coredump, data, coredump, 0xFC0000, 0x40000,
+recursos, data, spiffs,  0x1020000, 6M,
+fotos,    data, spiffs,  0x1620000, 6M,

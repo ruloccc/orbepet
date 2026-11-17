@@ -1,0 +1,2 @@
+Pestaña "Respaldo" del probador: elige la carpeta donde guardar (fuera de C:\mascota), pulsa Respaldar mascota.
+Funciona con la placa en modo normal o en boot. Instalar firmware solo graba la app: no toca la partida.

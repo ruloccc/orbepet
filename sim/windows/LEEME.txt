@@ -1,0 +1,13 @@
+MASCOTA VIRTUAL - SIMULADOR PARA WINDOWS
+
+Instalar como app:
+  1. Descomprime esta carpeta.
+  2. Doble clic en Instalar.cmd.
+     Si Windows muestra "Windows protegio su PC", elige "Mas informacion" y "Ejecutar de todas formas".
+  3. Se abre el simulador y queda el icono "Mascota virtual" en el escritorio y en el menu Inicio.
+
+Sin instalar:
+  Doble clic en simulador.html (se abre en tu navegador).
+
+Tu mascota se guarda en el navegador y sigue viviendo aunque cierres la ventana.
+Para quitarlo: Desinstalar.cmd
