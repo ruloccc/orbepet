@@ -2142,6 +2142,7 @@ void app_main(void)
             case UI_ACCION_VIAJE_NO: pet_trip_not_yet(&s_pet, t); break;
             case UI_ACCION_DESPEDIDA_NAT: s_pet.despedida_natural = (uint8_t)(m.arg != 0); break;
             case UI_ACCION_ACTUALIZAR: /* (1.0.09) guarda todo y reinicia en el modo actualizar por Wi-Fi */
+                vTaskDelay(pdMS_TO_TICKS(500)); /* (1.0.12) que alcance a dibujarse la pantalla con las instrucciones: queda a la vista */
                 pet_seal(&s_pet);
                 hal_storage_save(&s_pet);
                 guardar_dispositivo();

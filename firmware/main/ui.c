@@ -3058,14 +3058,23 @@ static void panel_mas_ajustes(void)
 }
 
 /* --- (1.0.09) la versión: número, nombre y fecha; desde aquí se pide actualizar por Wi-Fi --- */
+static char s_red_ota[24] = "ORBEPET";
+void ui_set_red_ota(const char *red) { if (red) snprintf(s_red_ota, sizeof s_red_ota, "%s", red); }
 static void version_cb(lv_event_t *e)
 {
     const int q = (int)(intptr_t)lv_event_get_user_data(e);
-    if (q == 1) { cerrar_panel(); ui_splash("ACTUALIZAR", "REINICIANDO EN MODO WI-FI...", false, 8000); accion(UI_ACCION_ACTUALIZAR, 0); }
+    if (q == 1) {
+        /* (1.0.12) estas instrucciones son lo ÚLTIMO que dibuja el juego: la pantalla las sigue mostrando durante el modo
+         * actualizar aunque ese modo no alcance a prender la pantalla (le falta memoria): así se sabe qué hacer.
+         * (En la 1.0.11 quedaba «REINICIANDO EN MODO WI-FI...» y parecía pegada.) */
+        char t[160];
+        snprintf(t, sizeof t, "\nEN EL CELULAR:\nWI-FI %s\nCLAVE ORBEPET1\nY ABRE 192.168.4.1\n(VUELVE SOLA EN 15 MIN)", s_red_ota);
+        cerrar_panel();
+        ui_splash("MODO ACTUALIZAR\n\n", t, false, 600000);
+        accion(UI_ACCION_ACTUALIZAR, 0);
+    }
     else panel_ajustes();
 }
-static char s_red_ota[24] = "ORBEPET";
-void ui_set_red_ota(const char *red) { if (red) snprintf(s_red_ota, sizeof s_red_ota, "%s", red); }
 static void panel_version(void)
 {
     abrir_tarjeta(PANEL_VERSION, 360, 360);

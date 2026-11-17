@@ -813,6 +813,10 @@ En el orbe:
   usaba `chance(prob_paso(1.2f, dt))`, pero `prob_paso` recorta la tasa a 1 por hora y con 1 la probabilidad es 100 %
   en cada paso. Ahora resiste igual (aguanta despierta un rato si la estaban tocando) pero lo dice **a lo más cada
   4 minutos**. Prueba nueva en test_core.
+- **ACTUALIZAR «se quedaba pegado»:** en el modo actualizar la pantalla no alcanza a prenderse (le falta memoria; el
+  modo sigue funcionando sin ella) y el panel AMOLED conserva la última imagen, que era «REINICIANDO EN MODO WI-FI...».
+  Ahora lo último que dibuja el juego antes de reiniciar es la pantalla **MODO ACTUALIZAR** con la red, la clave, la
+  dirección y «vuelve sola en 15 min»: queda a la vista todo el rato. (El juego espera medio segundo a que se dibuje.)
 - **Quedaba a medio camino entre dos mundos:** ese aviso la ponía en «duda» cada segundo y le cortaba el cruce. Ahora,
   mientras cruza a otro mundo, el aviso no la detiene.
 

@@ -42,6 +42,10 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 **1.0.12 (menos terca al dormir)** — con la luz apagada decía «¡UN RATITO MÁS!» y bostezaba cada segundo
 (prob_paso(1.2f) = 100 % por paso) y eso la dejaba a medio cruzar entre mundos. Ahora a lo más cada 4 min
 (estático `s_terca_aviso` en pet.c) y EV_NIEGA no la toca mientras cruza (ui_escena_especial() & 2).
+ACTUALIZAR «pegado» (1.0.11 en la placa): el modo actualizar corre SIN pantalla (no le alcanza la RAM interna para
+LVGL) y el AMOLED conserva la última imagen. Ahora el juego deja dibujada una pantalla «MODO ACTUALIZAR» con la red,
+la clave y la dirección antes de reiniciar. Pendiente: ver en el registro la línea «ACTUALIZACIÓN (modo Wi-Fi): ...»
+para saber cuánta RAM hay y si la descarga funciona.
 OJO: `prob_paso(x)` con x ≥ 1 da siempre 1; revisar otros usos con tasas > 1 si aparece algo parecido.
 
 **1.0.11 (arreglo del modo Wi-Fi)** — el usuario grabó la 1.0.09 y al entrar a ACTUALIZAR: pánico en
