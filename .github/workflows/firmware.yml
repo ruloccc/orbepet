@@ -114,7 +114,7 @@ jobs:
         run: |
           # una sola versión a la vez (sin historia): así el repositorio no crece. Claude la lee desde aquí si hace falta
           # publicar a mano (cuando no está el secreto ORBEPET_FIRMWARE_TOKEN).
-          mkdir comp && cp -r salida/* comp/ && cd comp
+          mkdir comp && cp -r salida/* comp/ && cp firmware/build/mascota.elf comp/ && cd comp   # (el .elf: para traducir los pánicos del registro; no se publica)
           git init -q -b compilados
           git config user.name "orbepet-ci"; git config user.email "ci@orbepet.invalid"
           git add -A && git commit -q -m "Compilado ${{ steps.ver.outputs.version }} (${GITHUB_SHA::7})"

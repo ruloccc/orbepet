@@ -1,0 +1,46 @@
+# Compila una versión vieja (el commit que diga .github/simbolos.txt) y guarda su mascota.elf en la rama
+# «elf-<commit corto>». Con ese archivo se traducen las direcciones de un PÁNICO del registro del orbe (FALLO_BT) a
+# archivo y línea de código (xtensa-esp32s3-elf-addr2line). Se dispara al cambiar .github/simbolos.txt.
+name: Simbolos de una version
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/simbolos.txt']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  elf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Hacer espacio en el disco
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost
+          sudo docker image prune --all --force > /dev/null || true
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ir al commit pedido
+        id: c
+        run: |
+          C=$(head -1 .github/simbolos.txt | tr -d '[:space:]')
+          git checkout "$C"
+          echo "corto=${C::7}" >> "$GITHUB_OUTPUT"
+      - name: Compilar con ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.6
+          target: esp32s3
+          path: firmware
+          command: idf.py build
+      - name: Guardar el elf en una rama
+        run: |
+          mkdir sal && cp firmware/build/mascota.elf sal/ && cp firmware/build/mascota.map sal/ 2>/dev/null || true
+          cd sal && git init -q && git checkout -q -b "elf-${{ steps.c.outputs.corto }}"
+          git config user.name "orbepet-ci"; git config user.email "ci@orbepet.invalid"
+          git add . && git commit -qm "elf de ${{ steps.c.outputs.corto }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "elf-${{ steps.c.outputs.corto }}"
