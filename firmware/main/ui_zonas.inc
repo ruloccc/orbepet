@@ -393,7 +393,7 @@ static bool mundo_en_pausa(void)
 {
     if (s_esponja_on || s_pecera) return false;
     if (zj_activo() && !s_zo) return true;
-    return s_cru_activo || s_picnic_on || s_juego == JG_FRUTAS || s_juego == JG_HONGOS || s_panel != PANEL_NINGUNO;
+    return s_cru_activo || s_via_activo /* (1.0.24) la despedida tapa todo */ || s_picnic_on || s_juego == JG_FRUTAS || s_juego == JG_HONGOS || s_panel != PANEL_NINGUNO;
 }
 static void zj_mundo_ver(bool si)
 {
