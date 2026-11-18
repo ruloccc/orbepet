@@ -1,4 +1,9 @@
-# PARTE — estado del trabajo (18-nov-2026, 17:20)
+# PARTE — estado del trabajo (18-nov-2026, 19:30)
+
+> **Sesión del 18-nov 19:10-19:45:** se revisaron los informes (prueba total 17:10, rendimiento 18:39 y 19:06,
+> registro 18:30) y se arregló el probador (solo herramientas, sin firmware nuevo): **3a hecho** (respaldo en
+> Documentos) y **3b-A hecho** (medir despierta). La sesión no tenía `git`: los archivos se subieron editándolos en
+> la web de GitHub. Falta que el usuario corra «RENDIMIENTO automático» y «Probar lo nuevo» con el probador nuevo.
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4, ESP-IDF 5.5). **Responder siempre en
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
@@ -202,13 +207,12 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
 
 ## 3. Qué falta (en orden)
 
-0. **Esperar el registro del usuario.** Va a instalar la 1.0.23 y correr en el programa del PC «Probar lo nuevo
-   (guiada)» (o la PRUEBA TOTAL, que la incluye como fase 29d) y mandar `informe.txt` + `registro_placa_*.txt`.
-   Revisar sobre todo: los 6 fondos (pj4 nuevo = 78145 bytes), los 6 juegos terminan y se cierran, tocar el faro y la
-   piedra en la isla, **soplar la niebla, el olor y el bote** (si falla: mirar en el registro «micrófono: abierto (RAM
-   DMA…)» y el evento «micrófono: esperó un soplido… lo más fuerte: N»; si N es bajo, bajar el umbral 34/24 en main.c
-   paso 5c; si «NO pudo abrirse», es la RAM DMA), y la tabla de velocidad con y sin «juntar áreas» (FUSION 0/1).
-1. **Rendimiento** (sección 3b): según lo que diga la tabla de velocidad del orbe.
+0. **Esperar los informes del probador nuevo** (RENDIMIENTO automático y Probar lo nuevo, ya midiendo despierta).
+   Revisar: la línea «RESPALDO: tus mascotas quedaron como antes…» al final del informe; si los 6 juegos, la niebla
+   y el bote siguen fallando con la pantalla encendida (si siguen, ahí sí es el firmware); y la tabla de velocidad
+   con kpx de verdad (FUSION 0/1).
+1. (hecho el 18-nov) Respaldo de las pruebas en Documentos (3a) y medir despierta (3b-A).
+2. **Rendimiento** (sección 3b, rehecha con los informes del 18-nov).
 2. **Pendiente del usuario «o la hormigas»** (sección 1): preguntarle dónde salió.
 3. **Editor de personajes** (conversación del 17-nov): el arte nuevo es de 48 px (96 los grandes) y el editor dibuja
    íconos de 24×24. Acordado: primero abrir el dibujo de fábrica en 48×48 para retocarlo (`art_icono_lado_de_bytes`),
@@ -216,11 +220,116 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
 4. Batería: noche sin cable con sueño profundo (nunca probado); %/h con pantalla apagada.
 5. Retoques que pida el usuario. Los pendientes viejos siguen en `claude/pendientes-v89.md`.
 
-## 3b. Rendimiento: lo medido y lo que se propone (18-nov)
+## 3a. Respaldo de las pruebas (pedido del 18-nov) — HECHO en el probador
 
-Lo que dice el registro del orbe (1.0.19): el juego normal va a **9-11 cuadros por segundo**; **dibujar** cuesta
-~95 ms por cuadro y el **motor 1 ms**: todo lo que valga la pena está en el dibujo. No sirve cambiar de lenguaje (ya
-es C, y LVGL también): serían meses, errores nuevos y nada más rápido.
+Cómo quedó (`herramientas/mascota_gui.py`, bloque «(1.0.24) respaldo de las pruebas», y `probar.documentos()`):
+todas las pruebas de `PRUEBAS_CON_RESPALDO` leen la partición **nvs** entera (todas las mascotas, perfiles y ajustes)
+con esptool a `Documentos\Respaldos mascota\Antes de las pruebas\antes_de_<prueba>_<fecha>\nvs.bin` (+ manifiesto
+y huella sha256), dejan `PENDIENTE_RESTAURAR.txt`, corren la prueba y en un `finally` graban ese nvs.bin (esptool
+comprueba lo grabado), reinician, ponen la hora y borran la marca; el informe termina con «RESPALDO: …». Si queda
+la marca (programa cerrado a mitad), al abrir el programa se restaura sola y avisa; una prueba nueva con la marca
+puesta usa ESE respaldo (no toma uno nuevo de la partida ensuciada). Se guardan los 10 más nuevos. Botón nuevo en
+Respaldo: «Restaurar el último respaldo de prueba». Si el respaldo falla, la prueba no empieza. Las fotos no se
+respaldan aquí (la fase 17 borra su propia foto de prueba). Probado con una placa simulada (5 casos).
+El RESPALDO/RESTAURAR de la placa sigue igual por dentro (las fases lo siguen usando); ya no importa que se gaste.
+
+Lo que se escribió como plan (para historia):
+
+Lo que pasa hoy: la PRUEBA TOTAL cambia la partida (aspecto y etapa en la fase 22, modo niño/infante en la 23,
+«abrir todo» en la 25, viajes en el tiempo en la 19, perfiles…) y **no hay ningún paso final que la devuelva**:
+el informe termina en «30. CIERRE» sin restaurar. Solo la fase 22 restaura lo suyo («aspectos: partida
+restaurada»). La prueba de RENDIMIENTO (18:39) no respalda nada. Y si la placa se cuelga o reinicia a mitad
+(pasó 6 veces el 17:10), lo que falta de la prueba ni siquiera corre.
+
+Lo que pidió el usuario: **respaldo al empezar, en Mis documentos, y restaurar desde ese mismo archivo al terminar.**
+Diseño (en `herramientas/mascota_gui.py` + un módulo común que usen `prueba_total.py` y `prueba_nuevo.py`, y la de
+rendimiento):
+1. Carpeta: la carpeta Documentos real del usuario. En Windows con `SHGetKnownFolderPath(FOLDERID_Documents)` por
+   ctypes (sirve aunque OneDrive la haya movido); si falla, `~/Documents`. Dentro: `OrbePet\Respaldos de pruebas\`.
+2. Al empezar CUALQUIER prueba: bajar el respaldo completo (todos los perfiles/mascotas, con el mismo formato que
+   el botón «Respaldo» del programa) a `antes_de_prueba_AAAA-MM-DD_HH-MM-SS.<ext>`. Releerlo y comprobarlo (tamaño,
+   CRC, cuántas mascotas y sus nombres). **Si el respaldo falla, la prueba no empieza.**
+3. Dejar un archivo `PENDIENTE_RESTAURAR.txt` con la ruta del respaldo. Se borra solo cuando la restauración se
+   comprobó.
+4. Al terminar, en un `finally` (también si se cancela, si hay un error o si la placa dejó de responder): esperar a
+   que la placa vuelva (hasta ~60 s, reconectando el puerto), subir el respaldo, reiniciar, y **comprobar** que
+   cada mascota volvió (nombre, especie, etapa, perfil activo). Anotar el resultado en el informe:
+   «RESPALDO: restauradas N mascotas desde …».
+5. Si el programa se cerró a mitad de una prueba, al abrirlo de nuevo ve `PENDIENTE_RESTAURAR.txt` y restaura solo
+   (el usuario casi no puede usar el PC: sin preguntas, solo avisar en grande que lo hizo).
+6. Guardar los 10 respaldos de prueba más nuevos; borrar los más viejos de esa carpeta (solo de esa carpeta).
+7. Botón en la pestaña Respaldo: «Restaurar el último respaldo de prueba».
+Comprobar en el código antes de escribir: cómo baja/sube hoy el respaldo el programa (orden por cable) y si incluye
+todos los perfiles; si no, ampliarlo. Ojo: la fase 27 reinicia la placa 5 veces y la 18 también: el respaldo NO se
+toma de nuevo después de esos reinicios.
+
+## 3b. Rendimiento: lo medido y lo que se propone (18-nov, rehecho con los informes de las 17:10, 18:39 y 19:06)
+
+Lo de antes (1.0.19): dibujar ~95 ms por cuadro. **Eso ya no pasa:** con la 1.0.23, el prado con la pantalla
+encendida y en calma dibuja **5 ms por cuadro y 15 kpx** («vivo» a los 785 s del registro). «Juntar áreas» (1.0.22)
+funcionó. Ahora lo que se nota son los **tirones** (cuadros de 0,3 a 4 s) y algunas escenas puntuales.
+No sirve cambiar de lenguaje (ya es C, y LVGL también).
+
+**A. Primero, medir bien** — HECHO en el probador: `probar.medir_despierta(p)` (pantalla 1, ACCION 5 0 = despertar,
+TOQUE) y mientras `p.despierta` cada orden manda antes un TOQUE si pasaron más de 5 s. Lo usan «RENDIMIENTO
+automático» entero y «Probar lo nuevo» entero (no la prueba total: ahí las fases de ahorro deben ver el ahorro).
+Lo que se vio:
+- La fase 29d corrió con la pantalla apagada (registro: «pantalla off» a los 642-663 s) y la mascota dormida todo el
+  rato (`dormida=1`). Por eso la tabla de velocidad dio 0-1 ms y 0 kpx: no se dibujó nada.
+- Con la mascota dormida y 12 s sin toques, el procesador baja a 80 MHz **aunque la pantalla esté encendida**
+  («energia: CPU 80 MHz (pantalla on, dormida 1, sin toques 12 s)»). En la prueba de rendimiento, desde el panel 22
+  todo da 1 ms y ~35 cuadros: ya estaba en ahorro. Las cifras de las dos mitades no se pueden comparar.
+- Arreglo en las pruebas: antes de cada medición, despertarla, encender la pantalla y fijar 240 MHz con una orden de
+  prueba (que el ahorro no actúe mientras se mide); al final, devolver el ahorro normal.
+
+**B. Los tirones (lo más importante para el usuario):**
+1. **Escrituras a flash dentro del ciclo.** «escritura lenta a flash: el registro tardó 854-2309 ms» pasa también
+   en uso normal (a los 13 s y 303 s de un arranque, sin pruebas). Cada una congela la pantalla. Además «escribir
+   4 KB tardó 1703 ms» y «memoria flash: peor vuelta 1943 ms». Propuesta: (a) el registro va a una cola en RAM y lo
+   escribe una tarea de baja prioridad cada ~60 s o al dormir; (b) revisar `CONFIG_SPI_FLASH_AUTO_SUSPEND` (el S3 lo
+   permite con algunos chips: deja seguir trabajando mientras la flash borra); (c) 1,7 s para 4 KB es mucho: recursos y fotos
+   son SPIFFS (partitions.csv); SPIFFS se pone muy lento al borrar cuando está lleno o fragmentado (mirar el espacio libre).
+2. **Mensajes de error que se repiten y van a la flash:** «TP: Sleep mode not supported!» salió más de 100 veces
+   (cada vez que se apaga la pantalla) y «i2s_channel_disable… not been enabled yet» en cada cierre del micrófono.
+   Callarlos: no pedirle «dormir» al táctil (no lo admite) y desactivar el canal i2s solo si estaba activo. Menos
+   escrituras y un registro más limpio.
+3. **Sonidos que se cargan de golpe:** sonido 60/61 con un cuadro de 677 ms, 28/29 de 560 ms, 122 de 478 ms, 98/99
+   de 373 ms. Probablemente se leen enteros de la flash al tocarlos. Cargarlos en la tarea de audio por trozos, o
+   dejar listos los largos que suenan seguido.
+4. **«1b editor USB» de 1,6 a 4,3 s** con pantalla encendida: las órdenes por cable hacen su trabajo dentro del
+   ciclo del juego. Solo afecta a las pruebas, pero explica varios «la placa NO contestó» (la prueba se cansa de
+   esperar). Además de mover el trabajo pesado fuera del ciclo, darle a la prueba más paciencia antes de dar FALLA.
+
+**C. Redibujos de más (posible error de «juntar áreas»):** el registro tiene cuadros de **1585 kpx** y **445 kpx**
+(a los 730 s y 743 s). La pantalla entera son 217 kpx: se dibujó la misma zona varias veces en un cuadro. Puede ser
+que `ui_inv_fusionar` deje áreas encimadas. Propuesta: si lo fusionado ya pasa de ~60 % de la pantalla, invalidar la
+pantalla una vez y listo; y no guardar un área que ya esté dentro de otra. Agregar a `redibujo.js` un aviso si la
+suma de kpx de un cuadro pasa de 217.
+
+**D. Memoria fragmentada → fondo por franjas (más lento):** con 2 MB de PSRAM libres el bloque mayor era de 608 KB,
+y el lienzo pide 876 KB: el fondo salió por franjas 3 veces en el registro. Al arrancar sí hay un bloque de 2432 KB.
+Propuesta: **reservar el lienzo una sola vez al arrancar y no soltarlo nunca.** Se acaba la fragmentación por ese
+lado y el camino lento queda solo de respaldo. También se soltaron 468 KB de íconos guardados por «memoria baja»
+(después hay que volver a cargarlos).
+
+**E. Escenas que siguen pesadas** (prueba de rendimiento de las 18:39, aún con 240 MHz): clima en el prado
+(viento 82 ms, nublado 70, lluvia 53, nieve 44, despejado 43 por cuadro), lago helado 47, ballena de nubes 36, y
+«llamar al animal» de 87 a 144 ms (no debería: el animal es de 36×36). Mirarlas en el simulador con kpx: si el
+cielo con nubes se redibuja entero, mover las nubes cada 2-3 cuadros y de a píxeles enteros.
+
+**F. Lo que se proponía antes,** ahora en segundo plano (el dibujo en calma ya cuesta poco): franjas de dibujo de
+30 filas, instrucciones vectoriales del S3 (`LV_DRAW_SW_ASM_CUSTOM`), sprites RGB565A8, adornos a menos cuadros.
+
+**G. Fallas que no son de velocidad (prueba total 17:10):** la placa dejó de responder en «aspecto especie 2 color 0»,
+«modo infante panel 3» y «acción 5», «historia narrador 2 n.º 2» y «con el olor del zorrillo encima»; en la de las
+19:06, «final regular» (después de eso la RAM sube a 48 KB y la PSRAM a 2,2 MB: parece un reinicio que el resumen
+no contó). El registro de eventos no muestra pánicos: pueden ser **esperas largas** (punto B4) y no cuelgues. Para
+saberlo, la prueba debe anotar el contador de arranques antes y después de cada paso que falla. Otros avisos del
+arranque: «hal: RTC no responde; se usa el reloj interno» (el reloj externo no contesta: la hora se puede perder sin
+batería) y «i2c.master: Please check pull-up». Los 5 juegos del claro del rey no se cierran con estrellas en la
+prueba y la nube no sube al mirador: revisar si es la prueba o el juego.
+
+Lo anterior (para historia):
 
 Hecho:
 - **1.0.22 — juntar áreas por redibujar** (`ui_inv_fusionar`, ui.c): LVGL guarda hasta 32 rectángulos por cuadro y al
@@ -267,6 +376,8 @@ Propuesto (en este orden; esperar la tabla de velocidad del orbe antes de decidi
 - **Pochi no va a la isla** (no sabe nadar) y **no llega con una visita** (espera que se vaya + 6 min).
 - **Durante una actividad el mundo se apaga** (juegos, bote, comer, paneles, diario): ni Pochi ni globos; el baño no.
 - **El micrófono viene apagado** y se abre solo mientras algo espera un soplido (niebla, olor, bote, velas, pesca).
+- **Toda prueba por cable respalda al empezar (en Documentos\Respaldos mascota\Antes de las pruebas) y restaura desde ese
+  mismo archivo al terminar, aunque falle o se cancele** (pedido del 18-nov).
 - No dañar lo que ya existe: tras cada cambio, test_core, paneles (18), regresión y, si toca el motor, soak.
 - Textos en MAYÚSCULAS vía `gtxt`; el Rey es **Peumo**; galletas de **piñón con miel de ulmo**.
 - Los enum ya guardados en partidas no se reordenan; campos nuevos al final, antes de `crc`, con conversión.
