@@ -117,6 +117,9 @@ void __wrap_lv_obj_move_to_index(lv_obj_t *obj, int32_t index)
 static void ocultar(lv_obj_t *o, bool si)
 {
     if (!o) return; /* (1.0.16) un objeto que todavía no se crea: antes era un pánico (po_fuera al crear una mascota nueva sin que Pochi hubiera venido) */
+    /* (1.0.24) si ya está como se pide, no se toca: mostrar algo que ya se ve hacía que LVGL lo redibujara entero,
+     * y ocultar() se llama en cada cuadro en muchas partes (la despedida, Pochi, los globos...) */
+    if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN) == si) return;
     if (si) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
 }
@@ -2908,6 +2911,7 @@ static void panel_respaldo(void);
 static void panel_modo(void);
 static void panel_modo_inicio(void);
 static void viaje_empezar(const pet_t *m);
+static uint32_t iconos_soltar(void); /* (más abajo) */
 static int elegir_vehiculo(void); /* el viaje sale en este vehículo (se lo cuenta al motor: desde ahí te escribe) */
 static const pet_device_t *s_disp_aj;  /* volumen, brillo y cuándo se apaga (de main) */
 static pet_device_t s_disp_vista;
@@ -11540,8 +11544,28 @@ static void viaje_empezar(const pet_t *m)
     s_via_desde = s_ms;
     s_via_sonado = 0;
     s_via_fv = s_via_fc = -1;
+#ifdef ESP_PLATFORM
+    /* (1.0.24) el paisaje (468×468, RGB565 = 428 KB) necesita un bloque seguido: sin él, la despedida quedaba pegada */
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < 470u * 1024u) {
+        lv_image_cache_drop(NULL);
+        const uint32_t b = iconos_soltar();
+        art_fondos_soltar_otros();
+        extern void hal_evento(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+        hal_evento("despedida: se hizo lugar para el paisaje (íconos %u KB; bloque mayor ahora %u KB)", (unsigned)(b / 1024),
+                   (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
+    }
+#endif
     art_viaje_fondo(&s_via_fondo_art, (art_viaje_t)s_via_tipo);
-    poner_src(s_via_fondo, &s_via_fondo_art.dsc);
+    if (s_via_fondo_art.px) poner_src(s_via_fondo, &s_via_fondo_art.dsc);
+    ocultar(s_via_fondo, !s_via_fondo_art.px); /* (1.0.24) si igual no cupo, queda el cielo liso de la caja */
+#ifdef ESP_PLATFORM
+    { /* (1.0.24) para el registro: la despedida quedaba pegada (informes del 18-nov); así se ve con cuánta memoria empezó */
+        extern void hal_evento(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+        hal_evento("despedida: empieza (viaje %d), paisaje %s; PSRAM %u KB (bloque mayor %u KB), RAM interna %u B", s_via_tipo,
+                   s_via_fondo_art.px ? "listo" : "NO CUPO", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
+                   (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024), (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    }
+#endif
     lv_obj_set_pos(s_via_fondo, -1, -1);
     for (int f = 0; f < 2; f++) {
         art_vehiculo(&s_via_veh_art[f], (art_viaje_t)s_via_tipo, f, 4);
@@ -11716,7 +11740,8 @@ static void animar_viaje(void)
         float px = (float)(40 + (i * 97) % 390), py = (float)(24 + (i * 53) % 170);
         if (!noche) { py = fmodf(py + 260.0f - (float)t * (0.012f + (float)(i % 4) * 0.004f), 260.0f) + 70.0f; px += sinf((float)t / 900.0f + (float)i) * 10.0f; }
         lv_obj_set_pos(s_via_est[i], (int)px, (int)py);
-        lv_obj_set_style_opa(s_via_est[i], (lv_opa_t)(110 + 140 * (0.5f + 0.5f * sinf((float)t / (260.0f + (float)i * 41.0f) + (float)i))), 0);
+        const int ob = 110 + (int)(140 * (0.5f + 0.5f * sinf((float)t / (260.0f + (float)i * 41.0f) + (float)i)));
+        lv_obj_set_style_opa(s_via_est[i], (lv_opa_t)((ob & ~15) | 8), 0); /* (1.0.24) en pasos de 16: así no cambia (ni se redibuja) en cada cuadro */
     }
     for (int i = 0; i < VIA_N_NUBE; i++) {
         const float sp = 0.012f + (float)i * 0.005f;
@@ -11738,6 +11763,7 @@ static void animar_viaje(void)
     /* el final: el cielo se apaga y queda un corazón con "hasta pronto" */
     const float oscuro = t < 13400 ? 0.0f : (t < 15200 ? (float)(t - 13400) / 1800.0f : 1.0f);
     lv_obj_set_style_opa(s_via_negro, (lv_opa_t)(oscuro * 235), 0);
+    ocultar(s_via_negro, oscuro <= 0.0f); /* (1.0.24) invisible: ni se dibuja */
     if (t > 14300) {
         const float k = suave((float)(t - 14300) / 1400.0f), lat = 1.0f + 0.07f * sinf((float)t / 220.0f);
         lv_image_set_scale(s_via_fin_cor, (uint32_t)(256.0f * lat));
