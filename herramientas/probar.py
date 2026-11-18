@@ -52,11 +52,32 @@ GUIA = None  # el programa con ventana pone aquí algo con guia_paso/guia_estado
 AVISAR = None  # función(titulo, texto) que pone el programa con ventana: muestra lo que debes hacer y espera a que aprietes Aceptar
 PREGUNTAR = None  # función(texto) -> bool que pone el programa con ventana; sin ella se pregunta en la consola
 
+def documentos():
+    """La carpeta Documentos de verdad (en Windows la pregunta al sistema: sirve aunque OneDrive la haya movido)."""
+    if os.name == "nt":
+        try:
+            import ctypes, uuid
+            from ctypes import wintypes
+            class GUID(ctypes.Structure):
+                _fields_ = [("d1", wintypes.DWORD), ("d2", wintypes.WORD), ("d3", wintypes.WORD), ("d4", ctypes.c_ubyte * 8)]
+            u = uuid.UUID("{FDD39AD0-238F-46AF-ADB4-6C85480369C7}")  # FOLDERID_Documents
+            g = GUID(u.fields[0], u.fields[1], u.fields[2], (ctypes.c_ubyte * 8)(*u.bytes[8:]))
+            ruta = ctypes.c_wchar_p()
+            if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(g), 0, None, ctypes.byref(ruta)) == 0:
+                d = ruta.value
+                ctypes.windll.ole32.CoTaskMemFree(ruta)
+                if d and os.path.isdir(d):
+                    return d
+        except Exception:
+            pass
+    for d in (os.path.join(os.path.expanduser("~"), "Documents"), os.path.join(os.path.expanduser("~"), "Documentos")):
+        if os.path.isdir(d):
+            return d
+    return os.path.expanduser("~")
+
 def carpeta_datos():
     """Carpeta que NO se borra al reinstalar: Documentos\\MascotaPruebas (progreso de la prueba, comparación con la anterior, informes y registros)."""
-    base = os.path.join(os.path.expanduser("~"), "Documents")
-    if not os.path.isdir(base):
-        base = os.path.expanduser("~")
+    base = documentos()
     ruta = os.path.join(base, "MascotaPruebas")
     try:
         os.makedirs(ruta, exist_ok=True)
@@ -80,6 +101,8 @@ class Placa:
         self.s.rts = False
         self.s.open()
         self.extra = []      # errores/avisos que salen por el camino
+        self.despierta = False   # (1.0.24) mientras mide: un «toque» cada 5 s para que no entre el ahorro (80 MHz, pantalla apagada)
+        self._ult_toque = 0.0
         self.ultimas = []    # las últimas líneas que dijo la placa (para ver por qué no contestó)
 
     def reabrir(self, seg=45):
@@ -145,6 +168,9 @@ class Placa:
             self.extra.append(l)
 
     def cmd(self, texto, espera=ESPERA, esperar_resp=True):
+        if self.despierta and not texto.startswith("TOQUE") and time.time() - self._ult_toque > 5:
+            self._ult_toque = time.time()
+            self.cmd("TOQUE", 0.05)
         self.ult_cmd = texto
         try:
             self.s.reset_input_buffer()
@@ -714,12 +740,26 @@ def descarga_resultado(p, sal):
     for l in sal[-14:]:
         print(l)
 
+def medir_despierta(p, si=True):
+    """(1.0.24) Para medir como se usa de verdad: pantalla encendida, ella despierta y el procesador rápido.
+    Antes las mediciones salían con la pantalla apagada (0 kpx) o a 80 MHz (dormida y 12 s sin toques), y no servían.
+    Mientras está activo, cada orden manda antes un «toque» si pasaron más de 5 s (el ahorro entra a los 12 s)."""
+    p.despierta = False
+    if si:
+        p.cmd("PANTALLA 1", 0.5)
+        p.cmd("ACCION 5 0", 1.0)   # despertar
+        p.cmd("TOQUE", 0.3)
+        p._ult_toque = time.time()
+        p.despierta = True
+
 def rendimiento(p, sal):
     """Todas las pruebas de velocidad y memoria, solas: cada zona × estación × hora, climas, niebla, casita, paneles y juegos.
     Al final hace un resumen con lo más lento, lo que más memoria gasta y si la placa se reinició."""
     res = []
     sal.append("== RENDIMIENTO ==")
     p.cmd("DESBLOQUEAR", 0.5)
+    medir_despierta(p)  # (1.0.24) todo se mide con la pantalla encendida y a 240 MHz
+    sal.append("(se mide con la pantalla encendida, ella despierta y sin ahorro de energía)")
     base = p.info()
     ram0 = base.get("ram", 0) if base else 0
     # 1) cada zona, en cada estación y a cada hora del día
@@ -766,6 +806,7 @@ def rendimiento(p, sal):
         _caso(p, sal, res, f"juego {NOM_JUEGO[j]}", p.info()); p.cmd("CERRAR", 1)
     # 6) sensores, micrófono, música, sonidos, historias, secretos, huevo, finales, Pochi y giro
     hardware(p, sal, res)
+    medir_despierta(p, False)
     # resumen
     sal.append(""); sal.append("== RESUMEN DE RENDIMIENTO ==")
     ok = [r for r in res if not r[4]]
