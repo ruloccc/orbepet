@@ -125,6 +125,7 @@ static void describir(const pet_event_t *e)
     case EV_CARTA_BOSQUE: { char n[8]; snprintf(n, sizeof n, "%d", e->a); log_linea(e->t, "papelito del bosque %s%s", n, e->b ? " (te lo trajo)" : ""); break; }
     case EV_PASEO_JUNTOS: { char n[8]; snprintf(n, sizeof n, "%d", e->a); log_linea(e->t, "paseo de verdad: %s00 pasos", n, 0); break; }
     case EV_HIELO: log_linea(e->t, "se derritio el trocito de hielo", 0, 0); break;
+    case EV_HEDIONDA: log_linea(e->t, e->b ? "se le quito el olor" : "quedo hedionda sola", 0, 0); break;
     case EV_REACCION:
         log_linea(e->t, "%s: %s", pet_action_name((action_t)e->a),
                   e->b > 0 ? "le gusto" : (e->b < 0 ? "no le gusto" : "indiferente"));
@@ -565,6 +566,8 @@ EXPORT(sim_frame) int sim_frame(uint32_t dt_ms)
         case UI_ACCION_COLOR: pet_set_color(&s_pet, arg); break;
         case UI_ACCION_ECLOSIONAR: pet_hatch(&s_pet, t); break;
         case UI_ACCION_HUEVO_EMPIEZA: pet_egg_start(&s_pet, t); break; /* (1.0.10) */
+        case UI_ACCION_AIREAR: { const int r = pet_air_out(&s_pet, t); log_linea(t, "le espantaste el olor (%s)", r == 1 ? "se le quitó" : (r == 2 ? "bajó" : "no estaba hedionda"), 0); break; } /* (1.0.18) */
+        case UI_ACCION_JUEGO_ISLA: { const int r = pet_island_game(&s_pet, arg & 15, (arg >> 4) & 127, t); log_linea(t, "terminó un juego de la isla (%s)", r == 2 ? "con concha nueva" : (r ? "contó" : "no contó"), 0); break; } /* (1.0.18) */
         case UI_ACCION_JUEGO_DOS: { const int r = pet_duo_game(&s_pet, arg & 15, (arg >> 4) & 3, t); log_linea(t, "terminó un juego de a dos (%s)", r ? "contó" : "no contó", 0); break; } /* (1.0.17) */
             case UI_ACCION_HABILIDAD: pet_ability_use(&s_pet, arg & 1, t); break;
         case UI_ACCION_BALLENA: log_linea(t, pet_whale_ride(&s_pet, arg, t) ? "paseo en la ballena: trajo polvo de estrellas" : "paseo en la ballena por el firmamento", 0, 0); break;
@@ -1095,6 +1098,9 @@ EXPORT(sim_zona_salir) void sim_zona_salir(void) { extern void ui_demo_zona_sali
 EXPORT(sim_zj_dbg) int sim_zj_dbg(int q) { extern int ui_zj_dbg(int); return ui_zj_dbg(q); }
 /* (1.0.17) los juegos de a dos */
 EXPORT(sim_zd_abrir) void sim_zd_abrir(int n) { extern void ui_zd_abrir(int); ui_zd_abrir(n); }
+EXPORT(sim_hedionda) void sim_hedionda(int pasos) { s_pet.hediondo = (uint8_t)pasos; s_pet.hediondo_min = 0; } /* (1.0.18) */
+EXPORT(sim_olor) int sim_olor(void) { return s_pet.hediondo; }
+EXPORT(sim_periodo) int sim_periodo(void) { extern int ui_periodo(void); return ui_periodo(); } /* (1.0.18) 0 día, 1 atardecer, 2 noche (art_periodo_t) */
 EXPORT(sim_zd_estado) int sim_zd_estado(void) { extern int ui_zd_estado(void); return ui_zd_estado(); }
 EXPORT(sim_dos_jugadas) int sim_dos_jugadas(void) { return s_pet.dos_jugadas * 1000 + s_pet.dos_ganadas; }
 /* (v40) las excursiones sola y lo escondido de los lugares secretos */

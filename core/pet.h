@@ -288,6 +288,7 @@ typedef enum {
     DIA_PASEO_JUNTOS, /* (fw 104) salieron a caminar de verdad: a = pasos / 100 (tope 255) */
     DIA_HIELO,        /* (fw 104) a = 1 el trocito de hielo se derritió (encontrarlo queda en DIA_TESORO) */
     DIA_JUEGO_DOS,    /* (1.0.17) jugó con una visita: a = PET_DOS_* (el juego), b = 0 perdió, 1 empate, 2 ganó */
+    DIA_JUEGO_ISLA,   /* (1.0.18) un juego de la isla: a = PET_ISLA_* (faro o buceo), b = puntos (hasta 127) */
     DIA_COUNT
 } diario_t;
 #define PET_DIARIO 32
@@ -787,6 +788,7 @@ typedef enum {
     EV_PASEO_JUNTOS,   /* (fw 104) salieron a caminar de verdad: a = pasos / 100 (tope 127) */
     EV_NIEGA,          /* (fw 104) terca: no quiso; a = action_t (ACT_DORMIR = no se quiere dormir todavía) */
     EV_HIELO,          /* (fw 104) a = 1 su trocito de hielo se derritió */
+    EV_HEDIONDA,       /* (1.0.18) quedó hedionda sola (no el zorrillo): a = por qué (0..5, ver ui); b = 0 empieza, 1 se le quitó soplándole o espantando el olor */
     EV_COUNT
 } event_type_t;
 
@@ -1548,7 +1550,10 @@ typedef enum {
 int pet_animal_touch(pet_t *p, int animal, int veces, uint32_t ahora); /* animal_t */
 int pet_fauna_touch(pet_t *p, int fauna, int veces, uint32_t ahora);   /* fauna_t */
 int pet_animal_patience(int animal); /* cuántos toques aguanta antes de la consecuencia (0: infinita) */
-bool pet_stinky(const pet_t *p);     /* la roció el zorrillo y todavía huele */
+bool pet_stinky(const pet_t *p);     /* la roció el zorrillo (o se puso hedionda sola) y todavía huele */
+/* (1.0.18) le soplaste o espantaste el olor: se le quita (el olor «suelto», no el del zorrillo, que es más fuerte y
+ * pide baño; ese solo baja a la mitad). Devuelve 1 si se le quitó, 2 si solo bajó, 0 si no estaba hedionda. */
+int pet_air_out(pet_t *p, uint32_t ahora);
 
 /* ---------- Criaturas mágicas (versión 23) ----------
  * Una en cada zona. A veces te escriben para invitarte a hacer algo juntos: si después de leer la carta van a
@@ -1788,6 +1793,12 @@ int pet_place_game_result(pet_t *p, int jg, int puntos, int estrellas, uint32_t 
  * Devuelve 1 si contó (0: huevo, dormida o juego que no existe). */
 enum { PET_DOS_PING = 0, PET_DOS_CUERDA, PET_DOS_MEMO, PET_DOS_ESCONDE, PET_DOS_COUNT };
 int pet_duo_game(pet_t *p, int juego, int resultado, uint32_t ahora);
+/* (1.0.18) los juegos de la isla: el FARO (guiar barquitos de noche hasta el muelle) y el BUCEO con Marea (perlas y
+ * conchas). puntos: barquitos a salvo o cosas encontradas. Divierte, cansa un poco; con buen puntaje encuentra una pieza
+ * de la colección de conchas (si le falta alguna). Queda en el diario (una vez por juego cada vez que se enciende el orbe).
+ * Devuelve 1 si contó, 2 si además encontró una concha nueva para su colección. */
+enum { PET_ISLA_FARO = 0, PET_ISLA_BUCEO, PET_ISLA_COUNT };
+int pet_island_game(pet_t *p, int juego, int puntos, uint32_t ahora);
 void pet_place_game_prize(int *ramitas, int *musgo, int *objeto);                      /* lo que ganó en la última ronda */
 int pet_place_game_seed(const pet_t *p, int jg, uint32_t ahora);                       /* cambia cada día (la piedra tibia) */
 

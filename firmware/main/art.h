@@ -592,7 +592,7 @@ const lv_image_dsc_t *art_pantalla(int id, int *x, int *y);
 void art_pantalla_liberar(int id);
 /* (1.0.17) los fondos de los juegos de a dos viven en la MEMORIA DE RECURSOS (/res/pjN.bin), no en el programa.
  * art_lector: quién lee esos archivos (main: hal_res_read). art_fondo_dos(n): el fondo n (0..3) o NULL si falta. */
-#define ART_PANT_DOS 16 /* las pantallas 16..19 son los fondos de los juegos de a dos */
+#define ART_PANT_DOS 16 /* las pantallas 16..19 son los fondos de los juegos de a dos; 20 y 21 los de la isla (pj4, pj5) */
 void art_lector(int (*leer)(const char *nombre, void *buf, int cap), int (*tam)(const char *nombre));
 const lv_image_dsc_t *art_fondo_dos(int n, int *x, int *y);
 bool art_fondo_dos_hay(int n);

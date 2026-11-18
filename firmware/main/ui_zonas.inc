@@ -13,7 +13,7 @@
  *  - Los juegos (ui_zjuegos.inc) se abren en su propia pantalla desde la casita o desde el mirador.
  * ==================================================================== */
 enum { ZO_NADA = 0, ZO_CLARO, ZO_CASITA, ZO_MIRADOR };
-enum { ZJ_NADA = 0, ZJ_HORNO, ZJ_CAMITA, ZJ_NUBE, ZJ_CORONA, ZJ_PIEDRA, ZJ_PING, ZJ_CUERDA, ZJ_MEMO, ZJ_ESCONDE }; /* (1.0.17: los de a dos, ui_dos.inc) */
+enum { ZJ_NADA = 0, ZJ_HORNO, ZJ_CAMITA, ZJ_NUBE, ZJ_CORONA, ZJ_PIEDRA, ZJ_PING, ZJ_CUERDA, ZJ_MEMO, ZJ_ESCONDE, ZJ_FARO, ZJ_BUCEO }; /* (1.0.17: los de a dos, ui_dos.inc; 1.0.18: los de la isla, ui_isla.inc) */
 static int s_zo, s_zo_pend = -1, s_zo_cosa = -1, s_zo_pose = -1;
 static uint32_t s_zo_t0, s_zo_txt_hasta, s_zo_quieta;
 static float s_zo_x, s_zo_y, s_zo_tx, s_zo_ty;
@@ -384,8 +384,17 @@ static void zona_bajo_panel(void) { if (s_zo && s_zo_capa) ocultar(s_zo_capa, tr
 /* (ui_zjuegos.inc) mientras se juega, lo de abajo (la casita o el mundo) se aparta para no gastar memoria ni cuadros */
 static void lw_refrescar(void);
 /* (1.0.17) un juego en pantalla aparte tapa todo el mundo (y el mundo está escondido): el cielo, los animales, las luces,
- * la lluvia, la niebla, el humo y la tierra no se animan; así el juego tiene todo el procesador */
-static bool mundo_en_pausa(void) { return zj_activo() && !s_zo && s_panel == PANEL_NINGUNO; }
+ * la lluvia, la niebla, el humo y la tierra no se animan; así el juego tiene todo el procesador.
+ * (1.0.18) lo mismo con todo lo que tapa el mundo: los juegos de pantalla completa (frutas, hongos, los de las zonas y la
+ * isla), el viaje en bote, el picnic, y detrás de los menús, el diario y los ajustes (el vidrio no se vuelve a pintar a
+ * cada rato). NO en el baño (pasa en el mundo), ni en la pecera (es el mundo), ni mientras come o juega a la pelota o a
+ * las escondidas en el mundo. Los globos (de ella y de Pochi) esperan y salen al volver. */
+static bool mundo_en_pausa(void)
+{
+    if (s_esponja_on || s_pecera) return false;
+    if (zj_activo() && !s_zo) return true;
+    return s_cru_activo || s_picnic_on || s_juego == JG_FRUTAS || s_juego == JG_HONGOS || s_panel != PANEL_NINGUNO;
+}
 static void zj_mundo_ver(bool si)
 {
     if (s_zo) {

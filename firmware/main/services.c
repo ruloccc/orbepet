@@ -33,6 +33,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/idf_additions.h" /* (1.0.18) xTaskCreateWithCaps: la tarea del micrófono puede tener su pila en la PSRAM */
 #include "esp_core_dump.h"
 #include "hal.h"
 #include "nvs.h"
@@ -849,13 +850,13 @@ static void tarea_mic(void *arg)
             const size_t dma_libre = heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
             const size_t dma_bloque = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
             if (dma_libre < 8192 || dma_bloque < 1024) {
-                static bool avisado;
-                if (!avisado) { avisado = true; hal_evento("micrófono: poca memoria DMA (libre %u B, bloque %u B): no se abre", (unsigned)dma_libre, (unsigned)dma_bloque); }
+                static int64_t avisado_us; /* (1.0.18) antes se avisaba una sola vez: ahora una vez por minuto, para ver en el registro si es esto */
+                if (!avisado_us || esp_timer_get_time() - avisado_us > 60000000) { avisado_us = esp_timer_get_time(); hal_evento("micrófono: poca memoria DMA (libre %u B, bloque %u B): no se abre", (unsigned)dma_libre, (unsigned)dma_bloque); }
                 s_mic_on = false; s_mic_nivel = -1; s_mic_falla = true;
                 continue;
             }
             esp_codec_dev_sample_info_t fs = {.sample_rate = BOARD_AUDIO_HZ, .channel = 2, .bits_per_sample = 16};
-            if (esp_codec_dev_open(s_micro, &fs) != ESP_CODEC_DEV_OK) { s_mic_on = false; s_mic_nivel = -1; continue; }
+            if (esp_codec_dev_open(s_micro, &fs) != ESP_CODEC_DEV_OK) { hal_evento("micrófono: no se pudo abrir"); s_mic_on = false; s_mic_nivel = -1; continue; }
             esp_codec_dev_set_in_gain(s_micro, 30.0f);
             s_mic_abierto = true;
             s_mic_falla = false;
@@ -871,16 +872,22 @@ static void tarea_mic(void *arg)
 
 void hal_mic_enable(bool si)
 {
-    if (si && !s_micro) {
-        static bool probado;
-        if (probado) return; /* no hay micrófono: no se insiste */
-        probado = true;
-        s_micro = bsp_audio_codec_microphone_init();
-        if (!s_micro) { ESP_LOGW(TAG, "sin micrófono"); return; }
-        if (xTaskCreate(tarea_mic, "micro", 4096, NULL, 3, &s_mic_tarea) != pdPASS) {
-            s_mic_tarea = NULL; /* sin memoria para la tarea: no hay micrófono */
-            ESP_LOGW(TAG, "sin memoria para el micrófono");
-            return;
+    if (si && (!s_micro || !s_mic_tarea)) {
+        /* (1.0.18) antes, si fallaba UNA vez (por ejemplo sin RAM interna justo en ese momento), ya no había micrófono hasta reiniciar:
+         * el bote no oía el soplido. Ahora se vuelve a intentar cada 20 s, y la tarea puede tener su pila en la PSRAM. */
+        static int64_t prox_us;
+        const int64_t ahora_us = esp_timer_get_time();
+        if (ahora_us < prox_us) return;
+        prox_us = ahora_us + 20000000;
+        if (!s_micro) s_micro = bsp_audio_codec_microphone_init();
+        if (!s_micro) { hal_evento("micrófono: no se pudo iniciar el códec (RAM interna %u B)", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL)); return; }
+        if (!s_mic_tarea && xTaskCreate(tarea_mic, "micro", 4096, NULL, 3, &s_mic_tarea) != pdPASS) {
+            s_mic_tarea = NULL;
+            if (xTaskCreateWithCaps(tarea_mic, "micro", 4096, NULL, 3, &s_mic_tarea, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+                s_mic_tarea = NULL;
+                hal_evento("micrófono: sin memoria para su tarea");
+                return;
+            }
         }
     }
     if (!s_micro || !s_mic_tarea || si == s_mic_on) return;

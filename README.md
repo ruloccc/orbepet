@@ -807,6 +807,29 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.18 — el faro y el buceo en la isla, el mundo descansa, hedionda
+
+- **Jugar en la isla**: primero salen los juegos de la zona (con estrellita y nombre dorado) y después los de siempre
+  (también en la cueva: CRISTALES va primero).
+  - **EL FARO** (al atardecer y de noche; de día el botón dice «DE NOCHE»): el mismo faro de la isla, con ella en el
+    balcón. Mueves su luz con el dedo; los barquitos que quedan dentro del haz navegan hacia donde apuntas. Hay que
+    llevarlos al muelle sin chocar con las rocas; los que quedan a oscuras se van con la corriente. 3 corazones, 75 s.
+  - **BUCEO CON MAREA**: la llevas con el dedo bajo el agua a buscar perlas, conchas y caracoles (la perla dorada vale 3).
+    Las medusas pican y quitan aire; las burbujas grandes dan aire; cuando se acaba, sube. Marea nada con ella y le
+    muestra perlas (si ya la conocen).
+  - Con buen puntaje (4 barquitos o 6 tesoritos) el mar le trae una concha que le falte para su colección. Queda en el
+    diario (`pet_island_game`, `DIA_JUEGO_ISLA`). Fondos nuevos con detalle en la memoria de recursos (`pj4.bin`,
+    `pj5.bin`; `herramientas/dibujar_juegos_isla.py`), que se bajan solos con BUSCAR ACTUALIZACIÓN.
+- **El mundo descansa durante las actividades**: con un juego de pantalla completa, el viaje en bote, el picnic, o con
+  un menú, el diario o los ajustes abiertos, el cielo, los animales, las luces, la lluvia, la niebla, el humo y la tierra
+  no se animan, y los globos (de ella y de Pochi) esperan hasta que vuelvas. No en el baño, la pecera ni mientras come.
+- **Pochi** no llega durante una actividad (comer, juegos, bote, menús, diario, ajustes): si le tocaba, llega al terminar.
+- **Hedionda**: un poco más de una vez al día (dos momentos fijos por día, más si anda sucia) queda hedionda sola
+  (se revolcó en algo, pisó algo, comió ajo...): vahos verdes y moscas. Se le quita con un baño, **soplándole** (tres
+  soplidos) o **tocando los vahos** para espantarlos (8). El olor del zorrillo es más fuerte: soplar solo lo baja.
+- **Micrófono** (el soplido del bote): si fallaba una vez al abrirse, no se volvía a intentar hasta reiniciar. Ahora
+  reintenta cada 20 s (la tarea puede ir en la PSRAM) y deja en el registro por qué no abre (poca memoria DMA, etc.).
+
 ## Versión 1.0.17 — juegos de a dos con las visitas
 
 - **Con una visita** (el amigo del barrio o un visitante), **JUGAR** muestra cuatro juegos para los dos en vez de los de

@@ -2151,6 +2151,8 @@ void app_main(void)
             case UI_ACCION_ECLOSIONAR: pet_hatch(&s_pet, t); break;
             case UI_ACCION_HUEVO_EMPIEZA: pet_egg_start(&s_pet, t); break; /* (1.0.10) */
             case UI_ACCION_JUEGO_DOS: pet_duo_game(&s_pet, m.arg & 15, (m.arg >> 4) & 3, t); break; /* (1.0.17) */
+            case UI_ACCION_AIREAR: pet_air_out(&s_pet, t); break; /* (1.0.18) */
+            case UI_ACCION_JUEGO_ISLA: pet_island_game(&s_pet, m.arg & 15, (m.arg >> 4) & 127, t); break; /* (1.0.18) */
             case UI_ACCION_HABILIDAD: pet_ability_use(&s_pet, m.arg & 1, t); break;
             case UI_ACCION_BALLENA: pet_whale_ride(&s_pet, m.arg, t); break;
             case UI_ACCION_EVOLUCION: if (m.arg) pet_evo_accept(&s_pet, t); else pet_evo_defer(&s_pet); break;

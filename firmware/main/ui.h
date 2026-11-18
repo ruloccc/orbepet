@@ -172,6 +172,8 @@ void ui_cine(int n); /* (pruebas) la escena de un secreto */
 #define UI_ACCION_PECERA_DUR 183   /* (v99) cuánto dura la pecera con batería: 0 = 10 min, 1 = 30 min, 2 = 1 h, 3 = no se apaga */
 #define UI_ACCION_EXCURSION 181    /* (v40) volvió de su excursión sola: arg 0 el claro, 1 el mirador (pet_excursion_back) */
 #define UI_ACCION_TOCAR_ANIMAL 184 /* (fw 103) tocaste a un animal del mundo: arg = animal | veces << 8 (pet_animal_touch); devuelve pet_toque_t en ui_toque_res() */
+#define UI_ACCION_AIREAR 190       /* (1.0.18) le soplaste o espantaste el olor (pet_air_out) */
+#define UI_ACCION_JUEGO_ISLA 189   /* (1.0.18) terminó un juego de la isla: arg = PET_ISLA_* | puntos << 4 (pet_island_game) */
 #define UI_ACCION_JUEGO_DOS 188    /* (1.0.17) terminó un juego de a dos con una visita: arg = PET_DOS_* | resultado << 4 (pet_duo_game) */
 #define UI_ACCION_HUEVO_EMPIEZA 187 /* (1.0.10) el primer huevo llegó al prado: empieza su cuenta de 5 minutos (pet_egg_start) */
 #define UI_ACCION_ACTUALIZAR 186   /* (1.0.09) Ajustes → Versión → Actualizar: guarda y reinicia en el modo actualizar por Wi-Fi (ota.c) */

@@ -106,6 +106,8 @@ static bool po_ocupada(void)
 {
     if (!s_pet) return true;
     if (s_esponja_on || s_picnic_on || s_pecera || s_fie_tipo >= 0 || s_cie_activo || s_rito_on || s_portal) return true;
+    /* (1.0.18) ni en un juego, ni en el bote, ni con un menú, el diario o los ajustes abiertos, ni mientras come */
+    if (s_panel != PANEL_NINGUNO || s_juego != JG_NADA || zj_activo() || s_cru_activo || s_via_activo || s_mascota.modo == M_COME) return true;
     switch (s_pet->actividad) {
     case ACTV_PESCAR: case ACTV_NADAR: case ACTV_TREPAR: case ACTV_CANTAR: case ACTV_BAILAR:
     case ACTV_CHARLAR: case ACTV_JUGUETE: case ACTV_PELOTA: case ACTV_JUNTOS: case ACTV_PROBAR:
@@ -123,7 +125,7 @@ static void po_di(const char *t, art_icono_t ico, uint32_t ms)
 {
     if (s_interior || po_en_transito()) return;
     if (!s_pg) po_globo_crear();
-    if ((s_globo && !lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN)) || po_globo_visible()) { /* alguien está hablando: espera su turno */
+    if (mundo_en_pausa() || (s_globo && !lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN)) || po_globo_visible()) { /* alguien está hablando: espera su turno */
         for (int i = 0; i < s_po_pend_n; i++) if (!strcmp(s_po_pend[i].t, t ? t : "")) return;
         if (s_po_pend_n >= 4) { for (int i = 1; i < 4; i++) s_po_pend[i - 1] = s_po_pend[i]; s_po_pend_n = 3; }
         s_po_pend[s_po_pend_n].ico = ico; s_po_pend[s_po_pend_n].ms = ms;
@@ -1503,7 +1505,7 @@ static void animar_pochi(void)
         } else if ((int32_t)(s_ms - s_po_resp_ms) > 6000) s_po_resp_t = NULL; /* ya no viene al caso */
     }
     po_seguir_globo();
-    if (s_po_pend_n > 0 && !po_globo_visible() && s_globo && lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) && s_gpend_n == 0 && !po_en_transito()) {
+    if (s_po_pend_n > 0 && !po_globo_visible() && s_globo && lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) && s_gpend_n == 0 && !po_en_transito() && !mundo_en_pausa()) {
         po_pend_t g = s_po_pend[0];
         for (int i = 1; i < s_po_pend_n; i++) s_po_pend[i - 1] = s_po_pend[i];
         s_po_pend_n--;

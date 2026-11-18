@@ -6509,7 +6509,7 @@ const lv_image_dsc_t *art_fondo(art_periodo_t periodo, uint32_t decor, art_estac
 
 
 /* ---- fondos de pantalla como foto: paleta + LZSS en la flash; se descomprimen al abrir la pantalla y se sueltan al cerrarla ---- */
-#define PANT_MAX 20 /* (v97) 8 → 16: las pantallas de los juegos de los lugares secretos; (1.0.17) 20: + los 4 de los juegos de a dos */
+#define PANT_MAX 22 /* (v97) 8 → 16: las pantallas de los juegos de los lugares secretos; (1.0.17) 20: + los 4 de los juegos de a dos; (1.0.18) 22: + el faro y el buceo */
 static EXT_RAM_BSS_ATTR struct { lv_image_dsc_t dsc; void *px; } s_pant[PANT_MAX];
 static uint32_t s_pant_clave[PANT_MAX];
 /* (v97) la interfaz dice qué pantalla está en uso (la del lugar secreto o del juego de ahora): esa no se suelta para hacer lugar */

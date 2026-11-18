@@ -18,7 +18,8 @@ static uint32_t s_zd_key[2];             /* (para no redibujarlas en cada cuadro
 static uint32_t s_zd_puesta[2];          /* y cuál está puesta en su imagen */
 static uint32_t s_zd_fin_t;              /* cuándo termina la animación del final de una partida (0: no) */
 static int s_zd_res = -1;                /* 0 perdió ella, 1 empate, 2 ganó */
-static bool zd_es(int jg) { return jg >= ZJ_PING && jg <= ZJ_ESCONDE; }
+static bool zd_es(int jg) { return jg >= ZJ_PING && jg <= ZJ_BUCEO; } /* (1.0.18: también los de la isla, que usan este marco) */
+static bool zi_es(int jg) { return jg == ZJ_FARO || jg == ZJ_BUCEO; } /* (1.0.18) los de la isla (ui_isla.inc) */
 static int zd_n(void) { return s_zj_jg - ZJ_PING; } /* 0..3 = PET_DOS_* */
 
 /* ---------- quién es la visita ---------- */
@@ -80,7 +81,7 @@ static void zd_poner(int quien, int k, int escala, bool espejo, float x, float y
 /* ---------- el marcador: carita de ella, "3 - 2", carita de la visita ---------- */
 static void zd_marcador(void)
 {
-    if (!s_zj_hud || s_zj_fase != 1 || s_zj_jg == ZJ_CUERDA) return; /* (en la cuerda, el marcador es la cinta) */
+    if (!s_zj_hud || s_zj_fase != 1 || s_zj_jg == ZJ_CUERDA || zi_es(s_zj_jg)) return; /* (en la cuerda, el marcador es la cinta) */
     const int clave = s_zj_pts * 100 + s_zd_b;
     if (clave == s_zd_vis) return;
     s_zd_vis = clave;
@@ -590,9 +591,12 @@ static void ze_animar(float dt)
     }
 }
 
+#include "ui_isla.inc" /* (1.0.18) los juegos de la isla: el faro y el buceo */
+
 /* ---------- el final ---------- */
 static void zd_terminar(void)
 {
+    if (zi_es(s_zj_jg)) { zi_terminar(); return; }
     if (s_zj_fase != 3) return;
     s_zj_fase = 2;
     s_zj_gano = true;
@@ -664,6 +668,7 @@ static const char *zd_nombre(int jg)
 }
 static void zd_portada(void)
 {
+    if (zi_es(s_zj_jg)) { zi_portada(); return; }
     zj_titulo(zd_nombre(s_zj_jg));
     lv_obj_t *c = caja(s_zj);
     lv_obj_set_size(c, 300, 200);
@@ -708,6 +713,16 @@ static void zd_fondo(void)
     case ZJ_MEMO:
         o = caja(s_zj); lv_obj_set_size(o, 334, 306); lv_obj_set_pos(o, 66, 86); lv_obj_set_style_bg_color(o, lv_color_hex(0xDCE8F8), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
         break;
+    case ZJ_FARO: /* (sin el fondo: el mar de noche, el faro y las rocas, sencillos) */
+        lv_obj_set_style_bg_color(s_zj, lv_color_hex(0x0E2546), 0);
+        o = caja(s_zj); lv_obj_set_size(o, 24, 160); lv_obj_set_pos(o, 84, 170); lv_obj_set_style_bg_color(o, lv_color_hex(0xCFC3AC), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+        for (int k = 0; k < 5; k++) { o = caja(s_zj); const int r = ZF_ROCA[k][2]; lv_obj_set_size(o, r * 2, r * 2); lv_obj_set_pos(o, ZF_ROCA[k][0] - r, ZF_ROCA[k][1] - r); lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0); lv_obj_set_style_bg_color(o, lv_color_hex(0x444A60), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0); }
+        o = caja(s_zj); lv_obj_set_size(o, 140, 14); lv_obj_set_pos(o, 330, 350); lv_obj_set_style_bg_color(o, lv_color_hex(0x6E4A2A), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+        break;
+    case ZJ_BUCEO:
+        lv_obj_set_style_bg_color(s_zj, lv_color_hex(0x1E6AA0), 0);
+        o = caja(s_zj); lv_obj_set_size(o, W, 100); lv_obj_set_pos(o, 0, 376); lv_obj_set_style_bg_color(o, lv_color_hex(0xD8C08A), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+        break;
     default: break;
     }
 }
@@ -719,7 +734,7 @@ static void zd_empezar(void)
     case ZJ_CUERDA: zc_empezar(); break;
     case ZJ_MEMO: zm_empezar(); break;
     case ZJ_ESCONDE: ze_empezar(); break;
-    default: break;
+    default: if (zi_es(s_zj_jg)) zi_empezar(); break;
     }
 }
 static void zd_toque(int x, int y)
@@ -743,7 +758,7 @@ static void zd_animar(float dt)
     case ZJ_CUERDA: zc_animar(dt); break;
     case ZJ_MEMO: zm_animar(dt); break;
     case ZJ_ESCONDE: ze_animar(dt); break;
-    default: break;
+    default: if (zi_es(s_zj_jg)) zi_animar(dt); break;
     }
     if (s_zj_fase == 1) zd_marcador();
     if (s_zj_fase == 1 && zj_tiempo() > 240000) { s_zd_res = s_zj_pts > s_zd_b ? 2 : (s_zj_pts == s_zd_b ? 1 : 0); s_zd_fin_t = s_zj_t; s_zj_fase = 3; } /* (por si nadie juega) */

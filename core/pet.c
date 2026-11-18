@@ -108,6 +108,7 @@ static bool es_noche_su(const pet_t *p, uint32_t t)
     int h = pet_pet_hour(p, t);
     return h >= 22 || h < 7;
 }
+static float dado_fijo(const pet_t *p, uint32_t k); /* (más abajo) */
 static int32_t dia_local(const pet_t *p, uint32_t t)
 {
     int64_t local = (int64_t)t + p->zona_horaria;
@@ -2982,7 +2983,24 @@ static void paso(pet_t *p, uint32_t t, float dt, bool vivo)
         const uint32_t pasos = mins / 10u;
         p->hediondo_min = (uint8_t)(mins % 10u);
         p->hediondo = pasos >= p->hediondo ? 0 : (uint8_t)(p->hediondo - pasos);
-        sucio += 2.0f;
+        if (p->hediondo > 6) sucio += 2.0f; /* (el del zorrillo: el olor «suelto» no la ensucia más) */
+    } else if (dt > 0 && dt < 600.0f && !dormida && p->etapa != STAGE_HUEVO && !pet_always_clean(p, t) && p->actividad != ACTV_SIESTA) {
+        /* (1.0.18) de vez en cuando queda hedionda sola: se revolcó en algo, pisó algo, comió algo con olor... Cada día hay dos
+         * momentos fijos (salen de su dado propio: no gastan el azar de la partida) y en cada uno pasa con 55 % (80 % si anda
+         * sucia): en promedio un poco más de una vez al día, mientras está despierta. Dura 1 hora (6 pasos de 10 min; el
+         * zorrillo deja 18) o hasta que la bañes, le soples o espantes el olor. Solo en vivo (no en un salto de horas). */
+        const int64_t l = (int64_t)t + p->zona_horaria;
+        const int64_t dia = l >= 0 ? l / 86400 : (l - 86399) / 86400;
+        const float prob = p->necesidad[NEED_HIGIENE] < 40 ? 0.80f : 0.55f;
+        for (int64_t d = dia - 1; d <= dia; d++)
+            for (uint32_t k = 0; k < 2; k++) {
+                const uint32_t clave = (uint32_t)d * 8u + k;
+                const int64_t m = d * 86400 - p->zona_horaria + (int64_t)(dado_fijo(p, 0x5E00000u + clave) * 86400.0f);
+                if ((int64_t)t - (int64_t)dt < m && m <= (int64_t)t && dado_fijo(p, 0x5F00000u + clave) < prob && !p->hediondo) {
+                    p->hediondo = 6; p->hediondo_min = 0;
+                    push_event(p, EV_HEDIONDA, (int)(dado_fijo(p, 0x6000000u + clave) * 6.0f) % 6, 0, t);
+                }
+            }
     }
     sumar(p, NEED_HIGIENE, -sucio * h * ritmo);
     if (p->digestion > 0) {
@@ -6471,6 +6489,35 @@ void pet_ice_test(pet_t *p, int que, uint32_t t)
         push_event(p, EV_HIELO, 1, 0, t);
     }
 }
+int pet_island_game(pet_t *p, int juego, int puntos, uint32_t t)
+{
+    static uint8_t anotado; /* (no se guarda: una vez por juego cada vez que se enciende el orbe) */
+    if (!p || p->etapa == STAGE_HUEVO || p->dormida || (unsigned)juego >= PET_ISLA_COUNT) return 0;
+    if (puntos < 0) puntos = 0;
+    if (puntos > 127) puntos = 127;
+    sumar(p, NEED_DIVERSION, 10.0f + (float)(puntos > 12 ? 12 : puntos));
+    sumar(p, NEED_ENERGIA, juego == PET_ISLA_BUCEO ? -6 : -3);
+    impulsar(p, EMO_ALEGRIA, 0.45f, CAUSA_JUGAMOS);
+    if (puntos >= (juego == PET_ISLA_FARO ? 6 : 10)) impulsar(p, EMO_ORGULLO, 0.5f, CAUSA_JUGAMOS);
+    p->ultima_interaccion = t;
+    if (!((anotado >> juego) & 1u)) { anotado |= (uint8_t)(1u << juego); anotar(p, DIA_JUEGO_ISLA, juego, puntos, t); }
+    if (puntos >= (juego == PET_ISLA_FARO ? 4 : 6)) { /* buen puntaje: una concha que le falte (el mar se la trae) */
+        int faltan[8], nf = 0;
+        for (int k = 0; k < TAM_COLECCION[COL_CONCHAS] && nf < 8; k++) if (!((p->coleccion[COL_CONCHAS] >> k) & 1u)) faltan[nf++] = k;
+        if (nf && guardar_pieza(p, COL_CONCHAS, faltan[rng_next(p) % (uint32_t)nf], t, true)) return 2;
+    }
+    return 1;
+}
+int pet_air_out(pet_t *p, uint32_t t)
+{
+    if (!p || !p->hediondo) return 0;
+    if (p->hediondo > 6) { p->hediondo = (uint8_t)(p->hediondo / 2); return 2; } /* el del zorrillo: baja, pero sigue (el baño sí lo quita) */
+    p->hediondo = p->hediondo_min = 0;
+    impulsar(p, EMO_ALEGRIA, 0.3f, CAUSA_CARICIAS);
+    p->ultima_interaccion = t;
+    push_event(p, EV_HEDIONDA, 0, 1, t);
+    return 1;
+}
 int pet_duo_game(pet_t *p, int juego, int resultado, uint32_t t)
 {
     if (!p || p->etapa == STAGE_HUEVO || p->dormida || (unsigned)juego >= PET_DOS_COUNT) return 0;
@@ -7912,6 +7959,15 @@ const char *pet_diary_text(const pet_t *p, const entrada_diario_t *e, char *buf,
                                         "Caminamos juntos un buen rato (%d00 pasos). Volví con las patitas cansadas y feliz", "Paseo de verdad: %d00 pasos. ¡Qué grande es el mundo de afuera!"};
         snprintf(buf, (size_t)n, VARIANTE(Z), a);
         break; }
+    case DIA_JUEGO_ISLA: /* (1.0.18) */
+        if (a == PET_ISLA_FARO) {
+            if (b <= 0) snprintf(buf, (size_t)n, "Encendimos el faro de la isla, pero los barquitos se perdieron en la niebla");
+            else snprintf(buf, (size_t)n, "Encendimos el faro de la isla y guiamos %d barquito%s hasta el muelle", b, b == 1 ? "" : "s");
+        } else {
+            if (b <= 0) snprintf(buf, (size_t)n, "Buceamos con Marea, pero esta vez no encontramos nada");
+            else snprintf(buf, (size_t)n, "Buceamos con Marea y encontramos %d tesorito%s del fondo del mar", b, b == 1 ? "" : "s");
+        }
+        break;
     case DIA_JUEGO_DOS: { /* (1.0.17) */
         static const char *const J[PET_DOS_COUNT] = {"ping pong", "tira y afloja", "memorice", "escondidas"};
         const char *j = (unsigned)a < PET_DOS_COUNT ? J[a] : "un juego";

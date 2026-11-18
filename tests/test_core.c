@@ -4823,6 +4823,52 @@ static void test_fw104(void)
         p.dormida = 1;
         CHECK(pet_duo_game(&p, PET_DOS_PING, 2, t + 900u) == 0, "(1.0.17) dormida no juega");
     }
+    /* --- (1.0.18) los juegos de la isla --- */
+    {
+        static pet_t p;
+        nueva(&p, 23, T0);
+        uint32_t t = T0 + 3u * 24u * H + 11u * H;
+        pet_update(&p, t);
+        p.dormida = 0;
+        p.coleccion[COL_CONCHAS] = 0;
+        p.necesidad[NEED_DIVERSION] = 30;
+        CHECK(pet_island_game(&p, PET_ISLA_FARO, 2, t) == 1, "(1.0.18) el faro con 2 barquitos cuenta (sin concha)");
+        CHECK(p.necesidad[NEED_DIVERSION] > 30, "(1.0.18) el faro la entretiene");
+        CHECK(pet_island_game(&p, PET_ISLA_BUCEO, 9, t + 60u) == 2 && p.coleccion[COL_CONCHAS], "(1.0.18) buen buceo: una concha nueva");
+        CHECK(pet_island_game(&p, PET_ISLA_COUNT, 9, t) == 0, "(1.0.18) un juego que no existe no cuenta");
+        char b2[200];
+        for (int j = 0; j < PET_ISLA_COUNT; j++)
+            for (int n = 0; n < 3; n++) {
+                const entrada_diario_t e = {t, DIA_JUEGO_ISLA, (int8_t)j, (int8_t)n, 0};
+                pet_diary_text(&p, &e, b2, sizeof b2);
+                CHECK(b2[0] && !strchr(b2, '{') && !strchr(b2, '%'), "(1.0.18) texto del diario de la isla: %s", b2);
+            }
+    }
+    /* --- (1.0.18) a veces queda hedionda sola; se le quita soplándole o espantando el olor --- */
+    {
+        static pet_t p;
+        nueva(&p, 24, T0);
+        uint32_t t = T0 + 2u * 24u * H;
+        pet_update(&p, t);
+        int veces = 0, dias = 0;
+        for (int d = 0; d < 20; d++) { /* 20 días latido a latido (cada 5 min), despierta de 8 a 22 */
+            for (int m = 0; m < 24 * 12; m++) {
+                t += 300u;
+                const int h = (int)(((t + (uint32_t)p.zona_horaria) % 86400u) / 3600u);
+                p.dormida = h < 8 || h >= 22;
+                p.necesidad[NEED_HIGIENE] = 80; p.necesidad[NEED_ENERGIA] = 80;
+                const int antes = p.hediondo;
+                pet_update(&p, t);
+                if (!antes && p.hediondo) { veces++; CHECK(pet_stinky(&p), "(1.0.18) hedionda se nota"); if (veces == 1) { CHECK(pet_air_out(&p, t) == 1 && !p.hediondo, "(1.0.18) soplarle le quita el olor"); } }
+            }
+            dias++;
+        }
+        CHECK(veces >= 6 && veces <= 30, "(1.0.18) queda hedionda sola de vez en cuando (%d veces en %d días)", veces, dias);
+        p.hediondo = 18;
+        CHECK(pet_air_out(&p, t) == 2 && p.hediondo == 9, "(1.0.18) el olor del zorrillo solo baja a la mitad");
+        p.hediondo = 0;
+        CHECK(pet_air_out(&p, t) == 0, "(1.0.18) sin olor no hay nada que espantar");
+    }
 }
 
 int main(void)

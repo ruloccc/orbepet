@@ -538,10 +538,14 @@ static int toques_animal(int clave)
 static void toque_mostrar(int res, float ax, float ay);
 void ui_demo_toque(int res);
 static void olor_actualizar(void);
+static bool olor_visible(void);
+static void olor_espantar(int n);
 static void animar_nochevieja(void);
 static int s_cum_fase; /* tu cumpleaños en su pantalla (ver cumple_empezar) */
 static void cumple_soplar(void);
 static void globo(int ico, const char *txt, uint32_t ms);
+static bool mundo_en_pausa(void); /* (1.0.18, ui_zonas.inc) un juego tapa todo: los globos del mundo esperan */
+static bool zj_activo(void); /* (ui_zjuegos.inc) */
 /* una frase al azar de varias (no repite la misma dos veces seguidas): para los avisos que salen todos los días */
 static const char *una_de(const char *const *v, int n)
 {
@@ -788,7 +792,7 @@ static void globo(int ico, const char *texto, uint32_t ms)
     texto = gtxt(texto);
     if (!s_po_bypass && texto && texto[0] && po_activo()) return; /* mientras Pochi habla o pasea, ella no suelta frases sueltas: solo le responde a él */
     static char cur[220];
-    const bool ocupado = po_globo_visible() || (s_globo && !lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) && (int32_t)(s_ms - s_globo_hasta) <= 0);
+    const bool ocupado = mundo_en_pausa() || po_globo_visible() || (s_globo && !lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) && (int32_t)(s_ms - s_globo_hasta) <= 0);
     if (ocupado) { /* ya se está diciendo algo (ella o Pochi): espera su turno, así no se pierde ningún mensaje */
         if (!((texto && texto[0]) || ico >= 0)) return;
         if (texto && !strcmp(texto, cur) && !po_globo_visible()) return; /* es lo mismo que está diciendo */
@@ -896,7 +900,7 @@ listo:
 static void seguir_globos(void)
 {
     criatura_t *c = &s_mascota;
-    if (lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) && s_gpend_n > 0 && !po_globo_visible()) { /* le toca a ella */
+    if (lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) && s_gpend_n > 0 && !po_globo_visible() && !mundo_en_pausa()) { /* le toca a ella */
         globo_pend_t g = s_gpend[0];
         for (int i = 1; i < s_gpend_n; i++) s_gpend[i - 1] = s_gpend[i];
         s_gpend_n--;
@@ -5843,6 +5847,7 @@ bool ui_wants_mic(void)
     if (pez_quiere_soplo()) return true; /* v89: picó y hay que soplar */
     if (s_mic_objeto >= 0) return true;
     if (s_panel != PANEL_NINGUNO || s_juego != JG_NADA || !s_pet) return false;
+    if (olor_visible()) return true; /* (1.0.18) anda hedionda: soplarle le quita el olor */
     return (pet_fog(s_pet, s_ultimo_t) && !s_interior) || pastel_visible();
 }
 
@@ -5855,6 +5860,7 @@ void ui_mic_blow(void)
     if (s_pez_on) { pez_soplo(); return; }
     if (s_mic_objeto >= 0) { if (s_om_fase == 1 && s_om_id == s_mic_objeto) om_listo(); else usar_objeto(s_mic_objeto); return; }
     if (s_panel != PANEL_NINGUNO || !s_pet) return;
+    if (olor_visible()) { olor_espantar(3); return; } /* (1.0.18) un soplido se lleva tres vahos */
     if (pet_fog(s_pet, s_ultimo_t) && !s_interior) { disipar_niebla(); return; }
     if (pastel_visible()) soplar_velas();
 }
@@ -8566,11 +8572,14 @@ static bool alarma_cancion(const pet_t *ap);
 static bool rep_activo(void);
 static void animar_pochi(void); /* ui_pochi.inc */
 static void chispa(int x, int y, uint32_t color, float vx, float vy); /* ui_magia.inc */
+static void zj_abrir(int jg); /* (ui_zjuegos.inc) */
+static art_periodo_t periodo_de(const pet_t *p, uint32_t utc);
 static void jugar_cb(lv_event_t *e)
 {
     int j = (int)(intptr_t)lv_event_get_user_data(e);
     if (j == 3) { panel_trucos(); return; }
     if (j == 9) { panel_crismenu(); return; } /* los cristales (en la cueva): el juego de memoria, tocar libre, las canciones (v38) */
+    if (j == 10 || j == 11) { cerrar_panel(); zj_abrir(j == 10 ? 10 : 11); return; } /* (1.0.18) la isla: el faro (ZJ_FARO) y el buceo (ZJ_BUCEO) */
     if (j == 4) j = JUEGO_HONGOS;
     cerrar_panel();
     s_juego_pedido = j;
@@ -8680,22 +8689,42 @@ static void panel_jugar(void)
     abrir_tarjeta(PANEL_JUGAR, 350, 350);
     if (dos_hay_visita()) { panel_jugar_dos(); return; }
     if (!s_nino) { lv_obj_t *t = texto(s_tarjeta, "¿A QUÉ JUGAMOS?", 0xFFE9A0, 2, 0); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 22); }
-    static const art_icono_t ICO[6] = {ICO_PELOTA, ICO_ESCONDIDAS, ICO_CANASTA, ICO_HONGO, ICO_PATITA, ICO_CRISTAL};
-    static const char *const TXT[6] = {"PELOTA", "ESCONDE", "FRUTAS", "HONGOS", "TRUCOS", "CRISTALES"};
-    static const int QUE[6] = {0, 1, 2, 4, 3, 9};
-    static const uint32_t COL[6][2] = {{0xFFB45C, 0xD8702A}, {0x6ADC8A, 0x2E9A52}, {0xFF7A7A, 0xC83C48}, {0xB48AF0, 0x6A4AB8}, {0x6AB8FF, 0x2E78C8}, {0xC8A8FF, 0x6A48C0}};
-    const int n = s_escena == ESC_CUEVA && !s_interior ? 6 : 5; /* en la cueva, el juego de los cristales */
-    const int arriba = n == 6 ? 3 : 2, D = s_nino ? 88 : 72;
-    for (int i = 0; i < n; i++) { /* arriba dos (o tres) y abajo tres */
+    /* (1.0.18) primero los juegos propios de la zona (los cristales en la cueva; el faro y el buceo en la isla) y después
+     * los de siempre */
+    typedef struct { art_icono_t ico; const char *txt; int que; uint32_t c0, c1; } jg_menu_t;
+    static const jg_menu_t SIEMPRE[5] = {{ICO_PELOTA, "PELOTA", 0, 0xFFB45C, 0xD8702A}, {ICO_ESCONDIDAS, "ESCONDE", 1, 0x6ADC8A, 0x2E9A52},
+                                         {ICO_CANASTA, "FRUTAS", 2, 0xFF7A7A, 0xC83C48}, {ICO_HONGO, "HONGOS", 4, 0xB48AF0, 0x6A4AB8},
+                                         {ICO_PATITA, "TRUCOS", 3, 0x6AB8FF, 0x2E78C8}};
+    jg_menu_t L[8];
+    int n = 0;
+    const bool afuera = !s_interior;
+    if (afuera && s_escena == ESC_CUEVA) L[n++] = (jg_menu_t){ICO_CRISTAL, "CRISTALES", 9, 0xC8A8FF, 0x6A48C0};
+    const bool faro_apagado = s_pet && periodo_de(s_pet, s_ultimo_t) == PERIODO_DIA; /* el faro se enciende al atardecer y de noche */
+    if (afuera && s_escena == ESC_ISLA) {
+        L[n++] = (jg_menu_t){ICO_FARO, faro_apagado ? "DE NOCHE" : "FARO", 10, 0xFFD87A, 0x2E4A8A};
+        L[n++] = (jg_menu_t){ICO_MAREA, "BUCEO", 11, 0x6AD8E0, 0x1E6AA0};
+    }
+    const int propios = n;
+    for (int i = 0; i < 5; i++) L[n++] = SIEMPRE[i];
+    /* filas: 5 → 2 + 3, 6 → 3 + 3, 7 → 3 + 4 */
+    const int arriba = n == 5 ? 2 : 3, D = s_nino ? (n > 6 ? 72 : 88) : (n > 6 ? 64 : 72);
+    for (int i = 0; i < n; i++) {
         const int fila = i < arriba ? 0 : 1, cant = fila == 0 ? arriba : n - arriba, pos = fila == 0 ? i : i - arriba;
-        lv_obj_t *b = boton(s_tarjeta, D, D, jugar_cb, QUE[i]);
-        ficha_magica(b, COL[i][0], COL[i][1], LV_RADIUS_CIRCLE);
+        const bool faro_dia = L[i].que == 10 && faro_apagado;
+        lv_obj_t *b = boton(s_tarjeta, D, D, jugar_cb, L[i].que);
+        ficha_magica(b, L[i].c0, L[i].c1, LV_RADIUS_CIRCLE);
         lv_obj_set_ext_click_area(b, 8);
-        const int x = (int)((pos - (cant - 1) / 2.0f) * (s_nino ? D + 6 : 98)), y = fila == 0 ? 66 : 184;
+        const int paso = cant == 4 ? (s_nino ? 78 : 88) : (s_nino ? D + 6 : (n >= 6 ? 106 : 98));
+        const int x = (int)((pos - (cant - 1) / 2.0f) * paso), y = fila == 0 ? 66 : 184;
         lv_obj_align(b, LV_ALIGN_TOP_MID, x, y + (s_nino ? 14 : 0));
-        lv_obj_t *ic = icono(b, ICO[i], 3);
+        lv_obj_t *ic = icono(b, L[i].ico, 3);
         lv_obj_center(ic);
-        if (!s_nino) { lv_obj_t *t = texto(s_tarjeta, TXT[i], 0xFFF3C8, 2, 0); lv_obj_align_to(t, b, LV_ALIGN_OUT_BOTTOM_MID, 0, 3); }
+        if (faro_dia) { lv_obj_set_style_opa(b, LV_OPA_50, 0); lv_obj_remove_flag(b, LV_OBJ_FLAG_CLICKABLE); }
+        if (i < propios) { /* los de la zona: una estrellita arriba */
+            lv_obj_t *st = icono(b, ICO_ESTRELLA, 1);
+            lv_obj_align(st, LV_ALIGN_TOP_RIGHT, -4, 4);
+        }
+        if (!s_nino) { lv_obj_t *t = texto(s_tarjeta, L[i].txt, i < propios ? 0xFFE27A : 0xFFF3C8, 2, 0); lv_obj_align_to(t, b, LV_ALIGN_OUT_BOTTOM_MID, 0, 3); }
     }
 }
 
@@ -9568,6 +9597,7 @@ static art_icono_t icono_diario(const entrada_diario_t *e)
     case DIA_EXCURSION: return e->b == 7 ? ICO_PAPELITO : (a ? ICO_CONDOR : ICO_CHUCAO);
     case DIA_PASEO_JUNTOS: return ICO_HUELLA; /* (fw 104) */
     case DIA_JUEGO_DOS: return ICO_PELOTA; /* (1.0.17) */
+    case DIA_JUEGO_ISLA: return e->a == 0 ? ICO_FARO : ICO_MAREA; /* (1.0.18) */
     case DIA_HIELO: return ICO_GOTA;         /* (fw 104) se derritió: queda una gotita */
     case DIA_FINAL: return ICO_ESTRELLA;
     case DIA_GUSTO: case DIA_GUSTO_SEM: return ICO_CORAZON;
@@ -14775,6 +14805,21 @@ void ui_show_event(const pet_t *p, const pet_event_t *e)
         }
         break;
     }
+    case EV_HEDIONDA: /* (1.0.18) quedó hedionda sola, o se le quitó soplándole / espantando el olor */
+        if (e->b == 0) {
+            static const char *const POR[6] = {"¡PUAJ! ME REVOLQUÉ EN ALGO... ¿A QUÉ HUELO?", "¡UPS! PISÉ ALGO QUE HUELE FEO",
+                                               "COMÍ ALGO CON MUCHO AJO... ¡HUELO A AJO!", "ME METÍ EN UN CHARCO PODRIDO. ¡QUÉ OLOR!",
+                                               "UNA MOSCA ME SIGUE... ¿SERÁ QUE ANDO HEDIOND{A}?", "¡UF! HUELO A PESCADO VIEJO"};
+            flotar(ICO_NARIZ, NULL, 0, hx + 18, hy - 6, 0);
+            globo(ICO_NARIZ, s_nino ? NULL : POR[e->a % 6], 3600);
+            if (!s_nino) globo(ICO_VIENTO, "SÓPLAME O ESPANTA LOS VAHOS CON EL DEDO (O UN BAÑO)", 3600);
+        } else {
+            for (int k = 0; k < 6; k++) chispa((int)s_mascota.x + (int)(azar() % 50) - 25, (int)s_mascota.y - 30 - (int)(azar() % 30), 0xFFF3C8, (float)((int)(azar() % 7) - 3) * 0.4f, -0.8f);
+            flotar(ICO_FLOR, NULL, 0, hx, hy - 20, 0);
+            globo(ICO_FLOR, s_nino ? NULL : "¡AHHH! ¡AHORA HUELO A FLORES!", 3000);
+            accion(UI_ACCION_SONAR, SND_LIMPIO);
+        }
+        break;
     case EV_HIELO: /* (fw 104) se derritió su trocito de hielo */
         if (e->a == 1) { flotar(ICO_GOTA, NULL, 0, hx + 20, hy, 0); globo(ICO_GOTA, s_nino ? NULL : "MI TROCITO DE HIELO SE DERRITIÓ... EL PRÓXIMO INVIERNO PESCO OTRO", 3600); }
         break;
@@ -15606,9 +15651,36 @@ void ui_toque_resultado(int r) { s_toq_res = r; s_toq_ms = s_ms; } /* lo llama m
 #define N_VAHO 5
 #define N_MOSCA 2
 static lv_obj_t *s_olor[N_VAHO], *s_mosca[N_MOSCA];
+/* (1.0.18) se le quita el olor soplándole o tocando los vahos (espantándolos con el dedo): cada uno que espantas se
+ * deshace en una nubecita; con 8 seguidos (en menos de 20 s) se le va el olor (pet_air_out) */
+static int s_olor_espantados;
+static uint32_t s_olor_ult, s_olor_fuera[8];
+static bool olor_visible(void)
+{
+    return s_pet && pet_stinky(s_pet) && !s_interior && s_mascota.visible && s_escena >= 0 && s_panel == PANEL_NINGUNO && !s_pecera && !mundo_en_pausa();
+}
+static void olor_espantar(int n)
+{
+    if (!olor_visible()) return;
+    if (s_ms - s_olor_ult > 20000u) s_olor_espantados = 0;
+    s_olor_ult = s_ms;
+    for (int k = 0; k < n; k++) {
+        const float a = (float)(azar() % 628) / 100.0f;
+        chispa((int)(s_mascota.x + cosf(a) * 24.0f), (int)(s_mascota.y - 40.0f + sinf(a) * 16.0f), 0xCBE86B, cosf(a) * 1.4f, sinf(a) * 1.2f - 0.4f);
+    }
+    s_olor_espantados += n;
+    accion(UI_ACCION_SONAR, SND_DESLIZA);
+    if (s_olor_espantados >= 8) { s_olor_espantados = 0; accion(UI_ACCION_AIREAR, 0); }
+}
+static void olor_toque_cb(lv_event_t *e)
+{
+    const int i = (int)(intptr_t)lv_event_get_user_data(e);
+    if (i >= 0 && i < 8) s_olor_fuera[i] = s_ms + 900u; /* ese vaho se esconde un ratito */
+    olor_espantar(1);
+}
 static void olor_actualizar(void)
 {
-    const bool hay = s_pet && pet_stinky(s_pet) && !s_interior && s_mascota.visible && s_escena >= 0 && s_panel == PANEL_NINGUNO && !s_pecera;
+    const bool hay = olor_visible();
     if (!s_olor[0]) {
         if (!hay) return;
         for (int i = 0; i < N_VAHO; i++) {
@@ -15617,7 +15689,10 @@ static void olor_actualizar(void)
             lv_obj_set_style_bg_color(s_olor[i], lv_color_hex(0xCBE86B), 0);
             lv_obj_set_style_border_width(s_olor[i], 2, 0);
             lv_obj_set_style_border_color(s_olor[i], lv_color_hex(0x46700F), 0);
-            lv_obj_remove_flag(s_olor[i], LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_remove_flag(s_olor[i], LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_add_flag(s_olor[i], LV_OBJ_FLAG_CLICKABLE); /* (1.0.18) se espantan tocándolos */
+            lv_obj_set_ext_click_area(s_olor[i], 10);
+            lv_obj_add_event_cb(s_olor[i], olor_toque_cb, LV_EVENT_PRESSED, (void *)(intptr_t)i);
         }
         for (int i = 0; i < N_MOSCA; i++) {
             s_mosca[i] = caja(s_mundo);
@@ -15640,7 +15715,7 @@ static void olor_actualizar(void)
         /* bien visible sobre el pasto: verde amarillento claro, no el verde del fondo */
         lv_obj_set_style_bg_opa(s_olor[i], (lv_opa_t)(v < 0.2f ? (int)(v * 5.0f * 205.0f) : (int)(205.0f * (1.0f - (v - 0.2f) / 0.8f))), 0);
         lv_obj_set_style_border_opa(s_olor[i], (lv_opa_t)(v < 0.5f ? 190 : (int)(190 * (1.0f - (v - 0.5f) * 2.0f))), 0);
-        ocultar(s_olor[i], false);
+        ocultar(s_olor[i], i < 8 && (int32_t)(s_ms - s_olor_fuera[i]) < 0);
         lv_obj_move_foreground(s_olor[i]);
     }
     for (int i = 0; i < N_MOSCA; i++) { /* las moscas que le dan vueltas */
@@ -16900,6 +16975,7 @@ static const char *const PRUEBA_NOMBRE[PRUEBA_PANELES] = {
     "verso-nombre", "verso-carta", "prisma", "tilde-chisme", "brizna", "pagina-tilo", "pagina-tilo-leer", "animales", "rito-pantalla", "rito-hoja", "nota-tilde",
     "cristales-menu", "canciones", "canciones-5", "libro-narradores", "verso-fin", "rito-oro", "version"};
 int ui_panel_actual(void) { return (int)s_panel; }
+int ui_periodo(void) { return s_pet ? (int)periodo_de(s_pet, s_ultimo_t) : -1; } /* (pruebas) */
 int ui_test_count(void) { return PRUEBA_PANELES; }
 int ui_juego_actual(void) { return (int)s_juego; }
 /* (pruebas) deja solo el fondo de una pantalla para sacarle una foto: 0 elegir huevo, 1 juego de la fruta, 2 picnic */

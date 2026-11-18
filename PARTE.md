@@ -1,7 +1,7 @@
 # PARTE — estado del trabajo (17-nov-2026, 16:30)
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.17** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
+Versión en curso: **1.0.18** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
 Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
@@ -38,6 +38,13 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 ---
 
 ## 2. Qué se hizo en las últimas versiones
+
+**1.0.18 (el faro y el buceo)** — ui_isla.inc (ZJ_FARO 10, ZJ_BUCEO 11, dentro del marco de ui_dos.inc), fondos
+pj4/pj5 (herramientas/dibujar_juegos_isla.py; el faro es el MISMO de la isla). Menú Jugar: primero los de la zona.
+`mundo_en_pausa()` ampliado (juegos de pantalla, bote, picnic, paneles; no baño/pecera/comer); po_ocupada bloquea a
+Pochi en actividades. Hedionda sola (EV_HEDIONDA, momentos fijos por día con dado_fijo, no gasta el azar), se quita
+con pet_air_out (soplar 3 o tocar 8 vahos). Micrófono reintenta (services.c). Pendiente: ver en el registro del
+usuario si sale «micrófono: poca memoria DMA» al viajar en bote.
 
 **1.0.17 (juegos de a dos)** — con visita, JUGAR muestra ping pong, tira y afloja, memorice y escondidas
 (`firmware/main/ui_dos.inc`, dentro del marco zj: ZJ_PING..ZJ_ESCONDE = 6..9). Motor: `pet_duo_game`,
