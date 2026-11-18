@@ -807,6 +807,24 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.24 — la despedida ya no se queda pegada y los sonidos no congelan la pantalla
+
+- **La despedida (el viaje del final) ya no se queda pegada:** su paisaje se armaba como una imagen de pantalla completa
+  con transparencia (856 KB) y justo antes del final casi nunca había un bloque así de memoria libre. Ahora es opaco
+  (RGB565, 428 KB, y se copia en vez de mezclarse píxel a píxel); si aun así falta lugar, primero suelta los íconos
+  guardados y los fondos de otras horas. Mientras dura, el mundo de atrás deja de animarse (no se ve) y el velo negro
+  del final no se dibuja mientras es invisible. El registro anota «despedida: empieza…» con la memoria que había.
+- **Los sonidos ya no congelan la pantalla:** el ambiente (8 s de sonido) y los efectos largos se arman con el
+  sintetizador en la tarea de sonido, que tenía prioridad 10 y le quitaba el núcleo al dibujo (el ambiente 5 llegó a
+  dejar la pantalla quieta 3,9 s; el sonido 68, 1,4 s). Ahora mientras sintetiza baja a prioridad 2 y el dibujo la
+  interrumpe; al tocar vuelve a la prioridad de siempre.
+- **ocultar() ya no redibuja lo que ya se ve:** se llama en cada cuadro en muchas partes; mostrar algo que ya estaba
+  visible hacía que LVGL lo volviera a dibujar entero.
+- **El táctil no se manda a dormir** (no tiene ese modo): se acaba el «TP: Sleep mode not supported!» repetido en el
+  registro (más de 100 veces por prueba, cada una escrita en la flash).
+- Programa del PC: las pruebas respaldan todas las mascotas en Documentos y las devuelven al terminar; RENDIMIENTO y
+  «Probar lo nuevo» miden con la pantalla encendida y ella despierta.
+
 ## Versión 1.0.23 — pruebas de lo nuevo, Pochi no va a la isla y pantalla nueva del faro
 
 - **El faro tiene su propia pantalla:** antes era la isla entera de noche y el mar era un anillo angosto. Ahora es el MISMO
