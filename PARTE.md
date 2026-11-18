@@ -1,26 +1,33 @@
-# PARTE — estado del trabajo (17-nov-2026, 16:30)
+# PARTE — estado del trabajo (18-nov-2026, 17:20)
 
-Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.19** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
-Partida **versión 42** (no cambia desde el 104).
+Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4, ESP-IDF 5.5). **Responder siempre en
+español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
+cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
+Versión publicada: **1.0.23** («PRUEBAS, POCHI Y FARO»). Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
-- `ruloccc/orbepet` (PRIVADO): el código. Se trabaja ahí: clonar, cambiar, commit y push a `main`.
-- `ruloccc/orbepet-firmware` (PÚBLICO): solo `mascota.bin` + `version.json` (lo que baja el orbe) y las Releases.
-- Ya no hace falta pedir el zip: `git clone --depth 1 https://github.com/ruloccc/orbepet` (con add_repo antes).
-  Igual se le entrega un zip cuando necesite grabar por cable.
+- `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
+- `ruloccc/orbepet-firmware` (PÚBLICO): lo que baja el orbe: `mascota.bin`, `version.json`, `bootloader.bin`,
+  `partition-table.bin`, `ota_data_initial.bin` y `recursos/pj0..pj5.bin`. **NUNCA** subir ahí `mascota.elf`.
+- `ruloccc/orbepet-informes` (PRIVADO): los informes que manda el orbe (Ajustes → Versión → ENVIAR INFORME), como issues.
+  Leerlos: `gh issue list -R ruloccc/orbepet-informes` y `gh issue view N -R ruloccc/orbepet-informes`.
+  La llave (fine-grained, solo Issues de ese repo) la tiene el usuario; se carga por cable con el programa del PC
+  (Respaldo → «Cargar llave de informes…»). **Nunca** pedirla por el chat ni ponerla en el código o el registro.
 
-**Compilar firmware:** GitHub Actions (`.github/workflows/firmware.yml`) compila con ESP-IDF v5.5 en cada push a main
-y revisa que quepa en ota_1. Con una etiqueta `v<versión>` además publica. Ver el resultado:
-`gh api repos/ruloccc/orbepet/actions/runs` (gh funciona por el proxy aunque `gh auth status` diga que no).
-El usuario también puede compilar y grabar con cable con el probador, como siempre.
-
-**Publicar una versión = subir el número:** cambiar `FW_VERSION` en `firmware/main/version.h` (y `FW_NOMBRE`),
-sección en README, commit y push a main. La compilación ve que es más nueva que la publicada y la publica.
-(Desde aquí NO se pueden empujar etiquetas ni bajar artefactos: el proxy lo bloquea.) Sin el secreto
-`ORBEPET_FIRMWARE_TOKEN` la deja en la rama `compilados` del repo privado: `git fetch origin +refs/heads/compilados:refs/remotes/origin/compilados` (con «+»: la rama se reescribe) y copiar
-mascota.bin + version.json al main de orbepet-firmware (push normal, eso sí se puede).
-Tamaño: ranuras de 0x7D0000 (8.192.000 bytes) desde la 1.0.10; el juego con -O2, solo red/BT con -Os.
+**Compilar:** cada push a main compila en GitHub Actions (`.github/workflows/firmware.yml`, ~11 min) y deja todo en la
+rama `compilados` (incluido `mascota.elf`). Ver: `gh run list -L 3` / `gh run view <id>`.
+**Publicar** (desde aquí no se pueden empujar etiquetas): subir `FW_VERSION`/`FW_NOMBRE` en `firmware/main/version.h`,
+sección en README y PARTE, push; cuando compile:
+`git fetch origin +refs/heads/compilados:refs/remotes/origin/compilados`, sacar los archivos a una carpeta
+(`git --work-tree=/tmp/comp checkout origin/compilados -- .` y `git reset`) y copiar a `orbepet-firmware` todo
+**menos** `mascota.elf` y `flasher_args.json` (con `recursos/`), commit y push. Comprobar con
+`gh api repos/ruloccc/orbepet-firmware/contents/version.json -q .content | base64 -d`.
+En el orbe: Ajustes → Versión → BUSCAR ACTUALIZACIÓN. Desde la 1.0.21 los fondos nuevos (pj*.bin) bajan en el mismo
+viaje; si el orbe venía de una anterior a la 1.0.21, hay que apretar dos veces.
+**Pánicos:** el registro trae «FALLO_BT: 0x42...». El .elf de la versión publicada está en `compilados`; para otra:
+poner el commit en `.github/simbolos.txt`, push, esperar «Simbolos de una version», `git fetch origin elf-<commit7>` y
+`/home/claude/tc/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e mascota.elf <direcciones>`
+(la cadena de herramientas hay que bajarla de nuevo en cada sesión).
 
 ---
 
@@ -39,14 +46,6 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 
 ## 2. Qué se hizo en las últimas versiones
 
-**1.0.19 (arreglo de los juegos)** — PÁNICO de la 1.0.18 en el buceo: s_zj_o[i] usado como caja y como imagen
-(zj_tipo lo arregla). Fondos rehechos sobre fondos_zonas (herramientas/hacer_fondos_juegos.py; el faro = la isla de
-noche + isla_mapa.inc). Manito de ayuda (zd_mano), anillos, portadas claras, textos propios (zj_texto_c).
-CÓMO TRADUCIR UN PÁNICO: el registro trae «FALLO_BT: 0x42...». Saber qué versión corría (si no, probar). El .elf de la
-versión publicada está en la rama `compilados` (mascota.elf); para otra: poner el commit en .github/simbolos.txt, push,
-esperar el flujo «Simbolos de una version» y `git fetch origin elf-<commit7>`; luego
-/home/claude/tc/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e mascota.elf <direcciones>.
-Al publicar a mano desde `compilados`: NO copiar mascota.elf al repo público (solo .bin, .json y recursos/).
 **1.0.23 (pruebas, Pochi y faro)** — Pochi: ui_pochi.inc no llega con s_escena o s_pet->escena == ESC_ISLA, sus
 paseos no incluyen la isla y si la mascota llega a la isla con Pochi, Pochi pasa a PO_SE_VA. Faro: herramientas/
 hacer_fondos_juegos.py faro() arma la pantalla nueva (FARO2_LAMPARA 391,150; FARO2_MUELLE 206,330) y regenera
@@ -81,6 +80,10 @@ UTF-8 saneado, POST a api.github.com/repos/ruloccc/orbepet-informes/issues con l
 (MASCOTA LLAVE <llave>|BORRAR|?; botón en mascota_gui → Respaldo). La llave (fine-grained, sin vencimiento, Issues
 lectura/escritura solo en orbepet-informes) la tiene el usuario; NUNCA ponerla en el código, el registro ni el chat.
 Para leer los informes: `gh issue list -R ruloccc/orbepet-informes` (repo privado: requiere la sesión de GitHub).
+
+**1.0.19 (arreglo de los juegos)** — PÁNICO de la 1.0.18 en el buceo: s_zj_o[i] usado como caja y como imagen
+(zj_tipo lo arregla). Fondos rehechos sobre fondos_zonas (herramientas/hacer_fondos_juegos.py; el faro = la isla de
+noche + isla_mapa.inc). Manito de ayuda (zd_mano), anillos, portadas claras, textos propios (zj_texto_c).
 
 **1.0.18 (el faro y el buceo)** — ui_isla.inc (ZJ_FARO 10, ZJ_BUCEO 11, dentro del marco de ui_dos.inc), fondos
 pj4/pj5 (herramientas/dibujar_juegos_isla.py; el faro es el MISMO de la isla). Menú Jugar: primero los de la zona.
@@ -199,24 +202,51 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
 
 ## 3. Qué falta (en orden)
 
-0. **Probar la 1.0.10 en la placa** (la 1.0.09 no alcanzó a grabarse): grabar con cable, ver Ajustes → Versión, entrar a ACTUALIZAR, conectar el
-   celular a ORBEPET-XXXX, poner el Wi-Fi de la casa, «Buscar» (debe decir «¡ESTÁS AL DÍA!»), y después publicar
-   una 1.0.10 de prueba para ver que llega sola. Revisar que el programa siga cabiendo (lo dice la compilación).
-1. **Probar en la placa todo lo del 102 al 108.** Nada de eso se ha probado salvo lo que el usuario vio: Pochi
-   hembra y los 4 cachorros, escenas de familia, toques a animales, el 104 entero (papelitos, hielo, paseos,
-   terquedad), los fondos por franjas (fase 29c), el huevo del inicio y los perfiles.
-2. **El tamaño.** El programa creció ~200 KB en el 106 (huevos 160 KB + vivero 40 KB). Si al grabar no cabe en
-   `ota_1` (0x7A0000): alias de primavera en FD_TABLA (−80 KB), bajar `CUANTOS` en huevos92.py, o dejar las
-   grietas 2 y 3 en el dibujo chico.
-3. **Batería y memoria, lo de siempre**: confirmar que el micrófono ya no se come la RAM interna (registro con
-   «escuchar música» varias horas); noche sin cable con sueño profundo (nunca probado); %/h con pantalla apagada;
-   reposo del táctil (CST9217 en GPIO2).
-4. **Editor de personajes** (conversación del 17-nov 11:52): el arte nuevo es de 48 px (y 96 los grandes) y el
-   editor dibuja íconos de 24×24; además, cuando hay dibujo propio, `ico_render` se salta la tabla HD y el pulido.
-   Acordado: primero **abrir el dibujo de fábrica en 48×48 para retocarlo** (el firmware tiene que aceptar ese
-   tamaño: `art_icono_lado_de_bytes`), y después un editor por partes (colores, ropa, orejas, cola, expresión).
-   La partición de recursos son 6 MB: espacio no es problema.
+0. **Esperar el registro del usuario.** Va a instalar la 1.0.23 y correr en el programa del PC «Probar lo nuevo
+   (guiada)» (o la PRUEBA TOTAL, que la incluye como fase 29d) y mandar `informe.txt` + `registro_placa_*.txt`.
+   Revisar sobre todo: los 6 fondos (pj4 nuevo = 78145 bytes), los 6 juegos terminan y se cierran, tocar el faro y la
+   piedra en la isla, **soplar la niebla, el olor y el bote** (si falla: mirar en el registro «micrófono: abierto (RAM
+   DMA…)» y el evento «micrófono: esperó un soplido… lo más fuerte: N»; si N es bajo, bajar el umbral 34/24 en main.c
+   paso 5c; si «NO pudo abrirse», es la RAM DMA), y la tabla de velocidad con y sin «juntar áreas» (FUSION 0/1).
+1. **Rendimiento** (sección 3b): según lo que diga la tabla de velocidad del orbe.
+2. **Pendiente del usuario «o la hormigas»** (sección 1): preguntarle dónde salió.
+3. **Editor de personajes** (conversación del 17-nov): el arte nuevo es de 48 px (96 los grandes) y el editor dibuja
+   íconos de 24×24. Acordado: primero abrir el dibujo de fábrica en 48×48 para retocarlo (`art_icono_lado_de_bytes`),
+   después un editor por partes (colores, ropa, orejas, cola, expresión).
+4. Batería: noche sin cable con sueño profundo (nunca probado); %/h con pantalla apagada.
 5. Retoques que pida el usuario. Los pendientes viejos siguen en `claude/pendientes-v89.md`.
+
+## 3b. Rendimiento: lo medido y lo que se propone (18-nov)
+
+Lo que dice el registro del orbe (1.0.19): el juego normal va a **9-11 cuadros por segundo**; **dibujar** cuesta
+~95 ms por cuadro y el **motor 1 ms**: todo lo que valga la pena está en el dibujo. No sirve cambiar de lenguaje (ya
+es C, y LVGL también): serían meses, errores nuevos y nada más rápido.
+
+Hecho:
+- **1.0.22 — juntar áreas por redibujar** (`ui_inv_fusionar`, ui.c): LVGL guarda hasta 32 rectángulos por cuadro y al
+  pasarse redibujaba la PANTALLA ENTERA (los 178 kpx/cuadro del registro). En el simulador: lluvia 72 → 3 kpx, nieve
+  72 → 4, tormenta 72 → 11, noche en el prado 72 → 6, en el lago 74 → 16, bosque de noche 72 → 11. Se puede apagar
+  por cable (`MASCOTA PROBAR FUSION 0`) para comparar en el orbe. Prueba: `sim/web/pruebas/redibujo.js [semilla]`.
+- **1.0.22 — 25 KB más de RAM interna** (dram0.bss 80,3 → 55,2 KB): los búferes de las órdenes por cable a la PSRAM.
+- Transparencias: medidas con `sim_alfa_scan` (simulador). Son pocas y chicas (mascota 80×80, animales 36×36, botones
+  48×48, globo, bote): quitarlas no ahorra nada. **Descartado.**
+
+Propuesto (en este orden; esperar la tabla de velocidad del orbe antes de decidir):
+1. **Franjas de dibujo más grandes**: hoy 20 filas (`buffer_height` en
+   `components/waveshare__esp32_s3_touch_amoled_1_75c/esp32_s3_touch_amoled_1_75c.c`, búfer doble en RAM interna:
+   2×466×20×2 = 37 KB). Con los 25 KB liberados se puede subir a ~30 filas (56 KB): menos costo fijo por franja.
+   Esperado 10-20 %. Riesgo bajo, pero OJO con la RAM interna (no bajar de ~15 KB libres en partida larga) y con el
+   modo Wi-Fi (`s_liviano`: ahí 10 filas).
+2. **Instrucciones vectoriales del S3 para mezclar píxeles**: Espressif publica rutinas de mezcla para LVGL que
+   aprovechan el SIMD del ESP32-S3 (buscar en esp_lvgl_port / esp_lvgl_adapter la opción de dibujo con
+   ensamblador propio, `LV_DRAW_SW_ASM_CUSTOM`). Es lo de más potencial (la mezcla varias veces más rápida) pero
+   hay que verificar que funcione con LVGL 9.4 y el adaptador que usamos. Investigar primero, probar con el
+   simulador no sirve (es WASM): solo en el orbe, con FUSION/VELOCIDAD para medir.
+3. **Sprites en formato más liviano**: hoy ARGB8888 (4 bytes/píxel, en PSRAM, que es lenta de leer). RGB565A8 (3
+   bytes) se ve igual y lee 25 % menos. Toca art.c (art_img_t) y todo lo que asume 4 bytes por píxel: cuidado.
+4. **Adornos a menos cuadros por segundo**: el agua, los brillos y las partículas no necesitan moverse cada cuadro
+   (la lluvia ya va a ~25 cps y de noche ~11: `s_vent_t` en ui.c).
+5. Medir siempre con `MASCOTA PROBAR VELOCIDAD` (cuadros, ms, kpx, animar) y la prueba «RENDIMIENTO automático».
 
 ---
 
@@ -231,7 +261,12 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
   usuario lo rechazó. Solo subir calidad, nunca cambiar el dibujo.
 - La marca del huevo elegido es un **óvalo** que encierra huevo y nidito, no un círculo sobre el huevo.
 - **Cada mascota tiene su mundo y sus historias**; Pochi no se pasa de perfil.
-- No usar pedazos del prado ni del bosque en fondos nuevos (dibujos propios con `pixel_mundo.py`).
+- No usar pedazos del prado ni del bosque en fondos nuevos de ZONAS (dibujos propios con `pixel_mundo.py`). Los fondos de
+  los JUEGOS sí van sobre las ilustraciones de `fondos_zonas/` (pedido del usuario: «detallados como acostumbrados»).
+- **El faro de los juegos es el MISMO de la isla** (recortado, sin espejo). Los juegos de cada zona salen PRIMERO en Jugar.
+- **Pochi no va a la isla** (no sabe nadar) y **no llega con una visita** (espera que se vaya + 6 min).
+- **Durante una actividad el mundo se apaga** (juegos, bote, comer, paneles, diario): ni Pochi ni globos; el baño no.
+- **El micrófono viene apagado** y se abre solo mientras algo espera un soplido (niebla, olor, bote, velas, pesca).
 - No dañar lo que ya existe: tras cada cambio, test_core, paneles (18), regresión y, si toca el motor, soak.
 - Textos en MAYÚSCULAS vía `gtxt`; el Rey es **Peumo**; galletas de **piñón con miel de ulmo**.
 - Los enum ya guardados en partidas no se reordenan; campos nuevos al final, antes de `crc`, con conversión.
@@ -250,7 +285,7 @@ curl -sL -o bin.tgz  https://github.com/WebAssembly/binaryen/releases/download/v
 ```
 Pruebas:
 ```
-cd build && cmake .. && make test_core && ./test_core          -> 1160/1160 comprobaciones OK
+cd build && cmake .. && make test_core && ./test_core          -> 1216/1216 comprobaciones OK
 export WASI_SDK=/home/claude/sdk/wasi-sdk-25.0-x86_64-linux LVGL_DIR=/home/claude/lvgl BINARYEN=/home/claude/sdk/binaryen-version_123
 sh sim/web/build.sh
 node sim/web/pruebas/paneles.js          -> 18 problemas (la base de siempre)
@@ -258,6 +293,8 @@ node sim/web/pruebas/regresion.js        -> «dibujo: igual que la línea base»
 node sim/web/pruebas/soak.js             -> soak: 180 días sin caerse   (~10 min)
 node sim/web/pruebas/fondos_franjas.js   -> 1260 casos, 0 distintos
 node sim/web/pruebas/inicio.js | libro.js | libro_flujo.js | final.js
+node sim/web/pruebas/dos.js | isla.js | olor.js   -> juegos de a dos / de la isla / el olor: todo bien
+node sim/web/pruebas/redibujo.js [semilla]        -> redibujo: todo bien (juntar áreas no deja restos)
 gcc -fsyntax-only -std=gnu17 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-sign-compare \
   -DLV_CONF_INCLUDE_SIMPLE -Isim/preview -I/home/claude/lvgl -Icore -Ifirmware/main firmware/main/ui.c
 ```
@@ -269,8 +306,8 @@ node -e "const {crear}=require('./sim/web/pruebas/arnes.js');(async()=>{const s=
 (`sim_test_panel(k)` abre un panel por número; `sim_test_panel_name(k)` dice cuál es; `sim_panel_id()` el que está
 abierto. Ojo: `s.listo(30)` deja abierto el panel del huevo: hay que cerrarlo con `sim_close_panel()`.)
 
-En la placa: `herramientas/prueba_total.py` (fase 29c para los fondos por franjas) y el probador
-`herramientas/mascota_gui.py`.
+En la placa: `herramientas/prueba_total.py` (fase 29c fondos por franjas; 29d lo nuevo 1.0.16-1.0.23),
+`herramientas/prueba_nuevo.py` («Probar lo nuevo») y el programa `herramientas/mascota_gui.py`.
 
 ---
 
@@ -285,5 +322,7 @@ En la placa: `herramientas/prueba_total.py` (fase 29c para los fondos por franja
   `hacer_fondos.py`, `hacer_pantallas.py`, `iconos_nuevos/huevos92.py` (+ `huevos_base.png`)
 - Placa y pruebas: `firmware/main/main.c`, `herramientas/prueba_total.py`, `herramientas/mascota_gui.py`
 - Simulador: `sim/web/web_main.c`, `sim/web/plantilla.html`, `sim/web/pruebas/*.js`
-- Actualizar por Wi-Fi: `firmware/main/ota.c`, `ota.h`, `version.h`, `.github/workflows/firmware.yml`
+- Actualizar por Wi-Fi e informes: `firmware/main/ota.c`, `ota.h`, `version.h`, `.github/workflows/firmware.yml`
+- Juegos de a dos y de la isla: `firmware/main/ui_dos.inc`, `ui_isla.inc`, `isla_mapa.inc` (generado),
+  `herramientas/hacer_fondos_juegos.py` → `hacer_fondos_dos.py` (→ `firmware/recursos/pj*.bin`, `fondos_dos_sim.inc`)
 - Documentación: `README.md` (una sección por firmware) y `claude/pendientes-v89.md`
