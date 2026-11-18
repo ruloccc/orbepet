@@ -199,6 +199,40 @@ static void img_preparar(art_img_t *img, int w, int h)
     img->dsc.data = (const uint8_t *)img->px;
 }
 
+/* (1.0.24) como ampliar(), pero a RGB565 opaco (2 bytes por píxel): para fondos de pantalla completa sin transparencia.
+ * Ocupa la mitad y LVGL lo copia en vez de mezclarlo píxel a píxel. La capacidad se lleva en unidades de 4 bytes
+ * (así art_img_free() y g_art_bytes siguen igual). */
+static void ampliar_565(art_img_t *dst, const lienzo_t *src, int escala)
+{
+    const int W = src->w * escala, H = src->h * escala;
+    const uint32_t n = (uint32_t)(W * H), unid = (n * 2u + 3u) / 4u;
+    if (unid > dst->capacidad || !dst->px) {
+        if (dst->px) { lv_image_cache_drop(&dst->dsc); g_art_bytes -= dst->capacidad * 4u; }
+        free(dst->px);
+        dst->px = malloc((size_t)unid * 4u);
+        dst->capacidad = dst->px ? unid : 0;
+        g_art_bytes += dst->capacidad * 4u;
+    }
+    if (!dst->px) { memset(&dst->dsc, 0, sizeof(dst->dsc)); return; }
+    lv_image_cache_drop(&dst->dsc);
+    uint16_t *q = (uint16_t *)dst->px;
+    for (int y = 0; y < src->h; y++)
+        for (int x = 0; x < src->w; x++) {
+            const uint32_t c = src->p[y * src->w + x];
+            const uint16_t v = (uint16_t)((((c >> 19) & 0x1Fu) << 11) | (((c >> 10) & 0x3Fu) << 5) | ((c >> 3) & 0x1Fu));
+            for (int j = 0; j < escala; j++)
+                for (int i = 0; i < escala; i++) q[(y * escala + j) * W + x * escala + i] = v;
+        }
+    memset(&dst->dsc, 0, sizeof(dst->dsc));
+    dst->dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+    dst->dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+    dst->dsc.header.w = (uint32_t)W;
+    dst->dsc.header.h = (uint32_t)H;
+    dst->dsc.header.stride = (uint32_t)(W * 2);
+    dst->dsc.data_size = n * 2u;
+    dst->dsc.data = (const uint8_t *)q;
+}
+
 /* amplía un lienzo a una imagen ARGB8888 (con espejo opcional) */
 static void ampliar(art_img_t *dst, const lienzo_t *src, int escala, bool espejo)
 {
@@ -7027,7 +7061,7 @@ void art_viaje_fondo(art_img_t *dst, art_viaje_t v)
         for (int i = 0; i < 22; i++) chispa(&l, (float)(hash(i, 6, 635) % D), (float)(20 + hash(i, 7, 635) % 96), (i & 1) ? A(0xFFE27A) : A(0x9CF0FF));
         break;
     }
-    ampliar(dst, &l, 2, false);
+    ampliar_565(dst, &l, 2); /* (1.0.24) el paisaje es opaco: RGB565 (428 KB en vez de 856 KB, y se copia en vez de mezclarse) */
     free(l.p);
 }
 
