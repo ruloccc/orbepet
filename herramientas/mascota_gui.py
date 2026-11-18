@@ -2,7 +2,7 @@ import time
 #!/usr/bin/env python3
 """Programa con ventana para instalar el firmware de la mascota y probarla por el cable USB.
 Se abre con "Abrir probador.bat" (en la carpeta C:\\mascota). No hace falta escribir nada."""
-import os, re, sys, glob, queue, threading, subprocess, time, io, traceback
+import os, re, sys, glob, queue, threading, subprocess, time, io, traceback, hashlib
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, scrolledtext
 
@@ -292,6 +292,9 @@ class App(tk.Tk):
         b = ttk.Button(fila, text="Respaldar mascota", command=self.respaldar); b.pack(side="left"); self.botones.append(b)
         b = ttk.Button(fila, text="Restaurar un respaldo…", command=self.restaurar_respaldo); b.pack(side="left", padx=6); self.botones.append(b)
         ttk.Checkbutton(fila, text="incluir fotos (más lento)", variable=self.var_fotos).pack(side="left", padx=6)
+        fila2 = ttk.Frame(g); fila2.pack(fill="x", pady=(4, 0))
+        b = ttk.Button(fila2, text="Restaurar el último respaldo de prueba", command=self.restaurar_ultimo_de_prueba); b.pack(side="left"); self.botones.append(b)
+        ttk.Label(fila2, text="(las pruebas respaldan solas en Documentos\\Respaldos mascota\\Antes de las pruebas y devuelven todo al terminar)").pack(side="left", padx=6)
         fd = ttk.Frame(g); fd.pack(fill="x", pady=2)
         ttk.Label(fd, text="Guardar los respaldos en:").pack(side="left")
         self.var_dir = tk.StringVar(value=self.carpeta_respaldos())
@@ -330,6 +333,7 @@ class App(tk.Tk):
         self.after(1500, self.remoto_tic)
         self._bat_ult, self._bat_ocupada = None, False
         self.after(2500, self.bateria_tic)
+        self.after(4000, self.revisar_pendiente)  # (1.0.24) una prueba que quedó a medias: devolver las mascotas
 
     # ---------- (105) pestañas por función y cuadros plegables
     def hoja(self, titulo, alto_max=360):
@@ -1401,9 +1405,176 @@ class App(tk.Tk):
         "escuchar": ("Escuchar a la placa", "Muestra en vivo lo que la placa va diciendo por el cable, hasta que lo detengas.", "Nada.", "hasta que lo cierres"),
         "registro": ("Obtener log del dispositivo", "Baja el registro guardado en la placa (arranques, motivos de reinicio, avisos) y lo copia para pegarlo en el chat.", "Nada.", "1–2 min"),
         "registro_borrar": ("Borrar registro", "Borra el registro guardado en la placa. La mascota no se toca.", "Nada.", "segundos"),
-        "restaurar": ("Restaurar partida", "Devuelve la mascota a como estaba antes de una prueba (usa el respaldo que la placa hizo al empezar).", "Nada.", "segundos"),
+        "restaurar": ("Restaurar partida", "Devuelve la partida con el respaldo que la placa guarda en su memoria. Para volver a como estaban tus mascotas antes de una prueba, usa mejor «Restaurar el último respaldo de prueba» (pestaña Respaldo).", "Nada.", "segundos"),
         "de_cero": ("Empezar de cero", "BORRA la mascota, el mundo y los objetos de la placa y la reinicia.", "Estar segura de querer perder la partida.", "segundos"),
     }
+
+    # ---------- (1.0.24) respaldo de las pruebas: al empezar se copian TODAS las mascotas (la partición nvs) a
+    # Documentos\Respaldos mascota\Antes de las pruebas, y al terminar se devuelven desde ese mismo archivo,
+    # aunque la prueba falle, se corte o se detenga. Antes el respaldo vivía en la placa y las fases 22-26 lo usaban
+    # y lo borraban a mitad de camino: al final ya no quedaba nada que devolver.
+    PRUEBAS_CON_RESPALDO = {"todo", "paneles", "juegos", "zonas", "secretos", "finales", "panel", "actividades", "cantar",
+                            "rendimiento", "tamano", "total", "total_guiado", "total_continuar", "nuevo", "nuevo_auto"}
+    RESP_PRUEBAS_MAX = 10  # se guardan los 10 más nuevos
+
+    @staticmethod
+    def carpeta_resp_pruebas():
+        return os.path.join(probar.documentos(), "Respaldos mascota", "Antes de las pruebas")
+
+    def marca_pendiente(self):
+        return os.path.join(self.carpeta_resp_pruebas(), "PENDIENTE_RESTAURAR.txt")
+
+    def resp_pendiente(self):
+        """Si una prueba quedó sin devolver las mascotas, la carpeta de su respaldo; si no, None."""
+        try:
+            c = open(self.marca_pendiente(), encoding="utf-8").read().strip()
+            return c if c and os.path.exists(os.path.join(c, "nvs.bin")) else None
+        except Exception:
+            return None
+
+    def leer_nvs(self, carpeta):
+        """Copia la partición nvs (todas las mascotas, sus mundos, los perfiles y los ajustes) a carpeta/nvs.bin y la comprueba."""
+        os.makedirs(carpeta, exist_ok=True)
+        tabla = self.tabla_particiones(os.path.join(carpeta, "_tabla.bin"))
+        if not tabla or "nvs" not in tabla:
+            print("No pude leer la tabla de particiones de la placa.")
+            return False
+        off, tam = tabla["nvs"]
+        ruta = os.path.join(carpeta, "nvs.bin")
+        ok, txt = self.esptool(["read_flash", hex(off), hex(tam), ruta], intentos=("no_reset", "default_reset"), timeout=300, despues="no_reset")
+        if not ok:
+            print(txt[-500:])
+            return False
+        d = open(ruta, "rb").read() if os.path.exists(ruta) else b""
+        if len(d) != tam or d.count(0xFF) == len(d):
+            print(f"El respaldo salió malo ({len(d)} de {tam} bytes, o vacío).")
+            return False
+        open(os.path.join(carpeta, "manifiesto.txt"), "w", encoding="utf-8").write(f"nvs 0x{off:X} {tam}\n")
+        open(os.path.join(carpeta, "huella.txt"), "w", encoding="utf-8").write(hashlib.sha256(d).hexdigest() + "\n")
+        return True
+
+    def escribir_nvs(self, carpeta, puerto):
+        """Graba carpeta/nvs.bin en la placa (esptool comprueba lo grabado), la hace arrancar y le pone la hora."""
+        try:
+            off = open(os.path.join(carpeta, "manifiesto.txt"), encoding="utf-8").read().split()[1]
+            ruta = os.path.join(carpeta, "nvs.bin")
+            d = open(ruta, "rb").read()
+        except Exception as e:
+            print(f"El respaldo de {carpeta} no se puede leer: {e}")
+            return False
+        try:
+            if open(os.path.join(carpeta, "huella.txt"), encoding="utf-8").read().strip() != hashlib.sha256(d).hexdigest():
+                print("El archivo del respaldo cambió desde que se guardó: no lo grabo.")
+                return False
+        except FileNotFoundError:
+            pass
+        ok, txt = self.esptool(["write_flash", off, ruta], intentos=("no_reset", "default_reset", "usb_reset"), timeout=300)
+        if not ok:
+            print(txt[-500:])
+            return False
+        try:
+            self.reiniciar_normal(puerto)
+        except Exception:
+            pass
+        if probar.placa_responde(puerto, 30):
+            probar.poner_hora(puerto, 15)  # la hora del computador (así no la pregunta en pantalla)
+        else:
+            print("La partida quedó grabada, pero la placa no contestó: reiníciala (saca el USB sin apretar BOOT).")
+        return True
+
+    def podar_resp_pruebas(self, guardar):
+        base = self.carpeta_resp_pruebas()
+        try:
+            viejas = sorted(n for n in os.listdir(base) if n.startswith("antes_de_") and os.path.isdir(os.path.join(base, n)))
+        except Exception:
+            return
+        import shutil
+        for n in viejas[:-self.RESP_PRUEBAS_MAX]:
+            ruta = os.path.join(base, n)
+            if os.path.normcase(os.path.abspath(ruta)) != os.path.normcase(os.path.abspath(guardar)):
+                shutil.rmtree(ruta, ignore_errors=True)
+
+    def respaldo_antes_de_prueba(self, que, puerto):
+        """Devuelve la carpeta del respaldo (nuevo, o el pendiente de una prueba que no terminó) o None si no se pudo."""
+        pend = self.resp_pendiente()
+        if pend:
+            print(f"Una prueba anterior no alcanzó a devolver tus mascotas: uso ESE respaldo (el de antes de esa prueba):\n   {pend}")
+            return pend
+        import datetime
+        carpeta = os.path.join(self.carpeta_resp_pruebas(), "antes_de_" + que + "_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        self.poner_etapa("Respaldando tus mascotas en Documentos")
+        print("Respaldando todas tus mascotas antes de la prueba (la placa entra sola al modo descarga y vuelve)…")
+        ok = self.leer_nvs(carpeta)
+        try:
+            self.reiniciar_normal(puerto)
+        except Exception:
+            pass
+        if not ok:
+            return None
+        open(self.marca_pendiente(), "w", encoding="utf-8").write(carpeta + "\n")
+        print(f"Respaldo listo en: {carpeta}")
+        self.podar_resp_pruebas(carpeta)
+        if not probar.placa_responde(puerto, 30):
+            print("(la placa tarda en volver; la prueba igual intenta conectarse)")
+        return carpeta
+
+    def restaurar_despues_de_prueba(self, carpeta, puerto):
+        probar.CANCELAR = False  # que «Detener» no corte también la devolución
+        self.poner_etapa("Devolviendo tus mascotas a como estaban antes de la prueba")
+        print("\nDevolviendo tus mascotas desde el respaldo de Documentos…")
+        ok = self.escribir_nvs(carpeta, puerto)
+        if ok:
+            try:
+                os.remove(self.marca_pendiente())
+            except Exception:
+                pass
+            linea = f"RESPALDO: tus mascotas quedaron como antes de la prueba (desde {carpeta})"
+        else:
+            linea = ("RESPALDO: NO pude devolver tus mascotas todavía. El respaldo está a salvo en " + carpeta +
+                     "; se devuelve solo la próxima vez que abras este programa, o con «Restaurar el último respaldo de prueba».")
+        print(linea)
+        for ruta in (os.path.join(os.getcwd(), "informe.txt"), os.path.join(probar.carpeta_datos(), "informe.txt")):
+            try:
+                if os.path.exists(ruta) and time.time() - os.path.getmtime(ruta) < 6 * 3600:
+                    open(ruta, "a", encoding="utf-8").write(linea + "\n")
+            except Exception:
+                pass
+        return ok
+
+    def revisar_pendiente(self):
+        """Al abrir el programa: si una prueba quedó a medias, devuelve las mascotas sola y avisa."""
+        c = self.resp_pendiente()
+        if not c:
+            return
+        if self.hilo and self.hilo.is_alive():
+            self.after(5000, self.revisar_pendiente)
+            return
+        puerto = self.puerto.get().strip() or "COM5"
+        def f():
+            print("=== UNA PRUEBA QUEDÓ SIN TERMINAR: devolviendo tus mascotas ===")
+            ok = self.restaurar_despues_de_prueba(c, puerto)
+            msj = ("Una prueba anterior había quedado sin terminar. Ya devolví tus mascotas a como estaban antes de esa prueba." if ok else
+                   "Una prueba anterior quedó sin terminar y no pude devolver tus mascotas (¿está conectado el orbe?).\n\n"
+                   "El respaldo está a salvo. Conecta el orbe y aprieta «Restaurar el último respaldo de prueba» en la pestaña Respaldo.")
+            self.cola.put(lambda: messagebox.showinfo("Tus mascotas", msj))
+            return ok
+        self.tarea(f)
+
+    def restaurar_ultimo_de_prueba(self):
+        c = self.resp_pendiente()
+        if not c:
+            base = self.carpeta_resp_pruebas()
+            try:
+                lista = sorted(n for n in os.listdir(base) if n.startswith("antes_de_") and os.path.exists(os.path.join(base, n, "nvs.bin")))
+            except Exception:
+                lista = []
+            if not lista:
+                messagebox.showinfo("Respaldo de prueba", "No hay respaldos de pruebas en Documentos todavía."); return
+            c = os.path.join(base, lista[-1])
+        if not messagebox.askyesno("Restaurar", f"Esto deja tus mascotas como estaban antes de la prueba guardada en:\n{c}\n\n¿Seguro?"):
+            return
+        puerto = self.puerto.get().strip() or "COM5"
+        self.tarea(lambda: self.restaurar_despues_de_prueba(c, puerto))
 
     def probar(self, que):
         ay = self.AYUDA_PRUEBAS.get(que)
@@ -1422,8 +1593,18 @@ class App(tk.Tk):
             probar.PREGUNTAR = self.preguntar_si
             probar.AVISAR = self.preguntar
             probar.GUIA = self
+            respaldo = None
+            if que in self.PRUEBAS_CON_RESPALDO:
+                respaldo = self.respaldo_antes_de_prueba(que, puerto)
+                if not respaldo:
+                    print("\nNO empiezo la prueba: no pude guardar el respaldo de tus mascotas en Documentos. Revisa el cable y vuelve a intentar.")
+                    return False
             self.poner_etapa("Conectando con la placa")
-            probar.correr(puerto, que)
+            try:
+                probar.correr(puerto, que)
+            finally:
+                if respaldo:
+                    self.restaurar_despues_de_prueba(respaldo, puerto)
             if que == "registro" and probar.ULTIMO_REGISTRO:  # queda copiado: solo hay que pegarlo en el chat
                 texto_log = probar.ULTIMO_REGISTRO
                 self.after(0, lambda: (self.clipboard_clear(), self.clipboard_append(texto_log), self.update()))
