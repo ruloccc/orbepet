@@ -748,6 +748,11 @@ void ota_modo(void)
             break;
         case E_BAJAR:
             if (descargar()) {
+                /* (1.0.21) los fondos de la versión nueva se bajan en este mismo viaje (antes había que volver a BUSCAR ACTUALIZACIÓN
+                 * ya con la versión nueva puesta, y si no, los juegos quedaban sin fondo). Se hace después de grabar el programa, para no
+                 * quitarle memoria a la descarga; si fallan, la versión nueva igual queda y los pide en el próximo BUSCAR */
+                const int rb = recursos_al_dia();
+                if (rb < 0) diag("recursos: fallaron junto a la versión nueva (se piden en el próximo BUSCAR)");
                 char t[96];
                 snprintf(t, sizeof t, "QUEDÓ INSTALADA LA %s", s_nueva);
                 msg("¡LISTO!", t, false, false);

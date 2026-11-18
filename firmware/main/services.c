@@ -858,7 +858,10 @@ static void tarea_mic(void *arg)
              * mejor no abrirlo y seguir sin micrófono */
             const size_t dma_libre = heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
             const size_t dma_bloque = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-            if (dma_libre < 8192 || dma_bloque < 1024) {
+            /* (1.0.21) antes se pedían 8 KB libres: con una partida larga la RAM interna queda en ~7,6 KB y el micrófono NO se abría
+             * nunca (ni la niebla, ni el olor, ni el bote). Los canales I2S y su DMA ya se reservaron al arrancar (bsp_audio_init, con el
+             * parlante); abrir el micrófono en estéreo solo cambia sus 3 búferes de 320 a 640 B (~2 KB). Con 3 KB alcanza de sobra */
+            if (dma_libre < 3072 || dma_bloque < 1024) {
                 static int64_t avisado_us; /* (1.0.18) antes se avisaba una sola vez: ahora una vez por minuto, para ver en el registro si es esto */
                 if (!avisado_us || esp_timer_get_time() - avisado_us > 60000000) { avisado_us = esp_timer_get_time(); hal_evento("micrófono: poca memoria DMA (libre %u B, bloque %u B): no se abre", (unsigned)dma_libre, (unsigned)dma_bloque); }
                 s_mic_on = false; s_mic_nivel = -1; s_mic_falla = true;
@@ -867,6 +870,7 @@ static void tarea_mic(void *arg)
             esp_codec_dev_sample_info_t fs = {.sample_rate = BOARD_AUDIO_HZ, .channel = 2, .bits_per_sample = 16};
             if (esp_codec_dev_open(s_micro, &fs) != ESP_CODEC_DEV_OK) { hal_evento("micrófono: no se pudo abrir"); s_mic_on = false; s_mic_nivel = -1; continue; }
             esp_codec_dev_set_in_gain(s_micro, 30.0f);
+            { static bool dicho; if (!dicho) { dicho = true; hal_log("micrófono: abierto (RAM DMA libre %u B, bloque %u B)", (unsigned)dma_libre, (unsigned)dma_bloque); } }
             s_mic_abierto = true;
             s_mic_falla = false;
         }

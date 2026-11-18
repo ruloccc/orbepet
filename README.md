@@ -807,6 +807,16 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.21 — el micrófono abre de verdad y los fondos llegan con la actualización
+
+- **El micrófono no se abría nunca en una partida larga** (niebla, olor, bote): antes de abrirlo se exigían 8 KB libres de
+  RAM interna, y tras un rato de juego quedan ~7,6 KB. En realidad abrirlo solo necesita ~2 KB (el audio ya reservó su
+  memoria al encender), así que ahora pide 3 KB. Sigue apagado de fábrica: solo se abre cuando algo espera un soplido.
+- **Los fondos de los juegos** (de a dos y de la isla) ahora se bajan en la MISMA actualización, justo después de grabar
+  la versión nueva. Antes había que volver a apretar BUSCAR ACTUALIZACIÓN con la versión nueva ya puesta.
+- El fondo se arma en un solo bloque de memoria (antes dos): cabe aunque la memoria esté picada tras horas de juego.
+- Si un fondo no aparece, EVENTOS RAROS dice por qué (no está el archivo o no hubo memoria).
+
 ## Versión 1.0.20 — el soplido se oye y los errores se mandan desde el orbe
 
 - **Soplar** (la niebla en cualquier mundo, los vahos de cuando anda hedionda, el bote, las velas, la pesca): el micrófono

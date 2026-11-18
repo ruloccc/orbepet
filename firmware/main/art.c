@@ -6642,45 +6642,70 @@ const lv_image_dsc_t *art_fondo_dos(int n, int *x, int *y)
 #endif
     uint32_t largo = 0;
     uint8_t *f = dos_leer(n, &largo);
-    if (!f) return NULL;
+#ifdef ESP_PLATFORM
+    extern void hal_evento(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+    static uint32_t avisado; /* (1.0.21) por qué no se vio un fondo, una vez por fondo: queda en EVENTOS RAROS (y en el informe) */
+#endif
+    if (!f) {
+#ifdef ESP_PLATFORM
+        if (!(avisado & (1u << n))) { avisado |= 1u << n; hal_evento("juego: no está el fondo pj%d.bin (se baja con BUSCAR ACTUALIZACIÓN)", n); }
+#endif
+        return NULL;
+    }
     const lv_image_dsc_t *res = NULL;
     if (largo > 12 && f[0] == 'P' && f[1] == 'J' && f[2] == 1) {
         const int alfa = f[3], w = f[4] | f[5] << 8, h = f[6] | f[7] << 8;
         pos[n][0] = (int16_t)(f[8] | f[9] << 8); pos[n][1] = (int16_t)(f[10] | f[11] << 8);
         const uint8_t *d = f + 12;
         const unsigned np = d[0];
-        uint8_t *idx = (w > 0 && h > 0 && w <= 466 && h <= 466) ? malloc((size_t)w * h) : NULL;
-        if (idx && 1 + np * 3 < largo - 12 && fd_lz(d + 1 + np * 3, f + largo, idx, (uint32_t)w * h)) {
-            void *px = malloc((size_t)w * h * (alfa ? 4 : 2));
-            if (px) {
-                if (alfa) {
-                    uint32_t pal[256];
-                    pal[0] = 0;
-                    for (unsigned i = 1; i < np && i < 256; i++) pal[i] = 0xFF000000u | ((uint32_t)d[1 + i * 3] << 16) | ((uint32_t)d[2 + i * 3] << 8) | d[3 + i * 3];
-                    uint32_t *o = px;
-                    for (int i = 0; i < w * h; i++) o[i] = pal[idx[i]];
-                } else {
-                    uint16_t pal[256] = {0};
-                    for (unsigned i = 0; i < np && i < 256; i++) {
-                        const uint32_t c = A(((uint32_t)d[1 + i * 3] << 16) | ((uint32_t)d[2 + i * 3] << 8) | d[3 + i * 3]);
-                        pal[i] = (uint16_t)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x1F));
-                    }
-                    uint16_t *o = px;
-                    for (int i = 0; i < w * h; i++) o[i] = pal[idx[i]];
-                }
-                memset(&s_pant[id].dsc, 0, sizeof(lv_image_dsc_t));
-                s_pant[id].dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-                s_pant[id].dsc.header.cf = alfa ? LV_COLOR_FORMAT_ARGB8888 : LV_COLOR_FORMAT_RGB565;
-                s_pant[id].dsc.header.w = (uint32_t)w;
-                s_pant[id].dsc.header.h = (uint32_t)h;
-                s_pant[id].dsc.header.stride = (uint32_t)(w * (alfa ? 4 : 2));
-                s_pant[id].dsc.data_size = (uint32_t)(w * h * (alfa ? 4 : 2));
-                s_pant[id].dsc.data = px;
-                s_pant[id].px = px;
-                res = &s_pant[id].dsc;
+        const int bpp = alfa ? 4 : 2;
+        /* (1.0.21) un solo bloque grande: los índices se descomprimen al final del mismo búfer de la imagen y se pasan a color de
+         * adelante hacia atrás (cada píxel escrito queda antes de los índices que faltan leer). Antes eran dos bloques (índices
+         * 217 KB + imagen 434 KB): con la PSRAM picada tras horas de juego no cabían y el juego quedaba sin fondo */
+        uint8_t *px = NULL;
+        if (w > 0 && h > 0 && w <= 466 && h <= 466) {
+            const size_t tam = (size_t)w * h * bpp;
+#ifdef ESP_PLATFORM
+            px = heap_caps_malloc(tam, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (!px) { /* se sueltan las otras pantallas y la caché de imágenes, y otra vez */
+                for (int k = 0; k < PANT_MAX; k++) if (k != id && !art_pantalla_en_uso(k)) art_pantalla_liberar(k);
+                lv_image_cache_drop(NULL);
+                px = heap_caps_malloc(tam, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             }
+            if (!px && !(avisado & (1u << n))) {
+                avisado |= 1u << n;
+                hal_evento("juego: sin memoria para el fondo pj%d (%u KB; PSRAM libre %u KB, bloque mayor %u KB)", n, (unsigned)(tam / 1024),
+                           (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024), (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
+            }
+#else
+            px = malloc(tam);
+#endif
         }
-        free(idx);
+        uint8_t *idx = px ? px + (size_t)w * h * (bpp - 1) : NULL;
+        if (px && 1 + np * 3 < largo - 12 && fd_lz(d + 1 + np * 3, f + largo, idx, (uint32_t)w * h)) {
+            if (alfa) {
+                uint32_t pal[256] = {0};
+                for (unsigned i = 1; i < np && i < 256; i++) pal[i] = 0xFF000000u | ((uint32_t)d[1 + i * 3] << 16) | ((uint32_t)d[2 + i * 3] << 8) | d[3 + i * 3];
+                for (int i = 0; i < w * h; i++) { const uint32_t c = pal[idx[i]]; memcpy(px + (size_t)i * 4, &c, 4); }
+            } else {
+                uint16_t pal[256] = {0};
+                for (unsigned i = 0; i < np && i < 256; i++) {
+                    const uint32_t c = A(((uint32_t)d[1 + i * 3] << 16) | ((uint32_t)d[2 + i * 3] << 8) | d[3 + i * 3]);
+                    pal[i] = (uint16_t)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x1F));
+                }
+                for (int i = 0; i < w * h; i++) { const uint16_t c = pal[idx[i]]; memcpy(px + (size_t)i * 2, &c, 2); }
+            }
+            memset(&s_pant[id].dsc, 0, sizeof(lv_image_dsc_t));
+            s_pant[id].dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+            s_pant[id].dsc.header.cf = alfa ? LV_COLOR_FORMAT_ARGB8888 : LV_COLOR_FORMAT_RGB565;
+            s_pant[id].dsc.header.w = (uint32_t)w;
+            s_pant[id].dsc.header.h = (uint32_t)h;
+            s_pant[id].dsc.header.stride = (uint32_t)(w * bpp);
+            s_pant[id].dsc.data_size = (uint32_t)(w * h * bpp);
+            s_pant[id].dsc.data = px;
+            s_pant[id].px = px;
+            res = &s_pant[id].dsc;
+        } else free(px);
     }
     free(f);
     if (res) { if (x) *x = pos[n][0]; if (y) *y = pos[n][1]; }
