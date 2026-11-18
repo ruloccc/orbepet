@@ -1517,6 +1517,12 @@ static void animar_pochi(void)
         s_po_chequeo = s_ms;
         if (s_pet->etapa == STAGE_HUEVO || s_interior || s_panel != PANEL_NINGUNO || s_juego != JG_NADA || s_sim_on) return;
         if (s_ultimo_t < s_po_proxima || pet_weather(s_pet) == CLIMA_TORMENTA || s_escena != (int)s_pet->escena) return;
+        { /* (1.0.21) con una visita (o el vecino) no llega: dos criaturas más ponían lento el juego. Espera a que se vaya y un rato más */
+            static uint32_t visita_ms;
+            if (s_visita.visible || s_vecino.visible) { visita_ms = s_ms ? s_ms : 1; s_po_quiere = false; return; }
+            if (visita_ms && s_ms - visita_ms < 6u * 60u * 1000u) return;
+            visita_ms = 0;
+        }
         if (s_pet->dormida) { if (!s_nino && azar() % 180 < 1) po_acurruca_empezar(); return; } /* (fw 102) durmiendo: rara vez llega en puntillas */
         if (po_ocupada()) { /* (fw 108) no llega en medio de una actividad: si le tocaba, espera y llega apenas termine */
             if (azar() % 60 < 1) s_po_quiere = true;

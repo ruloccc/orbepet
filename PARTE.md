@@ -52,7 +52,8 @@ Al publicar a mano desde `compilados`: NO copiar mascota.elf al repo público (s
 a 640 B (~2 KB): ahora pide 3072/1024. Registra «micrófono: abierto (RAM DMA …)» la primera vez. ota.c E_BAJAR: tras grabar
 el programa llama recursos_al_dia() (los pj*.bin nuevos llegan en el mismo viaje). art.c art_fondo_dos: un solo bloque
 (los índices se descomprimen al final del búfer de la imagen y se convierten hacia adelante), reintento tras soltar las
-otras pantallas y la caché; eventos «juego: no está el fondo pjN» / «sin memoria para el fondo».
+otras pantallas y la caché; eventos «juego: no está el fondo pjN» / «sin memoria para el fondo». ui_pochi.inc: con
+s_visita o s_vecino visibles Pochi no llega (ni queda pendiente); llega recién 6 min después de que se fueron.
 
 **1.0.20 (soplido e informes)** — SOPLIDO: services.c reconoce el soplido en tarea_mic (trozos de 16 ms;
 hal_mic_soplido(umbral, seguido, pausa), hal_mic_soplos() cuenta, hal_mic_pico() para dibujar); main.c 5c solo cuenta

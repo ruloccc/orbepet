@@ -816,6 +816,8 @@ En el orbe:
   la versión nueva. Antes había que volver a apretar BUSCAR ACTUALIZACIÓN con la versión nueva ya puesta.
 - El fondo se arma en un solo bloque de memoria (antes dos): cabe aunque la memoria esté picada tras horas de juego.
 - Si un fondo no aparece, EVENTOS RAROS dice por qué (no está el archivo o no hubo memoria).
+- **Pochi no llega mientras hay una visita** (o el vecino): eran demasiadas criaturas y el juego se ponía lento. Espera a
+  que la visita se vaya y unos 6 minutos más.
 
 ## Versión 1.0.20 — el soplido se oye y los errores se mandan desde el orbe
 
