@@ -1235,6 +1235,45 @@ static void comando_probar(const char *l)
         int zz = 0, jj = 0, vv = -1;
         if (hal_display_lock()) { zz = ui_zona(); jj = ui_zj_estado(); vv = ui_escena_vista(); hal_display_unlock(); }
         printf("MASCOTA PROBAR LUGARINFO OK zona=%d juego=%d vista=%d escena=%d\n", zz, jj, vv, (int)s_pet.escena);
+    } else if (sscanf(l, "ZDABRIR %d", &a) == 1) { /* (1.0.23) abre un juego de a dos (0..3) o de la isla (4 faro, 5 buceo) */
+        if (a < 0 || a > 5) { printf("MASCOTA PROBAR ZDABRIR ERROR %d\n", a); return; }
+        s_pet.dormida = 0;
+        s_pet.ultima_interaccion = ahora();
+        if (hal_display_lock()) { ui_close_panel(); ui_zd_abrir(a); hal_display_unlock(); }
+        probar_info("ZDABRIR");
+    } else if (!strcmp(l, "ZDINFO")) { /* (1.0.23) -1 cerrado; si no fase*1000 + puntos*10 + la visita (fase 0 portada, 1 jugando, 2 final) */
+        int e = -1;
+        if (hal_display_lock()) { e = ui_zd_estado(); hal_display_unlock(); }
+        printf("MASCOTA PROBAR ZDINFO OK estado=%d fase=%d\n", e, e < 0 ? -1 : e / 1000);
+    } else if (sscanf(l, "ISLATOQUE %d %d", &a, &b) == 2) { /* (1.0.23) como tocar (x, y) en la isla: el faro o la piedra del buceo */
+        bool hizo = false;
+        s_pet.dormida = 0;
+        if (hal_display_lock()) { ui_close_panel(); hizo = ui_test_isla_toque(a, b); hal_display_unlock(); }
+        printf("MASCOTA PROBAR ISLATOQUE OK hizo=%d\n", hizo ? 1 : 0);
+    } else if (!strcmp(l, "RECURSOS")) { /* (1.0.23) los fondos de los juegos en la memoria de recursos: nombre:bytes (-1 = falta) */
+        printf("MASCOTA PROBAR RECURSOS OK");
+        for (int k = 0; k < 6; k++) { char nom[12]; snprintf(nom, sizeof nom, "pj%d.bin", k); printf(" pj%d=%d", k, hal_res_size(nom)); }
+        printf("\n");
+    } else if (sscanf(l, "FONDODOS %d", &a) == 1) { /* (1.0.23) arma el fondo pj<a> (como al abrir el juego): ok y cuánta PSRAM quedó */
+        const lv_image_dsc_t *f = NULL;
+        if (a >= 0 && a < 6 && hal_display_lock()) { f = art_fondo_dos(a, NULL, NULL); hal_display_unlock(); }
+        printf("MASCOTA PROBAR FONDODOS %s n=%d w=%d h=%d psram=%u bloque=%u\n", f ? "OK" : "ERROR", a, f ? (int)f->header.w : 0, f ? (int)f->header.h : 0,
+               (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024), (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
+    } else if (sscanf(l, "OLOR %d", &a) == 1) { /* (1.0.23) le pone olor: 6 = hedionda «suelta» (se va soplando o tocando los vahos), 0 = sin olor */
+        s_pet.hediondo = (uint8_t)(a < 0 ? 0 : a > 30 ? 30 : a); s_pet.hediondo_min = 0; s_pet.dormida = 0;
+        probar_info("OLOR");
+    } else if (!strcmp(l, "SOPLOS")) { /* (1.0.23) el micrófono: ¿alguien espera un soplido?, ¿abrió?, soplidos oídos, nivel, niebla y olor */
+        bool q = false;
+        if (hal_display_lock()) { q = ui_wants_mic(); hal_display_unlock(); }
+        printf("MASCOTA PROBAR SOPLOS OK quiere=%d abierto=%d soplos=%u nivel=%d niebla=%d olor=%d dma=%u\n", q ? 1 : 0, hal_mic_ok() ? 1 : 0, (unsigned)hal_mic_soplos(),
+               hal_mic_level(), pet_fog(&s_pet, ahora()) ? 1 : 0, (int)s_pet.hediondo, (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+    } else if (sscanf(l, "FUSION %d", &a) == 1) { /* (1.0.23) 0 apaga «juntar áreas por redibujar» (como antes de la 1.0.22) para comparar; 1 la vuelve a poner */
+        if (hal_display_lock()) { ui_inv_fusion(a != 0); hal_display_unlock(); }
+        printf("MASCOTA PROBAR FUSION OK %d\n", a != 0);
+    } else if (!strcmp(l, "VELOCIDAD")) { /* (1.0.23) los últimos 3 s de la pantalla: cuadros, ms por cuadro, kpx por cuadro, animar */
+        int vc, vp, vm, vk, vt, vtm;
+        hal_vel_info2(&vc, &vp, &vm, &vk, &vt, &vtm);
+        printf("MASCOTA PROBAR VELOCIDAD OK cuadros=%d ms=%d max=%d kpx=%d animar=%d animar_max=%d ram=%u\n", vc, vp, vm, vk, vt, vtm, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     } else if (!strcmp(l, "SALIRLUGAR")) { /* (v97) cierra el juego del lugar (si hay) y sale de la zona secreta */
         if (hal_display_lock()) { ui_demo_zona_salir(); hal_display_unlock(); }
         probar_info("SALIRLUGAR");

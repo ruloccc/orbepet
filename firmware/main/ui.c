@@ -6123,6 +6123,8 @@ static bool isla_toque(int x, int y)
     return false;
 }
 
+bool ui_test_isla_toque(int x, int y) { return isla_toque(x, y); } /* (1.0.23, pruebas por cable) */
+
 static void fondo_cb(lv_event_t *e)
 {
     (void)e;

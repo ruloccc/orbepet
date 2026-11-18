@@ -213,7 +213,11 @@ bool ui_wants_mic(void);
 void ui_mic_blow(void);
 void ui_set_llave_informe(bool si);
 void ui_inv_fusionar(lv_event_t *e); /* (1.0.22) junta áreas por redibujar antes de que LVGL se rinda y redibuje todo */
-void ui_inv_fusion(bool si);           /* (pruebas) apagarlo para comparar */ /* (1.0.20) ya se cargó la llave de los informes */
+void ui_inv_fusion(bool si);
+/* (1.0.23) pruebas por cable de lo nuevo */
+bool ui_test_isla_toque(int x, int y); /* lo mismo que tocar (x, y) en la isla: true si abrió algo o contestó */
+void ui_zd_abrir(int n);              /* 0 ping pong, 1 cuerda, 2 memorice, 3 escondidas, 4 faro, 5 buceo */
+int ui_zd_estado(void);               /* -1 cerrado; si no, fase*1000 + puntos*10 + la visita */           /* (pruebas) apagarlo para comparar */ /* (1.0.20) ya se cargó la llave de los informes */
 /* una alarma está sonando en pantalla: main mantiene la pantalla encendida */
 bool ui_alarm_ringing(void);
 /* suena la alarma "siempre" de otra mascota (no la activa) */
