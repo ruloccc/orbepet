@@ -1,4 +1,4 @@
-# PARTE — estado del trabajo (18-nov-2026, 19:30)
+# PARTE — estado del trabajo (18-nov-2026, 20:45)
 
 > **Sesión del 18-nov 19:10-19:45:** se revisaron los informes (prueba total 17:10, rendimiento 18:39 y 19:06,
 > registro 18:30) y se arregló el probador (solo herramientas, sin firmware nuevo): **3a hecho** (respaldo en
@@ -9,7 +9,7 @@
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4, ESP-IDF 5.5). **Responder siempre en
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
-Versión publicada: **1.0.23** («PRUEBAS, POCHI Y FARO»). Partida **versión 42** (no cambia desde el 104).
+Versión publicada: **1.0.24** («DESPEDIDA Y SONIDOS SIN TIRONES»). Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
@@ -212,7 +212,17 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
    Revisar: la línea «RESPALDO: tus mascotas quedaron como antes…» al final del informe; si los 6 juegos, la niebla
    y el bote siguen fallando con la pantalla encendida (si siguen, ahí sí es el firmware); y la tabla de velocidad
    con kpx de verdad (FUSION 0/1).
-1. **Pantalla de las despedidas lenta** (pedido del usuario 18-nov, 19:44): es el viaje de despedida = «final
+0b. **1.0.24 publicada (18-nov noche)** — lo que hay que mirar en el próximo informe de RENDIMIENTO + registro:
+   «final regular» ya no SIN RESPUESTA y el evento «despedida: empieza (viaje N), paisaje listo/NO CUPO; PSRAM …»;
+   «sonido ambiente 5/6/7» y «sonido 68» sin picos de segundos. Los informes del PC se guardan con fecha y hora en
+   `Documentos\MascotaPruebas\informe_AAAA-MM-DD_HH-MM-SS.txt` (y el último como `informe.txt`): pedir esos.
+   Informe de rendimiento del 18-nov 19:45 (1.0.23, ya midiendo despierta): el dibujo normal va bien (zonas 3-24 ms,
+   paneles 4-25 ms); lo malo eran el final regular (pegado: reinicio) y los sonidos (ambiente 5 = 1018 ms de promedio,
+   máx 3909; ambiente 7 máx 1333; sonido 68 máx 1426; 61/62 637 ms). Lo que sigue en lo lento normal: clima en el prado
+   (despejado 43, lluvia 38, nublado 34 ms), Pochi 44, isla de noche 39, lago helado 36, juegos 35-51 ms.
+   OJO: en esta sesión NO se pudo compilar ni correr el simulador (sin red ni ESP-IDF): la 1.0.24 la validó solo la
+   compilación de GitHub. Antes de tocar de nuevo la despedida, correr en el simulador `final.js` y `regresion.js`.
+1. (hecho en la 1.0.24, ver 0b) **Pantalla de las despedidas lenta** (pedido del usuario 18-nov, 19:44): es el viaje de despedida = «final
    regular» (`ui.c` desde «El viaje de despedida», `viaje_tic`/`viaje_*`, VIAJE_MS 17800). En la prueba total dio
    164 ms por cuadro (máx 254) y en la de rendimiento de las 19:06 quedó SIN RESPUESTA (después la RAM sube: parece
    reinicio). Causa probable, vista en el código: `s_via_negro` es un velo de 466×466 y se le hace
