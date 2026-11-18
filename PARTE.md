@@ -3,7 +3,8 @@
 > **Sesión del 18-nov 19:10-19:45:** se revisaron los informes (prueba total 17:10, rendimiento 18:39 y 19:06,
 > registro 18:30) y se arregló el probador (solo herramientas, sin firmware nuevo): **3a hecho** (respaldo en
 > Documentos) y **3b-A hecho** (medir despierta). La sesión no tenía `git`: los archivos se subieron editándolos en
-> la web de GitHub. Falta que el usuario corra «RENDIMIENTO automático» y «Probar lo nuevo» con el probador nuevo.
+> la web de GitHub. Falta que el usuario corra «RENDIMIENTO automático» y «Probar lo nuevo» con el probador nuevo
+> (ya tiene los 3 archivos). Siguiente firmware (1.0.24): la despedida lenta (punto 1 de la sección 3) y la flash.
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4, ESP-IDF 5.5). **Responder siempre en
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
@@ -211,8 +212,24 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
    Revisar: la línea «RESPALDO: tus mascotas quedaron como antes…» al final del informe; si los 6 juegos, la niebla
    y el bote siguen fallando con la pantalla encendida (si siguen, ahí sí es el firmware); y la tabla de velocidad
    con kpx de verdad (FUSION 0/1).
-1. (hecho el 18-nov) Respaldo de las pruebas en Documentos (3a) y medir despierta (3b-A).
-2. **Rendimiento** (sección 3b, rehecha con los informes del 18-nov).
+1. **Pantalla de las despedidas lenta** (pedido del usuario 18-nov, 19:44): es el viaje de despedida = «final
+   regular» (`ui.c` desde «El viaje de despedida», `viaje_tic`/`viaje_*`, VIAJE_MS 17800). En la prueba total dio
+   164 ms por cuadro (máx 254) y en la de rendimiento de las 19:06 quedó SIN RESPUESTA (después la RAM sube: parece
+   reinicio). Causa probable, vista en el código: `s_via_negro` es un velo de 466×466 y se le hace
+   `lv_obj_set_style_opa(s_via_negro, oscuro * 235)` en CADA cuadro, también cuando vale 0 (antes de los 13,4 s) y
+   cuando ya quedó fijo en 235. Cambiar un estilo invalida el objeto entero aunque el valor no cambie: **la pantalla
+   completa se redibuja en cada cuadro durante toda la despedida**, y entre 13,4 y 15,2 s además con mezcla de
+   transparencia sobre todo. Lo mismo, más chico, con `s_via_c1`/`s_via_c2` (opa 255 fija igual se vuelve a poner),
+   las 16 estrellas y los corazones. Arreglo propuesto (seguro, no cambia cómo se ve):
+   (a) un ayudante `opa_si_cambia(obj, v)` que guarda el último valor y solo llama a `lv_obj_set_style_opa` si
+   cambió; usarlo en todo `viaje_*` (y de paso en `ui_final.inc`, el final secreto, que hace lo mismo);
+   (b) `s_via_negro` oculto (`ocultar(…, true)`) mientras `oscuro == 0`;
+   (c) las estrellas: titilar con 8 niveles de opacidad (no 255) y moverlas solo si cambian de píxel.
+   Comprobar con el simulador: kpx por cuadro del final antes/después (`sim_test_panel` / la escena del final) y
+   `regresion.js` igual; en el orbe, «final regular» en RENDIMIENTO (con medir despierta). Va en la 1.0.24 junto
+   con las escrituras a flash (3b-B1).
+2. (hecho el 18-nov) Respaldo de las pruebas en Documentos (3a) y medir despierta (3b-A).
+3. **Rendimiento** (sección 3b, rehecha con los informes del 18-nov).
 2. **Pendiente del usuario «o la hormigas»** (sección 1): preguntarle dónde salió.
 3. **Editor de personajes** (conversación del 17-nov): el arte nuevo es de 48 px (96 los grandes) y el editor dibuja
    íconos de 24×24. Acordado: primero abrir el dibujo de fábrica en 48×48 para retocarlo (`art_icono_lado_de_bytes`),
