@@ -1452,7 +1452,52 @@ void __wrap_lv_obj_invalidate(const lv_obj_t *obj)
             if (k == s_inv_n) s_inv_obj[s_inv_n++] = obj;
         }
     }
+    { /* (1.0.21, diagnóstico) cuántas veces se invalida cada objeto (para ver qué transparencias se redibujan) */
+        extern void alfa_contar(const lv_obj_t *o);
+        alfa_contar(obj);
+    }
     __real_lv_obj_invalidate(obj);
+}
+/* (1.0.21) las imágenes con transparencia (ARGB8888) a la vista: dónde están y cuántas veces se redibujaron */
+static struct { const lv_obj_t *o; int n; } s_alfa_inv[512]; static int s_alfa_inv_n;
+void alfa_contar(const lv_obj_t *o)
+{
+    if (!o) return;
+    for (int i = 0; i < s_alfa_inv_n; i++) if (s_alfa_inv[i].o == o) { s_alfa_inv[i].n++; return; }
+    if (s_alfa_inv_n < 512) { s_alfa_inv[s_alfa_inv_n].o = o; s_alfa_inv[s_alfa_inv_n].n = 1; s_alfa_inv_n++; }
+}
+static int alfa_veces(const lv_obj_t *o)
+{
+    int n = 0;
+    for (const lv_obj_t *p = o; p; p = lv_obj_get_parent(p))
+        for (int i = 0; i < s_alfa_inv_n; i++) if (s_alfa_inv[i].o == p) { if (p == o) n += s_alfa_inv[i].n; }
+    return n;
+}
+static char s_alfa_txt[16384]; static int s_alfa_len;
+static void alfa_recorrer(lv_obj_t *o)
+{
+    if (!o || lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) return;
+    if (lv_obj_check_type(o, &lv_image_class)) {
+        const void *src = lv_image_get_src(o);
+        if (src && lv_image_src_get_type(src) == LV_IMAGE_SRC_VARIABLE) {
+            const lv_image_dsc_t *d = src;
+            lv_area_t a; lv_obj_get_coords(o, &a);
+            const int w = lv_area_get_width(&a), h = lv_area_get_height(&a);
+            const int opa = lv_obj_get_style_opa_recursive(o, LV_PART_MAIN);
+            if (w * h >= 900 && s_alfa_len < (int)sizeof s_alfa_txt - 200)
+                s_alfa_len += snprintf(s_alfa_txt + s_alfa_len, sizeof s_alfa_txt - s_alfa_len, "%d %d %d %d %d %d %d %d\n",
+                                       (int)a.x1, (int)a.y1, w, h, (int)d->header.cf, alfa_veces(o), opa, (int)d->header.w * (int)d->header.h);
+        }
+    }
+    for (uint32_t i = 0; i < lv_obj_get_child_count(o); i++) alfa_recorrer(lv_obj_get_child(o, (int32_t)i));
+}
+EXPORT(sim_alfa_limpiar) void sim_alfa_limpiar(void) { s_alfa_inv_n = 0; }
+EXPORT(sim_alfa_scan) const char *sim_alfa_scan(void)
+{
+    s_alfa_len = 0; s_alfa_txt[0] = 0;
+    alfa_recorrer(lv_screen_active());
+    alfa_recorrer(lv_layer_top());
+    return s_alfa_txt;
 }
 const char *ui_dbg_obj_nombre(const void *o);
 EXPORT(sim_inv_n) int sim_inv_n(void) { return s_inv_n; }

@@ -6105,6 +6105,22 @@ static void caca_cb(lv_event_t *e)
     accion(ACT_LIMPIAR, 0);
 }
 
+static void zj_abrir(int jg); /* (ui_zjuegos.inc) */
+static art_periodo_t periodo_de(const pet_t *p, uint32_t utc);
+/* (1.0.21) en la isla, tocar el faro abre su juego y tocar el agua sobre la piedra de la izquierda, el buceo (también están en Jugar) */
+static bool isla_toque(int x, int y)
+{
+    if (s_interior || s_escena != ESC_ISLA || !s_pet || s_pet->dormida || s_panel != PANEL_NINGUNO || zj_activo()) return false;
+    if (x >= 354 && x <= 426 && y >= 100 && y <= 250) { /* la torre del faro */
+        if (periodo_de(s_pet, s_ultimo_t) == PERIODO_DIA) { globo(ICO_FARO, s_nino ? NULL : "EL FARO SE ENCIENDE AL ATARDECER: VUELVE DE NOCHE A GUIAR LOS BOTES", 2600); return true; }
+        zj_abrir(10); /* ZJ_FARO */
+        return true;
+    }
+    const int dx = x - 44, dy = y - 140; /* la piedra de la izquierda y el agua de encima */
+    if (dx * dx + dy * dy < 46 * 46) { zj_abrir(11); return true; } /* ZJ_BUCEO */
+    return false;
+}
+
 static void fondo_cb(lv_event_t *e)
 {
     (void)e;
@@ -6115,6 +6131,7 @@ static void fondo_cb(lv_event_t *e)
     if (s_baile_on) { baile_toque(pt.x, pt.y); return; }
     if (colocar_toque(pt.x, pt.y)) return;                    /* pones un juguete */
     if (s_juego != JG_NADA) { esco_toque(pt.x, pt.y); return; } /* jugando no se la llama */
+    if (isla_toque(pt.x, pt.y)) { s_toque1_x = -1000; return; }
     int d = decor_en(pt.x, pt.y);                            /* tres toques sobre una decoración: guardarla */
     if (d >= 0 && toques_seguidos(4000 + d) >= 3) { mostrar_quitar(QUITAR_DECOR, d, pt.x + 20, pt.y - 30); s_toque1_x = -1000; return; }
     bool doble = s_ms - s_toque1_ms < 500 && abs(pt.x - s_toque1_x) < 50 && abs(pt.y - s_toque1_y) < 50;

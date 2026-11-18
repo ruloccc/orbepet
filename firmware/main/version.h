@@ -11,8 +11,8 @@
  */
 #pragma once
 
-#define FW_VERSION "1.0.21"
-#define FW_NOMBRE "MICRÓFONO Y FONDOS"
+#define FW_VERSION "1.0.22"
+#define FW_NOMBRE "LA ISLA SE TOCA"
 
 /* «1.0.09» → 10009, para comparar cuál es más nueva (−1 si el texto no es una versión) */
 static inline int fw_codigo(const char *v)

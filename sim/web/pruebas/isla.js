@@ -66,6 +66,19 @@ const DIR = process.argv[2] || '/tmp/isla';
   x.sim_zd_abrir(4); s.frames(20); s.tap(233, 233); s.frames(30);
   x.sim_touch(300, 300, 1); for (let k = 0; k < 400; k++) { x.sim_touch(300, 300, 1); s.frames(1, 33); } x.sim_touch(300, 300, 0);
   s.png(`${DIR}/faro_dedo.png`); s.tap(233, 417); s.frames(20);
+  // (1.0.21) en la escena: tocar el faro (de noche) abre el faro; tocar el agua sobre la piedra de la izquierda, el buceo
+  for (let k = 0; k < 6 && x.sim_zd_estado() !== -1; k++) { s.tap(233 + 29, 417); s.frames(30); s.tap(233, 417); s.frames(30); }
+  x.sim_go(5); s.frames(200); calma();
+  for (let k = 0; k < 300 && !(x.sim_periodo() === 1 && x.sim_hora_su() >= 18 && x.sim_hora_su() < 21); k++) { x.sim_set_now(x.sim_now() + 600); s.frames(2); } s.frames(60); calma();
+  s.png(`${DIR}/escena_atardecer.png`);
+
+  s.tap(392, 130); s.frames(20);
+  if (x.sim_zd_estado() !== 0) mal('tocar el faro no abrió su juego (' + x.sim_zd_estado() + ')'); else console.log('tocar el faro: abre el juego');
+  s.tap(233, 417); s.frames(30); calma();
+  s.tap(44, 140); s.frames(20);
+  if (x.sim_zd_estado() !== 0) mal('tocar la piedra no abrió el buceo (' + x.sim_zd_estado() + ')'); else console.log('tocar la piedra: abre el buceo');
+  s.png(`${DIR}/buceo_por_piedra.png`);
+  s.tap(233, 417); s.frames(30);
   console.log(malos ? `${malos} problemas` : 'juegos de la isla: todo bien');
   process.exit(malos ? 1 : 0);
 })();
