@@ -268,6 +268,11 @@ def terminar_desbloqueo(p, hubo):
         p.leer(8)
         r = p.cmd("RESTAURAR", 1.5)
     ok = bool(r) and "ERROR" not in r
+    if not ok and r and "no hay respaldo" in r:
+        # (1.0.23) la PRUEBA TOTAL ya la devolvió por el camino (fases 22, 23, 25 y 26 restauran y borran el respaldo):
+        # no queda nada que devolver; lo de las fases siguientes es poco (puntos de juegos, la hora ya volvió con MOMENTO REAL)
+        print("La partida ya se había devuelto durante la prueba (no quedaba respaldo por usar). Está bien.")
+        return True
     print("Partida devuelta a como estaba antes de la prueba." if ok else
           "No pude restaurar: " + str(r) + "  (el respaldo sigue en la placa: usa «Restaurar partida»)")
     return ok
