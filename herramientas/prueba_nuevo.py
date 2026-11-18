@@ -97,6 +97,8 @@ def correr(p, sal, pr, guiado=False, anota=None):
           "OK" if k and "SI" in k else "AVISO")
     cmd("CERRAR", 0.5)
     cmd("PANTALLA 1", 0.5)
+    if hasattr(pr, "medir_despierta"):
+        pr.medir_despierta(p)  # (1.0.24) la 1.0.23 corrió esta prueba con la pantalla apagada y ella dormida: los juegos no abrían y la tabla daba 0 kpx
     d0 = p.info() or {}
     anota(f"memoria al empezar: RAM interna {d0.get('ram')} B (bloque mayor {d0.get('mayor')}), PSRAM {d0.get('psram')} KB")
 
@@ -258,6 +260,8 @@ def correr(p, sal, pr, guiado=False, anota=None):
     cmd("FUSION 1", 0.2)
     cmd("CLIMA 0", 1.0)
     cmd("MOMENTO REAL", 1.0)
+    if hasattr(pr, "medir_despierta"):
+        pr.medir_despierta(p, False)
 
     # ------------------------------------------------------------ memoria al final
     d = p.info() or {}
