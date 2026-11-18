@@ -296,6 +296,13 @@ class App(tk.Tk):
         ttk.Label(g, text="Cada respaldo queda en una subcarpeta con fecha. Elige un lugar FUERA de C:\\mascota para no perderlo al limpiar esa carpeta.",
                   wraplength=780, justify="left").pack(anchor="w", pady=(4, 0))
 
+        # (1.0.20) la llave de los informes: se carga una vez y el orbe manda sus errores a GitHub (Ajustes → Versión → ENVIAR INFORME)
+        g = self.plegable(t_res, "Llave de informes (para ENVIAR INFORME desde el orbe)", "Pega la llave de GitHub que creaste para orbepet-informes. Se guarda solo en la placa: no se muestra ni queda en el registro.", abierto=True)
+        fila = ttk.Frame(g); fila.pack(fill="x")
+        b = ttk.Button(fila, text="Cargar llave de informes…", command=self.cargar_llave); b.pack(side="left"); self.botones.append(b)
+        b = ttk.Button(fila, text="¿Tiene llave?", command=lambda: self.orden_llave("?")); b.pack(side="left", padx=6); self.botones.append(b)
+        b = ttk.Button(fila, text="Borrar llave", command=lambda: self.orden_llave("BORRAR")); b.pack(side="left"); self.botones.append(b)
+
         fa = ttk.Frame(self, padding=(8, 2)); fa.pack(fill="x")
         self.b_stop = ttk.Button(fa, text="Detener", command=self.detener, state="disabled"); self.b_stop.pack(side="left")
         ttk.Button(fa, text="Copiar informe", command=self.copiar_informe).pack(side="left", padx=6)
@@ -1317,6 +1324,40 @@ class App(tk.Tk):
             r = subprocess.run([exe, "-pfiaC", "-e", elf] + dirs, capture_output=True, text=True)
             print("Dónde falló (de adentro hacia afuera):")
             print(r.stdout or r.stderr)
+        self.tarea(f)
+
+    def cargar_llave(self):
+        from tkinter import simpledialog
+        k = simpledialog.askstring("Llave de informes", "Pega la llave (empieza con github_pat_):", show="*", parent=self)
+        if not k:
+            return
+        k = k.strip()
+        if len(k) < 20 or any(c.isspace() for c in k):
+            messagebox.showerror("Llave de informes", "Eso no parece una llave de GitHub.")
+            return
+        self.orden_llave(k, secreta=True)
+
+    def orden_llave(self, arg, secreta=False):
+        puerto = self.puerto.get().strip() or "COM5"
+        def f():
+            p = probar.Placa(puerto)
+            try:
+                p.s.reset_input_buffer()
+                p.s.write(("MASCOTA LLAVE " + arg + "\n").encode())
+                r = [l for l in p.leer(3) if l.startswith("MASCOTA OK") or l.startswith("MASCOTA ERROR") or l.startswith("MASCOTA LLAVE")]
+            finally:
+                p.s.close()
+            que = "cargar la llave" if secreta else f"LLAVE {arg}"
+            if not r:
+                print(f"{que}: la placa no contestó (¿tiene la versión 1.0.20 o más nueva?)")
+            elif r[0] == "MASCOTA LLAVE SI":
+                print("La placa YA tiene la llave de informes.")
+            elif r[0] == "MASCOTA LLAVE NO":
+                print("La placa NO tiene llave de informes.")
+            elif r[0].startswith("MASCOTA OK"):
+                print(f"{que}: listo." + (" Ya puedes usar Ajustes → Versión → ENVIAR INFORME en el orbe." if secreta else ""))
+            else:
+                print(f"{que}: no se pudo ({r[0]})")
         self.tarea(f)
 
     def probar_cmd(self, orden):

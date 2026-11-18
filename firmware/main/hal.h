@@ -113,6 +113,10 @@ void hal_touch_enable(bool si);
 /* micrófono (para soplar): se prende solo mientras la interfaz espera un soplido */
 void hal_mic_enable(bool si);
 int hal_mic_level(void); /* fuerza del sonido de los últimos ~30 ms: 0..100 (-1 si no hay micrófono) */
+/* (1.0.20) el soplido se reconoce en la tarea del micrófono: umbral 0..100, cuánto rato seguido y la pausa entre dos */
+void hal_mic_soplido(int umbral, int seguido_ms, int pausa_ms);
+uint32_t hal_mic_soplos(void); /* cuántos soplidos lleva (solo crece): el ciclo mira si cambió */
+int hal_mic_pico(void);        /* el sonido más fuerte desde la última pregunta (0..100, -1 sin micrófono) */
 /* sonido ambiente de fondo, mezclado con los efectos: vol 0 apagado, 1 bajito, 2 normal */
 void hal_ambient_set(ambiente_t a, int vol);
 /* sonidos propios (desde el editor): el reloj usa /res/s<n>.pcm o /res/a<n>.pcm (16 kHz, mono, 16 bits) */

@@ -3065,9 +3065,18 @@ static void panel_mas_ajustes(void)
 /* --- (1.0.09) la versión: número, nombre y fecha; desde aquí se pide actualizar por Wi-Fi --- */
 static char s_red_ota[24] = "ORBEPET";
 void ui_set_red_ota(const char *red) { if (red) snprintf(s_red_ota, sizeof s_red_ota, "%s", red); }
+static bool s_llave_inf; /* (1.0.20) */
+void ui_set_llave_informe(bool si) { s_llave_inf = si; }
 static void version_cb(lv_event_t *e)
 {
     const int q = (int)(intptr_t)lv_event_get_user_data(e);
+    if (q == 2) { /* (1.0.20) mandar el informe de errores a GitHub (por el modo Wi-Fi) */
+        if (!s_llave_inf) { ui_splash("FALTA LA LLAVE", "CONECTA EL ORBE AL COMPUTADOR UNA VEZ Y CARGA LA «LLAVE DE INFORMES» EN EL PROGRAMA", false, 9000); return; }
+        cerrar_panel();
+        ui_splash("ENVIAR INFORME", "ABRIENDO EL WI-FI...", false, 600000);
+        accion(UI_ACCION_INFORME, 0);
+        return;
+    }
     if (q == 1) {
         /* (1.0.13) el modo Wi-Fi tiene su propia pantalla (lista de redes, teclado): aquí solo se avisa que se abre */
         cerrar_panel();
@@ -3093,11 +3102,17 @@ static void panel_version(void)
       snprintf(f, sizeof f, "A LAS %02d:%02d", tm.tm_hour, tm.tm_min);
       lv_obj_t *ho = texto(s_tarjeta, f, C_TINTA, 2, 0); lv_obj_align(ho, LV_ALIGN_TOP_MID, 0, 168); }
 #endif
-    lv_obj_t *b = boton(s_tarjeta, 260, 60, version_cb, 1);
-    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 214);
+    lv_obj_t *b = boton(s_tarjeta, 260, 52, version_cb, 1);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 200);
     lv_obj_set_style_bg_color(b, lv_color_hex(C_VERDE), 0);
     lv_obj_t *bt = texto_c(b, "BUSCAR ACTUALIZACIÓN", C_BLANCO, 2, 240);
     lv_obj_center(bt);
+    /* (1.0.20) el informe de errores: los eventos raros y el registro llegan a GitHub (sin cable) */
+    lv_obj_t *bi = boton(s_tarjeta, 220, 44, version_cb, 2);
+    lv_obj_align(bi, LV_ALIGN_TOP_MID, 0, 260);
+    lv_obj_set_style_bg_color(bi, lv_color_hex(s_llave_inf ? C_VIOLETA : C_BOTON), 0);
+    lv_obj_t *bit = texto_c(bi, "ENVIAR INFORME", C_BLANCO, 2, 200);
+    lv_obj_center(bit);
     volver(version_cb, 0);
 }
 

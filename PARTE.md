@@ -47,13 +47,17 @@ versión publicada está en la rama `compilados` (mascota.elf); para otra: poner
 esperar el flujo «Simbolos de una version» y `git fetch origin elf-<commit7>`; luego
 /home/claude/tc/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e mascota.elf <direcciones>.
 Al publicar a mano desde `compilados`: NO copiar mascota.elf al repo público (solo .bin, .json y recursos/).
-PENDIENTE (pedido del usuario, 18-nov): la NIEBLA no se va al soplar, en ningún mundo; parece que el micrófono no se
-activa (lo mismo que el bote). Pistas: ui_wants_mic() pide el micrófono con niebla (pet_fog && !s_interior); el registro
-del usuario dice «micrófono (música) escuchando» (revisar si el modo música le gana al soplido o si el umbral/nivel no
-llega a ui_mic_blow); en la 1.0.18 el micrófono ya reintenta y anota «micrófono: ...» en EVENTOS RAROS: pedir un
-registro después de soplar a la niebla. Probar también que ui_mic_blow no quede bloqueado por mundo_en_pausa/paneles.
-PENDIENTE (pedido del usuario, para la próxima): mandar los errores desde el orbe (ver la propuesta en la respuesta del
-18-nov: modo Wi-Fi → issue en un repo privado «orbepet-informes» con un token de solo issues guardado en NVS).
+**1.0.20 (soplido e informes)** — SOPLIDO: services.c reconoce el soplido en tarea_mic (trozos de 16 ms;
+hal_mic_soplido(umbral, seguido, pausa), hal_mic_soplos() cuenta, hal_mic_pico() para dibujar); main.c 5c solo cuenta
+los nuevos y llama ui_mic_blow. Umbral 34/220 ms (bote/pesca 24/140 ms). Si esperó ≥ 8 s sin oír nada: evento
+«micrófono: esperó un soplido…» con el pico (cada 10 min como mucho). Si la niebla sigue sin irse, pedir un informe:
+ahí sale si el micrófono abrió y cuánto sonó (si el pico es bajo, bajar el umbral; si «NO pudo abrirse», es la RAM DMA).
+INFORMES: Ajustes → Versión → ENVIAR INFORME (UI_ACCION_INFORME 191) → ota_pedir_informe() (marca 0x1F0A3E55) → ota_modo
+con s_informe: tras conectar va a E_INFORME → enviar_informe(): monta /res, hal_log_read (lo mismo que MASCOTA REGISTRO),
+UTF-8 saneado, POST a api.github.com/repos/ruloccc/orbepet-informes/issues con la llave de NVS «inf_llave»
+(MASCOTA LLAVE <llave>|BORRAR|?; botón en mascota_gui → Respaldo). La llave (fine-grained, sin vencimiento, Issues
+lectura/escritura solo en orbepet-informes) la tiene el usuario; NUNCA ponerla en el código, el registro ni el chat.
+Para leer los informes: `gh issue list -R ruloccc/orbepet-informes` (repo privado: requiere la sesión de GitHub).
 
 **1.0.18 (el faro y el buceo)** — ui_isla.inc (ZJ_FARO 10, ZJ_BUCEO 11, dentro del marco de ui_dos.inc), fondos
 pj4/pj5 (herramientas/dibujar_juegos_isla.py; el faro es el MISMO de la isla). Menú Jugar: primero los de la zona.

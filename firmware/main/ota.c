@@ -90,11 +90,43 @@ void ota_pedir_modo(void)
     esp_restart();
 }
 
+/* (1.0.20) el mismo modo Wi-Fi, pero para mandar un informe (en vez de buscar la versión nueva) */
+#define OTA_MARCA_INFORME 0x1F0A3E55u
+static bool s_informe;
+void ota_pedir_informe(void)
+{
+    s_marca = OTA_MARCA_INFORME;
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_restart();
+}
+
 bool ota_modo_pedido(void)
 {
-    const bool si = s_marca == OTA_MARCA && esp_reset_reason() == ESP_RST_SW;
+    const bool sw = esp_reset_reason() == ESP_RST_SW;
+    const bool si = (s_marca == OTA_MARCA || s_marca == OTA_MARCA_INFORME) && sw;
+    s_informe = si && s_marca == OTA_MARCA_INFORME;
     s_marca = 0;
     return si;
+}
+
+/* (1.0.20) la llave para los informes: una llave de GitHub que SOLO puede crear avisos en el repositorio privado
+ * orbepet-informes. Se carga una vez por cable (MASCOTA LLAVE) y vive en la NVS; nunca va en el código ni en el registro. */
+#define INF_CLAVE_NVS "inf_llave"
+bool ota_informe_llave(void)
+{
+    char k[200];
+    size_t n = sizeof k;
+    const bool ok = hal_storage_get(INF_CLAVE_NVS, k, &n) && n >= 20;
+    memset(k, 0, sizeof k);
+    return ok;
+}
+bool ota_informe_guardar_llave(const char *llave)
+{
+    if (!llave || !llave[0]) return hal_storage_set(INF_CLAVE_NVS, NULL, 0) == ESP_OK;
+    const size_t n = strlen(llave);
+    if (n < 20 || n > 190) return false;
+    for (size_t i = 0; i < n; i++) if ((unsigned char)llave[i] <= ' ' || (unsigned char)llave[i] >= 127) return false;
+    return hal_storage_set(INF_CLAVE_NVS, llave, n) == ESP_OK;
 }
 
 void ota_arranque_ok(void)
@@ -123,7 +155,7 @@ typedef struct {
     char clave[65];
 } ota_wifi_t;
 
-typedef enum { E_INICIO, E_BUSCAR, E_LISTA, E_CLAVE, E_CONECTAR, E_REVISAR, E_AVISO, E_BAJAR, E_FIN } etapa_t;
+typedef enum { E_INICIO, E_BUSCAR, E_LISTA, E_CLAVE, E_CONECTAR, E_REVISAR, E_AVISO, E_BAJAR, E_FIN, E_INFORME } etapa_t;
 
 #define N_REDES 12
 typedef struct { char ssid[33]; int8_t rssi; bool abierta; } red_t;
@@ -432,6 +464,128 @@ static int recursos_al_dia(void)
     return hechos;
 }
 
+/* ------------------------------------------------------------------ (1.0.20) el informe de errores */
+
+#define INF_URL "https://api.github.com/repos/ruloccc/orbepet-informes/issues"
+#define INF_TXT (24576 + 12288 + 512) /* lo mismo que lee el cable (MASCOTA REGISTRO): eventos raros + registro */
+
+/* deja el texto en UTF-8 válido (un corte puede partir una letra con tilde: GitHub rechaza el JSON entero) */
+static void utf8_sanear(char *t, int n)
+{
+    for (int i = 0; i < n;) {
+        const unsigned char c = (unsigned char)t[i];
+        int k = c < 0x80 ? 1 : (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : (c & 0xF8) == 0xF0 ? 4 : 0;
+        if (k > 1 && i + k <= n) for (int j = 1; j < k; j++) if (((unsigned char)t[i + j] & 0xC0) != 0x80) { k = 0; break; }
+        if (k == 0 || i + k > n) { t[i++] = '?'; continue; }
+        i += k;
+    }
+}
+/* agrega s (ya en UTF-8 válido) escapado para JSON; devuelve el nuevo largo */
+static int json_poner(char *o, int v, int cap, const char *s, int n)
+{
+    for (int i = 0; i < n && v < cap - 8; i++) {
+        const unsigned char c = (unsigned char)s[i];
+        if (c == '"' || c == '\\') { o[v++] = '\\'; o[v++] = (char)c; }
+        else if (c == '\n') { o[v++] = '\\'; o[v++] = 'n'; }
+        else if (c == '\t') { o[v++] = '\\'; o[v++] = 't'; }
+        else if (c == '\r') {}
+        else if (c < 0x20) o[v++] = ' ';
+        else o[v++] = (char)c;
+    }
+    return v;
+}
+static int json_poner_txt(char *o, int v, int cap, const char *s) { return json_poner(o, v, cap, s, (int)strlen(s)); }
+
+/* crea un aviso (issue) en orbepet-informes con el registro; devuelve su número, o ≤ 0 y el motivo en por_que */
+static int enviar_informe(char *por_que, size_t npq)
+{
+    char llave[200];
+    size_t nl = sizeof llave - 1;
+    memset(llave, 0, sizeof llave);
+    if (!hal_storage_get(INF_CLAVE_NVS, llave, &nl) || nl < 20) {
+        snprintf(por_que, npq, "FALTA LA LLAVE DE LOS INFORMES: SE CARGA UNA SOLA VEZ CON EL CABLE");
+        return 0;
+    }
+    llave[nl] = 0;
+    if (!s_res_montada) s_res_montada = hal_res_init() == ESP_OK;
+    char *txt = heap_caps_malloc(INF_TXT + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    const int cap = INF_TXT * 2 + 2048;
+    char *js = heap_caps_malloc((size_t)cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!txt || !js) {
+        free(txt); free(js); memset(llave, 0, sizeof llave);
+        snprintf(por_que, npq, "SIN MEMORIA PARA ARMAR EL INFORME");
+        return 0;
+    }
+    int n = s_res_montada ? hal_log_read(txt, INF_TXT) : 0;
+    if (n < 0) n = 0;
+    txt[n] = 0;
+    utf8_sanear(txt, n);
+    const bool panico = strstr(txt, "PÁNICO") != NULL;
+    char cab[512];
+    snprintf(cab, sizeof cab,
+             "Informe mandado desde el orbe (Ajustes → Versión → ENVIAR INFORME).\n\n"
+             "- Versión: %s (%s)\n- RAM interna en el modo Wi-Fi: %u KB\n- Registro: %d bytes%s\n\n",
+             FW_VERSION, FW_NOMBRE, ram_kb(), n, s_res_montada ? "" : " (NO se pudo abrir la memoria de recursos)");
+    /* (el título no lleva comillas ni barras: va tal cual) */
+    int v = snprintf(js, (size_t)cap, "{\"title\":\"Informe del orbe v%s%s\",\"body\":\"", FW_VERSION, panico ? " (hubo un pánico)" : "");
+    v = json_poner_txt(js, v, cap, cab);
+    v = json_poner_txt(js, v, cap, "```text\n");
+    v = json_poner(js, v, cap, txt, n);
+    v = json_poner_txt(js, v, cap, "\n```\n");
+    v += snprintf(js + v, (size_t)(cap - v), "\"}");
+    free(txt);
+
+    esp_http_client_config_t hc = {
+        .url = INF_URL,
+        .method = HTTP_METHOD_POST,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .timeout_ms = 20000,
+        .buffer_size = 2048,
+        .buffer_size_tx = 2048,
+    };
+    esp_http_client_handle_t c = esp_http_client_init(&hc);
+    int num = 0, st = 0;
+    if (c) {
+        char aut[220];
+        snprintf(aut, sizeof aut, "Bearer %s", llave);
+        esp_http_client_set_header(c, "Authorization", aut);
+        memset(aut, 0, sizeof aut);
+        esp_http_client_set_header(c, "Accept", "application/vnd.github+json");
+        esp_http_client_set_header(c, "X-GitHub-Api-Version", "2022-11-28");
+        esp_http_client_set_header(c, "User-Agent", "orbepet");
+        esp_http_client_set_header(c, "Content-Type", "application/json; charset=utf-8");
+        if (esp_http_client_open(c, v) == ESP_OK) {
+            int va = 0;
+            while (va < v) {
+                const int k = esp_http_client_write(c, js + va, v - va > 1024 ? 1024 : v - va);
+                if (k <= 0) break;
+                va += k;
+                uso();
+            }
+            if (va == v) {
+                esp_http_client_fetch_headers(c);
+                st = esp_http_client_get_status_code(c);
+                char r[1536];
+                const int nr = esp_http_client_read_response(c, r, sizeof r - 1);
+                r[nr > 0 ? nr : 0] = 0;
+                const char *q = strstr(r, "\"number\":");
+                if (st == 201 && q) num = atoi(q + 9);
+                else if (st == 201) num = 1;
+            }
+        }
+        esp_http_client_close(c);
+        esp_http_client_cleanup(c);
+    }
+    memset(llave, 0, sizeof llave);
+    free(js);
+    if (num > 0) return num;
+    if (st == 401) snprintf(por_que, npq, "GITHUB NO ACEPTÓ LA LLAVE (¿LA BORRARON?). HAY QUE CARGAR OTRA");
+    else if (st == 403 || st == 404) snprintf(por_que, npq, "LA LLAVE NO TIENE PERMISO PARA ESE REPOSITORIO (ESTADO %d)", st);
+    else if (st) snprintf(por_que, npq, "GITHUB CONTESTÓ CON UN ERROR (ESTADO %d). PRUEBA MÁS RATO", st);
+    else snprintf(por_que, npq, "NO PUDE CONECTARME A GITHUB. PRUEBA MÁS RATO");
+    return 0;
+}
+
 /* ------------------------------------------------------------------ el modo */
 
 static void salir(const char *por_que)
@@ -523,7 +677,7 @@ void ota_modo(void)
                     hal_storage_set("wifi", &s_wifi, sizeof s_wifi);
                 }
                 diag("conectado a la red (RAM %u KB)", ram_kb());
-                etapa = E_REVISAR;
+                etapa = s_informe ? E_INFORME : E_REVISAR;
             } else {
                 revisar_cancelar();
                 if (s_buscar_otra) { etapa = E_BUSCAR; break; }
@@ -564,6 +718,23 @@ void ota_modo(void)
                 salir("al día");
             }
             etapa = E_AVISO;
+            break;
+        }
+        case E_INFORME: { /* (1.0.20) */
+            msg("CONECTADO", "MANDANDO EL INFORME...", false, false);
+            char por_que[96] = "";
+            const int num = enviar_informe(por_que, sizeof por_que);
+            char t[120];
+            if (num > 0) {
+                snprintf(t, sizeof t, "QUEDÓ COMO EL AVISO N° %d. ¡GRACIAS!", num);
+                msg("¡INFORME ENVIADO!", t, false, true);
+                diag("informe enviado: aviso #%d", num);
+            } else {
+                msg("NO SE PUDO MANDAR EL INFORME", por_que, false, true);
+                diag("informe: no se pudo (%s)", por_que);
+            }
+            if (esperar(8000)) salir("CANCELAR");
+            salir(num > 0 ? "informe enviado" : "informe fallido");
             break;
         }
         case E_AVISO:

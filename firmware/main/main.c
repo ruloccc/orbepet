@@ -497,6 +497,7 @@ static void poner_hora(int32_t local)
  *                                   CRIATURA <especie> <etapa> FABRICA lo devuelve
  *   MASCOTA ESPECIE <especie> NOMBRE <texto> | ESPECIE <especie> FABRICA -> MASCOTA OK
  *   MASCOTA ARCHIVO <pjN.bin> INICIO|DATOS|FIN|TIENE -> como SONIDO, para los archivos de la memoria de recursos (1.0.17)
+ *   MASCOTA LLAVE <llave>|BORRAR|? -> MASCOTA OK / MASCOTA LLAVE SI|NO: la llave de GitHub de los informes (1.0.20)
  *   MASCOTA CAMBIOS              -> MASCOTA CAMBIOS I <íconos> S <sonidos> A <ambientes> C <especie*10+etapa> N <especies> */
 
 static EXT_RAM_BSS_ATTR char s_usb_txt[PET_RESPALDO_MAX + 64];
@@ -1693,7 +1694,15 @@ static void comando_usb(const char *l)
 {
     if (strncmp(l, "MASCOTA ", 8)) return;
     l += 8;
-    if (!strcmp(l, "VERSION")) { /* (1.0.09) qué versión tiene: «MASCOTA VERSION 1.0.09 <nombre>» */
+    if (!strncmp(l, "LLAVE", 5)) { /* (1.0.20) la llave de los informes: LLAVE <llave> la guarda, LLAVE BORRAR, LLAVE ? (nunca se muestra ni va al registro) */
+        const char *k = l + 5;
+        while (*k == ' ') k++;
+        if (!strcmp(k, "?")) printf("MASCOTA LLAVE %s\n", ota_informe_llave() ? "SI" : "NO");
+        else if (!strcmp(k, "BORRAR")) { ota_informe_guardar_llave(NULL); printf("MASCOTA OK\n"); hal_log("informe: llave borrada por cable"); }
+        else if (ota_informe_guardar_llave(k)) { printf("MASCOTA OK\n"); hal_log("informe: llave guardada por cable"); }
+        else printf("MASCOTA ERROR llave no valida\n");
+        if (hal_display_lock()) { ui_set_llave_informe(ota_informe_llave()); hal_display_unlock(); }
+    } else if (!strcmp(l, "VERSION")) { /* (1.0.09) qué versión tiene: «MASCOTA VERSION 1.0.09 <nombre>» */
         printf("MASCOTA VERSION %s %s\n", FW_VERSION, FW_NOMBRE);
     } else if (!strcmp(l, "HOLA")) {
         printf("MASCOTA OK %d %s\n", PET_SAVE_VERSION, s_pet.nombre);
@@ -1918,6 +1927,7 @@ void app_main(void)
     hal_log_init();
     { const char *dg = ota_diagnostico(); if (dg) hal_evento("ACTUALIZACIÓN (modo Wi-Fi): %s", dg); } /* (1.0.11) */
     { char red[24]; ota_nombre_red(red, sizeof red); ui_set_red_ota(red); } /* (1.0.11) para Ajustes → Versión */
+    ui_set_llave_informe(ota_informe_llave()); /* (1.0.20) sin llave, ENVIAR INFORME explica cómo cargarla */
     { const char *m = hal_night_wake_reason(); if (m) hal_log("energia: desperté del sueño profundo de noche (%s)", m); } /* (v101) */
     PASO(14);
     if (tenia_marca && paso_antes < 18) /* registro guardado en el dispositivo: desde acá anota el motivo del arranque (y al resumen de eventos raros) */
@@ -2205,6 +2215,16 @@ void app_main(void)
                 hal_log("actualizar: reinicio en el modo Wi-Fi (versión %s)", FW_VERSION);
                 hal_log_flush(true);
                 ota_pedir_modo();
+                break;
+            case UI_ACCION_INFORME: /* (1.0.20) guarda todo y reinicia en el modo Wi-Fi para mandar el informe a GitHub */
+                vTaskDelay(pdMS_TO_TICKS(500));
+                pet_seal(&s_pet);
+                hal_storage_save(&s_pet);
+                guardar_dispositivo();
+                hal_log("informe: pedido desde Ajustes (versión %s, %s, etapa %d, escena %d, %u s encendida); reinicio en el modo Wi-Fi",
+                        FW_VERSION, s_pet.nombre, (int)s_pet.etapa, (int)s_pet.escena, (unsigned)(esp_timer_get_time() / 1000000));
+                hal_log_flush(true);
+                ota_pedir_informe();
                 break;
             case UI_ACCION_FOTO:
                 if (m.arg & 0x10000) pet_photo_legacy(&s_pet, m.arg & 0xFFFF);
@@ -2671,7 +2691,6 @@ void app_main(void)
         s_sec_us[7] = esp_timer_get_time();
         /* 5c. soplar: el micrófono escucha solo cuando la interfaz espera un soplido (niebla, velas, un objeto) */
         {
-            static uint32_t soplo_desde, soplo_pausa;
             uint32_t ms = (uint32_t)(esp_timer_get_time() / 1000);
             bool quiere = false;
             /* (v101) antes se pedía el candado de la pantalla en CADA vuelta solo para preguntar esto, y esperaba que terminara de
@@ -2684,12 +2703,16 @@ void app_main(void)
             s_pet.escucha_musica = s_dispo.musica; /* así ella sabe si puede pedirte su canción */
             bool musica = s_dispo.musica && s_pantalla_on && !s_pet.dormida && s_pet.etapa != STAGE_HUEVO;
             bool tanda = musica && (ms % 20000u) < 6000u; /* en tandas: 6 s de cada 20, para gastar poca batería */
-            hal_mic_enable(quiere || tanda);
-            int nivel = (quiere || tanda) ? hal_mic_level() : 0;
+            /* en el bote soplar tiene que ser fácil: umbral bajo, poco tiempo seguido y se puede repetir enseguida */
+            const bool bote = quiere && ui_escena_especial() & (2 | 32); /* (el cruce en bote y la pesca, v89) */
+            const int umbral = bote ? 24 : 34; /* (1.0.20) antes 26/40, medido de a una muestra suelta */
+            if (quiere) hal_mic_soplido(umbral, bote ? 140 : 220, bote ? 700 : 1200);
+            hal_mic_enable(quiere || tanda); /* (apagado de fábrica: solo se abre mientras algo espera un soplido, o con «escuchar música») */
+            int nivel = quiere ? hal_mic_pico() : tanda ? hal_mic_level() : 0;
             { /* v90: la interfaz ve lo fuerte que suena (el soplido se ve) y sabe si el micrófono funciona */
                 static bool mic_ok_ant = true;
                 const bool ok = hal_mic_ok();
-                if (quiere || ok != mic_ok_ant) if (hal_display_lock()) { ui_mic_nivel(quiere ? nivel : 0); ui_set_mic_ok(ok); hal_display_unlock(); }
+                if (quiere || ok != mic_ok_ant) if (hal_display_lock()) { ui_mic_nivel(quiere ? (nivel > 0 ? nivel : 0) : 0); ui_set_mic_ok(ok); hal_display_unlock(); }
                 mic_ok_ant = ok;
             }
             if (tanda && !quiere && nivel >= 0) {
@@ -2710,22 +2733,29 @@ void app_main(void)
                     mus_ini = 0; mus_n = mus_alto = 0; mus_suma = mus_cuad = 0;
                 }
             } else mus_ini = 0, mus_n = mus_alto = 0, mus_suma = mus_cuad = 0;
-            /* en el bote soplar tiene que ser fácil: umbral bajo, poco tiempo seguido y se puede repetir enseguida */
-            const bool bote = quiere && ui_escena_especial() & (2 | 32); /* (el cruce en bote y la pesca, v89) */
-            const int umbral = bote ? 26 : 40;
-            const uint32_t seguido = bote ? 160u : 250u, pausa = bote ? 700u : 1500u;
-            static uint32_t soplo_bajo;
-            if (quiere && nivel >= umbral) { /* un soplido: fuerte y seguido un rato */
-                soplo_bajo = 0;
-                if (!soplo_desde) soplo_desde = ms;
-                else if (ms - soplo_desde > seguido && (int32_t)(ms - soplo_pausa) > 0) {
-                    if (hal_display_lock()) { ui_mic_blow(); hal_display_unlock(); }
-                    soplo_pausa = ms + pausa;
-                    soplo_desde = 0;
+            /* (1.0.20) el soplido lo reconoce la tarea del micrófono (services.c): aquí solo se cuentan los nuevos */
+            static uint32_t soplos_vistos, esp_ini, esp_soplos, esp_aviso;
+            static int esp_pico, esp_umbral;
+            const uint32_t sp = hal_mic_soplos();
+            if (quiere && sp != soplos_vistos) {
+                if (hal_display_lock()) { ui_mic_blow(); hal_display_unlock(); }
+                hal_log("micrófono: soplido (umbral %d, pico %d)", umbral, nivel);
+                esp_soplos++;
+            }
+            soplos_vistos = sp;
+            /* (1.0.20) si esperó un soplido un buen rato y no oyó ninguno, queda en EVENTOS RAROS (y en el informe): cuánto sonó */
+            if (quiere) {
+                if (!esp_ini) { esp_ini = ms ? ms : 1; esp_soplos = 0; esp_pico = 0; }
+                esp_umbral = umbral;
+                if (nivel > esp_pico) esp_pico = nivel;
+            } else if (esp_ini) {
+                const uint32_t dur = ms - esp_ini;
+                if (dur >= 8000u && !esp_soplos && (!esp_aviso || ms - esp_aviso > 600000u)) {
+                    esp_aviso = ms;
+                    hal_evento("micrófono: esperó un soplido %u s y no oyó ninguno (lo más fuerte: %d; hace falta %d seguido); %s",
+                               (unsigned)(dur / 1000), esp_pico, esp_umbral, hal_mic_ok() ? "el micrófono abrió bien" : "el micrófono NO pudo abrirse");
                 }
-            } else if (soplo_desde) { /* un bajón corto no corta el soplido (el aire no suena parejo) */
-                if (!soplo_bajo) soplo_bajo = ms;
-                if (ms - soplo_bajo > 120) soplo_desde = soplo_bajo = 0;
+                esp_ini = 0;
             }
         }
 

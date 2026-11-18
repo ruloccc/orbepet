@@ -11,8 +11,8 @@
  */
 #pragma once
 
-#define FW_VERSION "1.0.19"
-#define FW_NOMBRE "ARREGLO DE LOS JUEGOS"
+#define FW_VERSION "1.0.20"
+#define FW_NOMBRE "SOPLIDO E INFORMES"
 
 /* «1.0.09» → 10009, para comparar cuál es más nueva (−1 si el texto no es una versión) */
 static inline int fw_codigo(const char *v)

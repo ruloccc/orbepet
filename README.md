@@ -807,6 +807,19 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.20 — el soplido se oye y los errores se mandan desde el orbe
+
+- **Soplar** (la niebla en cualquier mundo, los vahos de cuando anda hedionda, el bote, las velas, la pesca): el micrófono
+  sigue apagado de fábrica y se abre solo mientras algo espera un soplido. Antes el soplido se medía en el ciclo
+  principal mirando el sonido de a una muestra suelta cada 90-250 ms, y bastaba una muestra baja para cortarlo: la
+  niebla casi nunca se iba. Ahora lo reconoce la tarea del micrófono, trozo a trozo (16 ms), con un umbral un poco más
+  bajo (34; en el bote 24). Si espera un soplido más de 8 s sin oír ninguno, queda en EVENTOS RAROS cuánto sonó.
+- **ENVIAR INFORME** (Ajustes → Versión): reinicia en el modo Wi-Fi, se conecta y crea un aviso (issue) en el
+  repositorio privado `ruloccc/orbepet-informes` con los eventos raros y el registro. Al terminar muestra el número del
+  aviso y vuelve al juego. Necesita la **llave de informes** (una llave de GitHub que solo puede crear avisos ahí): se
+  carga UNA vez por cable, en el programa del PC → Respaldo → «Cargar llave de informes…» (o `MASCOTA LLAVE <llave>`).
+  La llave vive solo en la placa: no se muestra, no va al registro ni al código.
+
 ## Versión 1.0.19 — arreglo de los juegos nuevos (pánico, fondos, instrucciones)
 
 - **Pánico al jugar** (1.0.18, buceo): el mismo lugar de la lista de objetos del juego (`s_zj_o[]`) se usaba a veces

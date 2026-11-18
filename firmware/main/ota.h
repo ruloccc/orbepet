@@ -26,3 +26,8 @@ const char *ota_diagnostico(void);
 void ota_nombre_red(char *b, size_t n);
 /* si la última actualización falló y se volvió atrás: la versión que falló (NULL si no) */
 const char *ota_version_fallida(void);
+/* (1.0.20) informe de errores: reinicia en el modo Wi-Fi, que conecta y crea un aviso (issue) en el repositorio privado
+ * ruloccc/orbepet-informes con los eventos raros y el registro. Necesita la llave (se carga por cable: MASCOTA LLAVE). */
+void ota_pedir_informe(void);
+bool ota_informe_llave(void);                       /* ¿ya tiene la llave? */
+bool ota_informe_guardar_llave(const char *llave);  /* NULL o "" la borra */

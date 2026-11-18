@@ -815,6 +815,15 @@ static volatile int s_mic_nivel = -1;
 
 static volatile bool s_mic_falla; /* v90: la última vez no se pudo abrir (falta memoria): la pesca no pide soplar */
 bool hal_mic_ok(void) { return !s_mic_falla; }
+/* (1.0.20) el soplido se reconoce AQUÍ, trozo a trozo (16 ms), y no en el ciclo principal: el ciclo mira el nivel cada
+ * 90-250 ms (espera el candado de la pantalla) y con un solo trozo bajo entre medio el soplido se cortaba. Por eso la niebla
+ * casi nunca se iba. El ciclo solo cuenta los soplidos nuevos (hal_mic_soplos) y el pico (hal_mic_pico) para dibujarlo. */
+static volatile int s_mic_pico;
+static volatile int s_sop_umbral = 34, s_sop_seguido = 220, s_sop_pausa = 1200;
+static volatile uint32_t s_soplos;
+void hal_mic_soplido(int umbral, int seguido_ms, int pausa_ms) { s_sop_umbral = umbral; s_sop_seguido = seguido_ms; s_sop_pausa = pausa_ms; }
+uint32_t hal_mic_soplos(void) { return s_soplos; }
+int hal_mic_pico(void) { int p = s_mic_pico; s_mic_pico = 0; return s_micro ? p : -1; }
 static void tarea_mic(void *arg)
 {
     (void)arg;
@@ -866,7 +875,21 @@ static void tarea_mic(void *arg)
         for (int i = 0; i < (int)(sizeof buf / 2); i++) suma += (int32_t)buf[i] * buf[i];
         float rms = sqrtf((float)suma / (float)(sizeof buf / 2));
         int n = (int)(rms * 100.0f / 9000.0f); /* soplar de cerca satura el micrófono: ~100 */
-        s_mic_nivel = n > 100 ? 100 : n;
+        if (n > 100) n = 100;
+        s_mic_nivel = n;
+        if (n > s_mic_pico) s_mic_pico = n;
+        { /* (1.0.20) el soplido: fuerte y seguido un rato; un bajón corto no lo corta (el aire no suena parejo) */
+            static int alto_ms, bajo_ms, pausa_ms;
+            const int t = (int)(sizeof buf / 4) * 1000 / BOARD_AUDIO_HZ; /* ms de este trozo (estéreo, 16 bits) */
+            pausa_ms = pausa_ms > t ? pausa_ms - t : 0;
+            if (n >= s_sop_umbral) {
+                alto_ms += t; bajo_ms = 0;
+                if (alto_ms >= s_sop_seguido && !pausa_ms) { s_soplos++; pausa_ms = s_sop_pausa; alto_ms = 0; }
+            } else if (alto_ms) {
+                bajo_ms += t;
+                if (bajo_ms > 160) alto_ms = bajo_ms = 0;
+            }
+        }
     }
 }
 
