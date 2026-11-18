@@ -47,6 +47,11 @@ versión publicada está en la rama `compilados` (mascota.elf); para otra: poner
 esperar el flujo «Simbolos de una version» y `git fetch origin elf-<commit7>`; luego
 /home/claude/tc/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e mascota.elf <direcciones>.
 Al publicar a mano desde `compilados`: NO copiar mascota.elf al repo público (solo .bin, .json y recursos/).
+PENDIENTE (pedido del usuario, 18-nov): la NIEBLA no se va al soplar, en ningún mundo; parece que el micrófono no se
+activa (lo mismo que el bote). Pistas: ui_wants_mic() pide el micrófono con niebla (pet_fog && !s_interior); el registro
+del usuario dice «micrófono (música) escuchando» (revisar si el modo música le gana al soplido o si el umbral/nivel no
+llega a ui_mic_blow); en la 1.0.18 el micrófono ya reintenta y anota «micrófono: ...» en EVENTOS RAROS: pedir un
+registro después de soplar a la niebla. Probar también que ui_mic_blow no quede bloqueado por mundo_en_pausa/paneles.
 PENDIENTE (pedido del usuario, para la próxima): mandar los errores desde el orbe (ver la propuesta en la respuesta del
 18-nov: modo Wi-Fi → issue en un repo privado «orbepet-informes» con un token de solo issues guardado en NVS).
 
