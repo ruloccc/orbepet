@@ -420,7 +420,7 @@ static bool recurso_bajar(const char *nom, int tam, uint32_t crc)
 /* devuelve cuántos se bajaron, o -1 si alguno falló */
 static int recursos_al_dia(void)
 {
-    static char lista[512];
+    static EXT_RAM_BSS_ATTR char lista[512];
     if (!json_txt(s_json, "recursos", lista, sizeof lista) || !lista[0]) return 0;
     if (!s_res_montada) {
         if (ram_kb() < 8) { diag("recursos: poca RAM interna (%u KB)", ram_kb()); return -1; }

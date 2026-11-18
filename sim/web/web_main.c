@@ -397,6 +397,7 @@ EXPORT(sim_init) int sim_init(uint32_t ahora, uint32_t seed, int cargada)
     lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_XRGB8888);
     lv_display_set_buffers(s_disp, s_fb, NULL, sizeof s_fb, LV_DISPLAY_RENDER_MODE_DIRECT);
     lv_display_set_flush_cb(s_disp, flush_cb);
+    lv_display_add_event_cb(s_disp, ui_inv_fusionar, LV_EVENT_INVALIDATE_AREA, NULL); /* (1.0.22) igual que en la placa */
     lv_indev_t *in = lv_indev_create();
     lv_indev_set_type(in, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(in, touch_cb);
@@ -1491,6 +1492,8 @@ static void alfa_recorrer(lv_obj_t *o)
     }
     for (uint32_t i = 0; i < lv_obj_get_child_count(o); i++) alfa_recorrer(lv_obj_get_child(o, (int32_t)i));
 }
+EXPORT(sim_invalidar_todo) void sim_invalidar_todo(void) { lv_obj_invalidate(lv_screen_active()); lv_obj_invalidate(lv_layer_top()); }
+EXPORT(sim_inv_fusion) void sim_inv_fusion(int on) { ui_inv_fusion(on != 0); }
 EXPORT(sim_alfa_limpiar) void sim_alfa_limpiar(void) { s_alfa_inv_n = 0; }
 EXPORT(sim_alfa_scan) const char *sim_alfa_scan(void)
 {

@@ -211,7 +211,9 @@ void ui_set_device(const pet_device_t *d);
 /* el micrófono: main lo prende solo cuando la interfaz espera un soplido, y le avisa cuando lo detecta */
 bool ui_wants_mic(void);
 void ui_mic_blow(void);
-void ui_set_llave_informe(bool si); /* (1.0.20) ya se cargó la llave de los informes */
+void ui_set_llave_informe(bool si);
+void ui_inv_fusionar(lv_event_t *e); /* (1.0.22) junta áreas por redibujar antes de que LVGL se rinda y redibuje todo */
+void ui_inv_fusion(bool si);           /* (pruebas) apagarlo para comparar */ /* (1.0.20) ya se cargó la llave de los informes */
 /* una alarma está sonando en pantalla: main mantiene la pantalla encendida */
 bool ui_alarm_ringing(void);
 /* suena la alarma "siempre" de otra mascota (no la activa) */

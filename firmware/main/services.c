@@ -254,6 +254,7 @@ lv_display_t *hal_display_init(void)
         bsp_display_brightness_set(100);
         lv_display_add_event_cb(d, refr_evento, LV_EVENT_REFR_START, NULL);
         lv_display_add_event_cb(d, refr_evento, LV_EVENT_REFR_READY, NULL);
+        { extern void ui_inv_fusionar(lv_event_t *e); lv_display_add_event_cb(d, ui_inv_fusionar, LV_EVENT_INVALIDATE_AREA, NULL); } /* (1.0.22) después del redondeo del BSP */
         lv_display_add_event_cb(d, inv_evento, LV_EVENT_INVALIDATE_AREA, NULL);
     }
     return d;

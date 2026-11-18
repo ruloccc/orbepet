@@ -32,6 +32,8 @@
 
 #include "art.h"
 #include "src/misc/cache/instance/lv_image_cache.h" /* (v96) lv_image_cache_drop */
+#include "src/display/lv_display_private.h" /* (1.0.22) inv_areas / inv_p: juntar áreas antes de que se llene la lista */
+#include "src/misc/lv_area_private.h" /* (lv_area_is_in) */
 
 #define W 466
 #define CX 233
@@ -17342,3 +17344,33 @@ const char *ui_dbg_obj_nombre(const void *o)
     snprintf(b, sizeof b, "hijo de %s (%d,%d %dx%d) idx %d", np, (int)a.x1, (int)a.y1, (int)lv_area_get_width(&a), (int)lv_area_get_height(&a), (int)lv_obj_get_index((const lv_obj_t *)o));
     return b;
 }
+
+/* (1.0.22) LVGL guarda hasta LV_INV_BUF_SIZE (32) rectángulos por redibujar; si llega uno más, se rinde y redibuja la
+ * PANTALLA ENTERA. Con la lluvia (26 gotas = 52 rectángulos), la nieve, las luciérnagas o varios animales a la vez pasaba
+ * casi siempre: el registro decía 178 kpx por cuadro (82 % de la pantalla) aunque se moviera poco. Ahora, cuando la lista
+ * está casi llena, el rectángulo nuevo se junta con el que menos crece al unirlos (y queda "adentro" de él, así LVGL no lo
+ * agrega). Se dibuja un poco más de lo justo, pero nunca la pantalla entera por esto. */
+static bool s_inv_fusion = true;
+void ui_inv_fusion(bool si) { s_inv_fusion = si; }
+void ui_inv_fusionar(lv_event_t *e)
+{
+    if (!s_inv_fusion) return;
+    lv_display_t *d = (lv_display_t *)lv_event_get_current_target(e);
+    lv_area_t *a = (lv_area_t *)lv_event_get_param(e);
+    if (!d || !a || d->inv_p < LV_INV_BUF_SIZE - 4) return;
+    for (uint32_t i = 0; i < d->inv_p; i++) if (lv_area_is_in(a, &d->inv_areas[i], 0)) return; /* ya está adentro de uno */
+    int mejor = -1;
+    int64_t crece_min = INT64_MAX;
+    for (uint32_t i = 0; i < d->inv_p; i++) {
+        const lv_area_t *b = &d->inv_areas[i];
+        if (d->inv_area_joined[i]) continue;
+        lv_area_t u = {LV_MIN(a->x1, b->x1), LV_MIN(a->y1, b->y1), LV_MAX(a->x2, b->x2), LV_MAX(a->y2, b->y2)};
+        const int64_t crece = (int64_t)lv_area_get_size(&u) - (int64_t)lv_area_get_size(b);
+        if (crece < crece_min) { crece_min = crece; mejor = (int)i; }
+    }
+    if (mejor < 0) return;
+    lv_area_t *b = &d->inv_areas[mejor];
+    b->x1 = LV_MIN(a->x1, b->x1); b->y1 = LV_MIN(a->y1, b->y1); b->x2 = LV_MAX(a->x2, b->x2); b->y2 = LV_MAX(a->y2, b->y2);
+    *a = *b; /* LVGL lo ve dentro de uno que ya está: no lo agrega */
+}
+

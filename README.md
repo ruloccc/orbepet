@@ -807,6 +807,17 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.22 — más fluido, más memoria libre y la isla se toca
+
+- **Más fluido con lluvia, nieve, tormenta y de noche:** el sistema de dibujo anota hasta 32 rectángulos por redibujar en
+  cada cuadro; si se mueven más cosas (solo las gotas de lluvia son 52), se rendía y redibujaba la pantalla ENTERA. Ahora,
+  cuando la lista está por llenarse, junta el rectángulo nuevo con el más cercano. En el simulador: con lluvia 72 → 3 mil
+  píxeles por cuadro; de noche 72 → 6 (en el lago 16); tormenta 72 → 11. De día y despejado no cambia (ya era poco).
+- **Más memoria interna libre (~24 KB):** los espacios de trabajo que solo usan las órdenes por cable (respaldo, fotos,
+  criaturas, fiestas, pruebas) y el modo Wi-Fi pasaron a la PSRAM. El juego no los usa mientras juegas.
+- **En la isla:** tocar el faro abre su juego (de día te dice que vuelvas al atardecer) y tocar el agua sobre la piedra
+  de la izquierda abre el buceo. Siguen también en Jugar.
+
 ## Versión 1.0.21 — el micrófono abre de verdad y los fondos llegan con la actualización
 
 - **El micrófono no se abría nunca en una partida larga** (niebla, olor, bote): antes de abrirlo se exigían 8 KB libres de

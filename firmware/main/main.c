@@ -244,7 +244,7 @@ static void carga_tarea(void *arg)
 static void descarga_log(const char *tag)
 {
     uint32_t id[2] = {0, 0}, tot = 0;
-    static TaskStatus_t st[32];
+    static EXT_RAM_BSS_ATTR TaskStatus_t st[32]; /* (1.0.22) solo en la prueba de descarga: a la PSRAM */
     const UBaseType_t n = uxTaskGetSystemState(st, 32, &tot);
     for (UBaseType_t i = 0; i < n; i++) {
         if (!strcmp(st[i].pcTaskName, "IDLE0")) id[0] = st[i].ulRunTimeCounter;
@@ -450,7 +450,7 @@ static void cargar_o_crear_mascota(void)
 
 static void cargar_celebraciones(void)
 {
-    static uint8_t buf[16 + PET_CELEBRACIONES * sizeof(celebracion_t)];
+    static EXT_RAM_BSS_ATTR uint8_t buf[16 + PET_CELEBRACIONES * sizeof(celebracion_t)]; /* (1.0.22) una vez al encender */
     size_t len = sizeof buf;
     if (hal_storage_get("fiestas", buf, &len) && pet_celebrations_unpack(buf, (int)len))
         ESP_LOGI(TAG, "%d celebraciones del editor", pet_celebration_count());
@@ -557,7 +557,7 @@ static void comando_criatura(const char *l)
         return;
     }
     static EXT_RAM_BSS_ATTR uint8_t b[ART_CUERPO_BYTES + 8];
-    static art_cuerpo_t c;
+    static EXT_RAM_BSS_ATTR art_cuerpo_t c; /* (1.0.22) solo por cable: a la PSRAM */
     int n = pet_base64_decode(q, b, sizeof b);
     if (!art_cuerpo_desde_bytes(b, n, &c) || !hal_res_save(nombre, b, n)) { printf("MASCOTA ERROR criatura\n"); return; }
     aplicar_criatura(e, et, &c);
@@ -635,7 +635,7 @@ static void cargar_recursos(void)
     }
     int cu = 0;
     static EXT_RAM_BSS_ATTR uint8_t b[ART_CUERPO_BYTES];
-    static art_cuerpo_t c;
+    static EXT_RAM_BSS_ATTR art_cuerpo_t c; /* (1.0.22) solo por cable: a la PSRAM */
     for (int e = 0; e < pet_species_count(); e++) {
         for (int et = 1; et <= 3; et++) {
             snprintf(n, sizeof n, "c%d%d.bin", e, et);
@@ -1540,7 +1540,7 @@ static void comando_probar(const char *l)
         hal_res_delete("prueba_flash.bin");
         printf("MASCOTA PROBAR FLASH OK vueltas=%d fallo_guardar=%d fallo_leer=%d distinto=%d peor_ms=%d total_ms=%d\n", a, fallo_g, fallo_l, malos, peor, (int)((esp_timer_get_time() - ini) / 1000));
     } else if (!strcmp(l, "FOTOPRUEBA")) { /* guarda una foto falsa, la lista, la lee, la borra y comprueba que se fue */
-        static uint8_t foto[2048], vuelta[2048];
+        static EXT_RAM_BSS_ATTR uint8_t foto[2048], vuelta[2048]; /* (1.0.22) solo por cable */
         for (int k = 0; k < (int)sizeof foto; k++) foto[k] = (uint8_t)(k * 31 + 5);
         uint16_t ids[16];
         const int antes = hal_photo_list(ids, 16);
@@ -1745,7 +1745,7 @@ static void comando_usb(const char *l)
         encender_pantalla(true, 100);
         printf("MASCOTA ESPERANDO\n");
     } else if (!strcmp(l, "FIESTAS")) {
-        static uint8_t bin[16 + PET_CELEBRACIONES * sizeof(celebracion_t)];
+        static EXT_RAM_BSS_ATTR uint8_t bin[16 + PET_CELEBRACIONES * sizeof(celebracion_t)]; /* (1.0.22) solo por cable */
         int n = pet_celebrations_pack(bin, sizeof bin);
         if (n > 0 && pet_base64_encode(bin, n, s_usb_txt, sizeof s_usb_txt) > 0) printf("MASCOTA FIESTAS %s\n", s_usb_txt);
         else printf("MASCOTA ERROR\n");
@@ -1754,7 +1754,7 @@ static void comando_usb(const char *l)
         hal_storage_set("fiestas", NULL, 0);
         printf("MASCOTA OK\n");
     } else if (!strncmp(l, "FIESTAS ", 8)) {
-        static uint8_t bin[16 + PET_CELEBRACIONES * sizeof(celebracion_t)];
+        static EXT_RAM_BSS_ATTR uint8_t bin[16 + PET_CELEBRACIONES * sizeof(celebracion_t)]; /* (1.0.22) solo por cable */
         int n = pet_base64_decode(l + 8, bin, sizeof bin);
         if (n > 0 && pet_celebrations_unpack(bin, n) && hal_storage_set("fiestas", bin, (size_t)n) == ESP_OK) printf("MASCOTA OK\n");
         else printf("MASCOTA ERROR celebraciones no validas\n");
@@ -1838,7 +1838,7 @@ static void enviar_foto(int id)
         free(buf);
         return;
     }
-    static char b64[4 * (3000 / 3) + 8];
+    static EXT_RAM_BSS_ATTR char b64[4 * (3000 / 3) + 8]; /* (1.0.22) solo por cable */
     for (int k = 0; k < n; k += 3000) {
         int m = n - k < 3000 ? n - k : 3000;
         pet_base64_encode(buf + k, m, b64, sizeof b64);

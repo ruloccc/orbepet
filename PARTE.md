@@ -47,6 +47,14 @@ versión publicada está en la rama `compilados` (mascota.elf); para otra: poner
 esperar el flujo «Simbolos de una version» y `git fetch origin elf-<commit7>`; luego
 /home/claude/tc/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e mascota.elf <direcciones>.
 Al publicar a mano desde `compilados`: NO copiar mascota.elf al repo público (solo .bin, .json y recursos/).
+**1.0.22 (más fluido)** — ui.c ui_inv_fusionar (LV_EVENT_INVALIDATE_AREA, registrado DESPUÉS del redondeo del BSP en
+services.c y en el simulador): con inv_p ≥ LV_INV_BUF_SIZE-4 une el área nueva con la que menos crece y la deja «adentro»
+(LVGL no la agrega). Antes, al pasar de 32 áreas LVGL invalidaba la pantalla entera (lv_refr.c lv_inv_area): eso eran los
+178 kpx/cuadro del registro. Prueba: sim/web/pruebas/redibujo.js [semilla] (compara con un redibujo completo; diferencias
+de 1-12 niveles son redondeo). sim_inv_fusion(0) lo apaga para comparar. Memoria: EXT_RAM_BSS_ATTR en los búferes de
+cable de main.c, lista de ota.c y PET_EXT_RAM (core/pet.c) para el tmp del respaldo. Isla: isla_toque() en fondo_cb.
+sim_alfa_scan lista las imágenes con transparencia a la vista (ARGB8888) y cuántas veces se redibujaron.
+
 **1.0.21 (micrófono y fondos)** — services.c: el micrófono pedía dma_libre ≥ 8192 y en partida larga la interna queda en
 ~7,6 KB → no abría nunca. bsp_audio_init ya reservó los DMA de tx y rx (3×160 cuadros); abrir en estéreo solo los rehace
 a 640 B (~2 KB): ahora pide 3072/1024. Registra «micrófono: abierto (RAM DMA …)» la primera vez. ota.c E_BAJAR: tras grabar

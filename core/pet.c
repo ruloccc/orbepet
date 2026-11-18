@@ -22,6 +22,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#if defined(ESP_PLATFORM)
+#include "esp_attr.h"
+#define PET_EXT_RAM EXT_RAM_BSS_ATTR /* (1.0.22) lo grande que casi nunca se usa, en la PSRAM (la RAM interna es escasa) */
+#else
+#define PET_EXT_RAM
+#endif
 
 /* ======================================================================
  * 1. Utilidades
@@ -8922,7 +8928,7 @@ bool pet_backup_import(const char *txt, pet_t *out)
         txt += hl;
         while (*txt && *txt != '\n') txt++;
     }
-    static pet_t tmp; /* grande: fuera de la pila */
+    static PET_EXT_RAM pet_t tmp; /* grande: fuera de la pila (1.0.22: y en la PSRAM; solo se usa al restaurar un respaldo) */
     memset(&tmp, 0, sizeof tmp);
     int n = pet_base64_decode(txt, (uint8_t *)&tmp, (int)sizeof tmp);
     if (n == (int)sizeof tmp && pet_validate(&tmp)) { /* misma versión */ }
