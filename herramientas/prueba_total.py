@@ -1403,6 +1403,14 @@ def correr_total(p, sal, pr, guiado=False, reanudar=False):
         if not reanudando:
             raise
         anota(f"esta fase quedó a medias ({type(_e).__name__}: {_e})", "AVISO")
+    if fase("29d", "Lo nuevo de las versiones 1.0.16 a 1.0.23 (juegos de a dos e isla, fondos, micrófono, velocidad)"):
+      try:
+        import prueba_nuevo
+        prueba_nuevo.correr(p, sal, pr, guiado=guiado, anota=anota)
+      except (NameError, TypeError, KeyError, AttributeError) as _e:
+        if not reanudando:
+            raise
+        anota(f"esta fase quedó a medias ({type(_e).__name__}: {_e})", "AVISO")
     fase(30, "Cierre")
     cmd("PANTALLA 1", 0.5)
     en = cmd("ENERGIA", 0.3)

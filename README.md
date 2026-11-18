@@ -807,6 +807,14 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.23 — pruebas de lo nuevo y Pochi no va a la isla
+
+- **Pochi no va nunca a la isla** (no sabe nadar): no llega de visita ahí, sus paseos no pasan por la isla y, si estaba
+  contigo cuando te vas a la isla, se queda en tierra y se va a su casa.
+- **Órdenes de prueba por cable** para lo de las versiones 1.0.16 a 1.0.23 (el juego no cambia): ZDABRIR, ZDINFO,
+  ISLATOQUE, RECURSOS, FONDODOS, OLOR, SOPLOS, FUSION y VELOCIDAD. El programa del PC trae «Probar lo nuevo» (guiada,
+  te pide soplar la niebla, el mal olor y la vela del bote; o sin manos) y la PRUEBA TOTAL la incluye como fase 29d.
+
 ## Versión 1.0.22 — más fluido, más memoria libre y la isla se toca
 
 - **Más fluido con lluvia, nieve, tormenta y de noche:** el sistema de dibujo anota hasta 32 rectángulos por redibujar en

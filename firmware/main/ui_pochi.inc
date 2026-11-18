@@ -259,7 +259,7 @@ static void po_empezar(void)
 static void po_a_paseo(void)
 {
     s_po_nz = 0;
-    for (int e = 0; e < ESC_COUNT; e++) if (s_pet && pet_scene_open(s_pet, (escena_t)e) && !ESC_ES_SECRETA(e)) s_po_zonas[s_po_nz++] = (uint8_t)e; /* (v98: a los lugares del rey no la lleva de paseo) */
+    for (int e = 0; e < ESC_COUNT; e++) if (s_pet && pet_scene_open(s_pet, (escena_t)e) && !ESC_ES_SECRETA(e) && e != ESC_ISLA) s_po_zonas[s_po_nz++] = (uint8_t)e; /* (v98: a los lugares del rey no la lleva de paseo; 1.0.23: a la isla tampoco, no sabe nadar) */
     s_po_nvis = s_po_nz;
     if (s_pet && s_po_nz > 0 && s_po_zonas[s_po_nz - 1] != (uint8_t)s_pet->escena) s_po_zonas[s_po_nz++] = (uint8_t)s_pet->escena; /* el último paso: volver al mundo del que salieron (a pie o por el portal) */
     s_po_zona_i = -1; s_po_fase = PO_PASEO; s_po_t0 = s_ms; s_po_zona_t0 = 0;
@@ -1517,6 +1517,7 @@ static void animar_pochi(void)
         s_po_chequeo = s_ms;
         if (s_pet->etapa == STAGE_HUEVO || s_interior || s_panel != PANEL_NINGUNO || s_juego != JG_NADA || s_sim_on) return;
         if (s_ultimo_t < s_po_proxima || pet_weather(s_pet) == CLIMA_TORMENTA || s_escena != (int)s_pet->escena) return;
+        if (s_escena == ESC_ISLA || s_pet->escena == ESC_ISLA) return; /* (1.0.23) Pochi no sabe nadar: a la isla no llega nunca */
         { /* (1.0.21) con una visita (o el vecino) no llega: dos criaturas más ponían lento el juego. Espera a que se vaya y un rato más */
             static uint32_t visita_ms;
             if (s_visita.visible || s_vecino.visible) { visita_ms = s_ms ? s_ms : 1; s_po_quiere = false; return; }
@@ -1541,7 +1542,12 @@ static void animar_pochi(void)
     if (s_po_pf && s_po_fase != PO_PASEO) po_portal_fin();
     /* si te vas a otro mundo mientras te invita (o come, o corre): "¡espera, te acompaño!" y sigue contigo */
     if (s_po_fase == PO_PASEO || s_po_fase == PO_DESPIDE || s_po_fase == PO_SE_VA) s_po_esc_ref = s_escena;
-    else if (s_escena >= 0 && s_escena != s_po_esc_ref && !po_en_transito() && s_po_pf == 0) {
+    else if (s_escena == ESC_ISLA && s_po_fase != PO_NADA && s_po_fase != PO_ACURRUCA) { /* (1.0.23) Pochi no sabe nadar: a la isla no va (se queda en tierra y se va a su casa) */
+        s_po_esc_ref = s_escena;
+        po_op_ocultar(); ocultar(s_po_plato, true);
+        s_po_fase = PO_SE_VA; s_po_t0 = s_ms; s_po_lado = s_po_x < CX ? -1 : 1;
+        s_po_hoyno = true;
+    } else if (s_escena >= 0 && s_escena != s_po_esc_ref && !po_en_transito() && s_po_pf == 0) {
         s_po_esc_ref = s_escena;
         po_coloca();
         ocultar(s_po_plato, true); po_op_ocultar();

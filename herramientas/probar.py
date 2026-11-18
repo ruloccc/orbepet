@@ -1153,6 +1153,7 @@ def menu():
   G  PRUEBA TOTAL + guiada (además te pide tocar la pantalla y enchufar el cargador)
   T  PRUEBA TOTAL automática (pantalla, volumen, sensores, sonidos, objetos, animales, cueva, ahorro de energía, estrés... y baja el registro)
   9  RENDIMIENTO automático (zonas, estaciones, horas, climas, niebla, casita, paneles, juegos)
+  N  Probar LO NUEVO 1.0.16-1.0.23 (guiada: te pide soplar)   M  lo mismo, sin manos
   7  Cambiar de puerto
   8  Restaurar la partida a como estaba antes de una prueba
   0  Salir""")
@@ -1167,6 +1168,8 @@ def menu():
         elif o == "5": correr(puerto, "paneles")
         elif o == "6": correr(puerto, "info")
         elif o == "9": correr(puerto, "rendimiento")
+        elif o.upper() == "N": correr(puerto, "nuevo")
+        elif o.upper() == "M": correr(puerto, "nuevo_auto")
         elif o.upper() == "T": correr(puerto, "total")
         elif o.upper() == "G": correr(puerto, "total_guiado")
         elif o == "7": puerto = pedir_puerto()
@@ -1275,10 +1278,10 @@ def ejecutar():
     n_pan = max(1, len(r_pan.split()[4:])) if r_pan else 67  # los paneles que tiene ESTA placa
     n_act = len(NOM_ACT)
     _total[0] = {"todo": n_pan + 4 + 6 + 4 + 2 + n_act + 4, "paneles": n_pan, "juegos": 4, "zonas": 6, "secretos": 4, "finales": 2, "panel": 1, "sonido": 3,
-                 "actividades": n_act, "cantar": 4, "rendimiento": RENDIMIENTO_PASOS, "tamano": 330, "total": 640 + n_pan, "total_guiado": 640 + n_pan, "total_continuar": 640 + n_pan}.get(que, 1)
+                 "actividades": n_act, "cantar": 4, "rendimiento": RENDIMIENTO_PASOS, "tamano": 330, "total": 640 + n_pan, "total_guiado": 640 + n_pan, "total_continuar": 640 + n_pan, "nuevo": 60, "nuevo_auto": 60}.get(que, 1)
     hubo = False
     try:
-        if que in ("todo", "paneles", "juegos", "zonas", "secretos", "finales", "panel", "actividades", "cantar", "rendimiento", "tamano", "total", "total_guiado", "total_continuar"):
+        if que in ("todo", "paneles", "juegos", "zonas", "secretos", "finales", "panel", "actividades", "cantar", "rendimiento", "tamano", "total", "total_guiado", "total_continuar", "nuevo", "nuevo_auto"):
             hubo = desbloquear_todo(p)
         if que in ("todo", "paneles"): paneles(p, sal)
         if que in ("todo", "juegos"): juegos(p, sal)
@@ -1288,6 +1291,16 @@ def ejecutar():
         if que in ("todo", "actividades"): actividades(p, sal)
         if que in ("todo", "cantar"): cantar(p, sal)
         if que == "rendimiento": rendimiento(p, sal)
+        if que in ("nuevo", "nuevo_auto"):  # (1.0.23) lo de las versiones 1.0.16 a 1.0.23
+            import prueba_nuevo
+            p.cmd("MARCA PRUEBA LO NUEVO INICIO", 0.1)
+            c, f = prueba_nuevo.correr(p, sal, sys.modules[__name__], guiado=(que == "nuevo"))
+            sal.append(""); sal.append(f"== RESUMEN DE LO NUEVO: {c['OK']} OK, {c['AVISO']} AVISOS, {c['FALLA']} FALLAS ==")
+            for x in f: sal.append("   FALLA: " + x)
+            print(sal[-1 - len(f)])
+            p.cmd("MARCA PRUEBA LO NUEVO FIN", 0.1)
+            etapa("Bajando el registro de la placa")
+            leer_registro(p)  # queda en registro_placa_*.txt: pásamelo junto con informe.txt
         if que == "descarga_corta": descarga(p, sal, False)
         if que == "descarga_larga": descarga(p, sal, True)
         if que == "descarga_resultado": descarga_resultado(p, sal)

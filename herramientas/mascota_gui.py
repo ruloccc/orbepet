@@ -188,6 +188,10 @@ class App(tk.Tk):
                           "Usa UNA de las dos para empezar. La guiada es la recomendada: al comienzo te pide tocar, sacudir, girar y soplar; después sigue sola. "
                           "Si se corta (la placa se cae o se desenchufa), «CONTINUAR» sigue desde la fase donde quedó, sin repetir lo ya hecho.", abierto=True)
         self.rejilla(g, (("PRUEBA TOTAL + guiada (con tus manos)", "total_guiado"), ("PRUEBA TOTAL (todo automático)", "total"), ("CONTINUAR la prueba cortada", "total_continuar")), self.probar, por_fila=3)
+        g = self.plegable(t_prue, "Lo nuevo (versiones 1.0.16 a 1.0.23)",
+                          "Prueba en el orbe lo que se hizo en las últimas versiones: los juegos de a dos y de la isla, sus fondos, tocar el faro y la piedra, "
+                          "el micrófono (niebla, mal olor, bote), la velocidad con lluvia y de noche, y la memoria. Necesita la versión 1.0.23 o más nueva.", abierto=True)
+        self.rejilla(g, (("Probar lo nuevo (guiada: te pide soplar)", "nuevo"), ("Probar lo nuevo (sin manos)", "nuevo_auto")), self.probar, por_fila=2)
         g = self.plegable(t_prue, "Probar una sola parte", "Cada botón prueba una sola cosa, más rápido que la prueba completa.")
         self.rejilla(g, (("Paneles", "paneles"), ("Juegos", "juegos"), ("Zonas", "zonas"), ("Secretos", "secretos"), ("Finales", "finales"),
                          ("Actividades", "actividades"), ("Modo cantar", "cantar"), ("Sonido", "sonido"), ("Probar todo", "todo")), self.probar)
@@ -1375,6 +1379,8 @@ class App(tk.Tk):
     AYUDA_PRUEBAS = {
         "total": ("PRUEBA TOTAL (todo automático)", "Revisa todo sola: pantalla, sonido, cielo, zonas, acciones, ropa, bolsa, animales, ahorro de energía, paneles, historias, alarmas, reinicios y más. Al final baja el registro de la placa.", "Nada: no hace falta tocar la placa. Déjala enchufada.", "1 hora aprox."),
         "total_guiado": ("PRUEBA TOTAL + guiada (con tus manos)", "Igual que la prueba total, pero al comienzo una ventana te guía paso a paso para tocar la pantalla, sacudir, girar, apretar PWR, soplar y desenchufar el cable. Después sigue sola.", "Tener la placa en la mano al comienzo (unos 5 minutos). Luego te puedes olvidar.", "1 hora aprox."),
+        "nuevo": ("Probar lo nuevo (guiada)", "Revisa lo de las versiones 1.0.16 a 1.0.23: los 6 fondos de los juegos, los juegos de a dos y de la isla (se juegan solos y se cierran), tocar el faro y la piedra en la isla, que el micrófono se encienda solo con niebla o mal olor, la velocidad con y sin la mejora de la 1.0.22 (lluvia, nieve, tormenta, noche) y la memoria. Al final baja el registro.", "Tener el orbe en la mano cuando te lo pida: SOPLAR la niebla, el mal olor y la vela del bote (3 veces, unos segundos cada una).", "10–15 min"),
+        "nuevo_auto": ("Probar lo nuevo (sin manos)", "Lo mismo que la guiada, sin las pruebas de soplar (esas quedan como aviso). Al final baja el registro.", "Nada: déjala enchufada.", "10 min aprox."),
         "rendimiento": ("RENDIMIENTO automático", "Mide velocidad y memoria: cada zona, estación y hora, climas, niebla, casita, paneles y juegos. Resume lo más lento y lo que más memoria gasta.", "Nada.", "20–30 min"),
         "reinicios": ("Solo REINICIOS (3 veces)", "Reinicia la placa 3 veces seguidas y mide si vuelve a contestar. Sirve para ver si el reinicio por software la deja colgada. Baja el registro al final.", "Nada. Si la placa no vuelve: saca la batería, vuelve a ponerla y usa «Obtener log del dispositivo».", "2–3 min"),
         "total_continuar": ("CONTINUAR la prueba cortada", "Retoma la última prueba total que se cortó: salta las fases ya hechas y repite solo desde la fase donde quedó (esa la hace entera). El informe junta lo de antes con lo nuevo.", "Que la placa esté encendida y conectada. Si era la guiada, las pruebas con las manos no se repiten.", "lo que falte"),
