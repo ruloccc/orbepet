@@ -6,7 +6,7 @@ para que se vean como el resto del orbe. Encima se pinta lo propio de cada juego
   14_dos_cuerda.png      el prado en otoño con el charco de barro al centro y dos banderitas
   15_dos_memorice.png    la laguna con un mantel de cuadros al centro (las cartas van encima)
   16_dos_escondidas.png  el bosque tal cual (los escondites son los del dibujo: tronco, arbusto, puente, piedras...)
-  17_isla_faro.png       la isla DE NOCHE (el mismo faro con la lámpara encendida, ventanas con luz, el farol del muelle)
+  17_isla_faro.png       (1.0.24) pantalla propia del faro DE NOCHE: el mismo faro de la isla en su costa con el muelle, y mar abierto
   18_isla_buceo.png      bajo el agua, dibujado suave (rayos de luz, arena, algas, corales, rocas)
 
 Además escribe firmware/main/isla_mapa.inc: el mapa de agua de la isla (dónde pueden navegar los barquitos del faro).
@@ -186,39 +186,114 @@ def escondidas():
 
 
 # ------------------------------------------------------------------------------------------------- el faro (noche)
+# (1.0.24) Pantalla propia del faro: antes era la isla entera de noche y el mar era solo un anillo angosto alrededor.
+# Ahora: el MISMO faro de la isla (recortado de la ilustración, sin espejo, con su base de rocas) en la costa oeste de la
+# isla con su muelle, a la derecha; a la izquierda, mar abierto con las rocas de la isla. Los barquitos llegan por la izquierda.
+FARO2_LAMPARA = (391, 150)     # el vidrio de la lámpara (pantalla de 466)
+FARO2_MUELLE = (206, 330)      # la punta del muelle, con el salvavidas
+FARO2_VENTANAS = ((391, 203), (391, 240))
+FARO2_FAROL = (232, 316)       # un farolito en el muelle
+
+
 def faro():
-    src = Image.open(os.path.join(ZONAS, "isla_verano.png")).convert("RGB").resize((G, G), Image.LANCZOS)
-    a = np.asarray(src).astype(np.float32)
-    agua = (a[..., 2] > a[..., 0] + 30) & (a[..., 2] > a[..., 1] + 5)
-    # la noche: oscuro y azulado (el agua un poco más clara que la tierra, para leer bien por dónde navegar)
+    src = Image.open(os.path.join(ZONAS, "isla_verano.png")).convert("RGB")
+    A = np.asarray(src).astype(np.float32)
+    r, g, b = A[..., 0], A[..., 1], A[..., 2]
+    hondo = (b > r + 60) & (b > g + 20) & (b < 235)
+    hondoL = Image.fromarray((hondo * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.MinFilter(5))
+    f = P / 1024 * 1.35           # fuente (1024) -> pantalla: el faro 35 % más grande que en la isla
+    F = f * K
+    S = int(np.ceil(P / f))
+    tierra = Image.new("L", (G, G), 0)   # dónde NO es agua (para el mapa de los barquitos)
+
+    def capa(caja, suave=2.0):
+        im_ = src.crop(caja).convert("RGBA")
+        m_ = Image.eval(hondoL.crop(caja), lambda v: 255 - v).filter(ImageFilter.GaussianBlur(suave))
+        im_.putalpha(m_)
+        w, h = im_.size
+        return im_.resize((int(w * F), int(h * F)), Image.LANCZOS)
+
+    def pegar(im_, c, x, y):
+        im_.alpha_composite(c, (x, y))
+        a_ = c.split()[3].point(lambda v: 255 if v > 150 else 0)
+        tierra.paste(255, (x, y), a_)
+    # el mar, como el de la ilustración: azul parejo (más claro hacia la costa) con guiones de olas claros y oscuros
+    rs = np.random.RandomState(11)
+    yy, xx = np.mgrid[0:S, 0:S]
+    t = np.clip(xx / S * 1.1, 0, 1)
+    fondo = np.stack([30 + 3 * t, 76 + 18 * t, 143 + 34 * t], -1) + rs.normal(0, 1.2, (S, S, 3))
+    mar = Image.fromarray(np.clip(fondo, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(mar)
+    for _ in range(int(S * S / 1300)):
+        x, y = rs.uniform(0, S), rs.uniform(0, S)
+        l = rs.uniform(5, 13)
+        if rs.rand() < 0.55:
+            d.line([x, y, x + l, y], fill=(118, 176, 232), width=2)
+        else:
+            d.line([x, y, x + l * 0.8, y], fill=(22, 58, 116), width=3)
+    im = mar.resize((G, G), Image.LANCZOS).convert("RGBA")
+    # la costa oeste de la isla con su muelle (el mar de la foto se saca: queda el nuestro)
+    caja = (30, 180, 720, 900)
+    pegar(im, capa(caja), int(180 * K), int(60 * K))
+    # rocas sueltas: las de la isla
+    for c, (x, y) in (((35, 330, 130, 405), (80, 110)), ((80, 815, 185, 900), (140, 300)), ((400, 885, 470, 940), (215, 175)),
+                      ((665, 905, 755, 970), (60, 230)), ((940, 710, 1022, 780), (250, 395))):
+        k = capa(c)
+        pegar(im, k, int(x * K - k.size[0] / 2), int(y * K - k.size[1] / 2))
+    # el faro de la isla, con su base de rocas, sin el pasto ni la arena de alrededor (el techo verde se queda)
+    fc = (765, 222, 942, 578)
+    fi = src.crop(fc).convert("RGBA")
+    fa = np.asarray(fi).astype(np.float32)
+    fr, fg, fb = fa[..., 0], fa[..., 1], fa[..., 2]
+    quitar = ((fg > fr + 12) & (fg > fb + 8)) | ((fr > 150) & (fg > 130) & (fb < 140) & (fr - fb > 50)) | (fb > fr + 40)
+    hh, ww = quitar.shape
+    jj, ii = np.mgrid[0:hh, 0:ww]
+    techo = ((ii - 90) / 36.0) ** 2 + ((jj - 46) / 30.0) ** 2 < 1.0   # el techo verde y el vidrio
+    quitar &= ~techo
+    mI = Image.fromarray((~quitar * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(0.8))
+    fi.putalpha(mI)
+    fi = fi.resize((int(fi.size[0] * F), int(fi.size[1] * F)), Image.LANCZOS)
+    FX, FY = int(338 * K), int(92 * K)
+    som = Image.new("L", im.size, 0)
+    ImageDraw.Draw(som).ellipse([FX + 10 * K, FY + 190 * K, FX + 110 * K, FY + 222 * K], fill=120)
+    som = som.filter(ImageFilter.GaussianBlur(6 * K))
+    sc = Image.new("RGBA", im.size, (10, 20, 10, 0)); sc.putalpha(som)
+    im = Image.alpha_composite(im, sc)
+    pegar(im, fi, FX, FY)
+    # la noche: oscuro y azulado; el agua un poco más clara que la tierra (para leer por dónde navegar)
+    a = np.asarray(im.convert("RGB")).astype(np.float32)
+    agua = np.asarray(tierra) < 128
     lum = a.mean(axis=2, keepdims=True)
     n = a * 0.30 + lum * 0.08
     n[..., 0] *= 0.80; n[..., 1] *= 0.95; n[..., 2] = n[..., 2] * 1.25 + 14
     n[agua] = n[agua] * 1.15 + np.array([4, 10, 22], np.float32)
     im = Image.fromarray(np.clip(n, 0, 255).astype(np.uint8)).convert("RGBA")
-    def luz(x, y, r, col, fuerza):
-        global_ = Image.new("L", im.size, 0)
-        ImageDraw.Draw(global_).ellipse([s(x - r), s(y - r), s(x + r), s(y + r)], fill=int(255 * fuerza))
-        global_ = global_.filter(ImageFilter.GaussianBlur(r * K * 0.45))
-        c = Image.new("RGBA", im.size, col + (0,))
-        c.putalpha(global_)
-        return Image.alpha_composite(im, c)
-    lx, ly = FARO_LAMPARA
-    im = luz(lx, ly, 70, (255, 226, 150), 0.55)
-    im = luz(lx, ly, 22, (255, 240, 190), 0.9)
-    im = luz(MUELLE[0] + 26, MUELLE[1] - 18, 26, (255, 210, 120), 0.6)
+
+    def luz(x, y, r_, col, fuerza):
+        m_ = Image.new("L", im.size, 0)
+        ImageDraw.Draw(m_).ellipse([s(x - r_), s(y - r_), s(x + r_), s(y + r_)], fill=int(255 * fuerza))
+        m_ = m_.filter(ImageFilter.GaussianBlur(r_ * K * 0.45))
+        c_ = Image.new("RGBA", im.size, col + (0,)); c_.putalpha(m_)
+        return Image.alpha_composite(im, c_)
+    lx, ly = FARO2_LAMPARA
+    im = luz(lx, ly, 80, (255, 226, 150), 0.5)
+    im = luz(lx, ly, 26, (255, 240, 190), 0.9)
+    im = luz(FARO2_FAROL[0], FARO2_FAROL[1], 26, (255, 210, 120), 0.6)
+    im = luz(110, 70, 60, (190, 210, 255), 0.18)   # la luna, fuera de la pantalla: un brillo suave arriba a la izquierda
     d = ImageDraw.Draw(im)
-    d.rectangle([s(lx - 7), s(ly - 7), s(lx + 7), s(ly + 7)], fill=(255, 246, 200, 255))  # el vidrio encendido
-    for (wx, wy) in ((392, 186), (384, 214)):  # ventanitas con luz
-        d.rectangle([s(wx - 2), s(wy - 3), s(wx + 2), s(wy + 3)], fill=(255, 210, 110, 255))
-    rs = np.random.RandomState(3)
-    for _ in range(60):  # brillitos de luna en el agua
+    d.rectangle([s(lx - 9), s(ly - 9), s(lx + 9), s(ly + 9)], fill=(255, 246, 200, 230))  # el vidrio encendido
+    for (wx, wy) in FARO2_VENTANAS:
+        d.rectangle([s(wx - 3), s(wy - 5), s(wx + 3), s(wy + 5)], fill=(255, 210, 110, 255))
+    fx_, fy_ = FARO2_FAROL
+    d.rectangle([s(fx_ - 1), s(fy_ - 2), s(fx_ + 1), s(fy_ + 14)], fill=(60, 44, 30, 255))
+    d.ellipse([s(fx_ - 4), s(fy_ - 7), s(fx_ + 4), s(fy_ + 1)], fill=(255, 226, 140, 255))
+    for _ in range(80):  # brillitos de luna en el agua
         x, y = rs.uniform(0, P), rs.uniform(0, P)
         if agua[int(y * K), int(x * K)]:
             l = rs.uniform(3, 8)
-            d.line([s(x), s(y), s(x + l), s(y)], fill=(200, 220, 255, 120), width=s(1))
+            d.line([s(x), s(y), s(x + l), s(y)], fill=(200, 220, 255, 110), width=s(1))
     out = final(im, "17_isla_faro.png")
-    # el mapa de agua para el firmware: 58 x 58 celdas de 8 px; 1 = agua
+    # el mapa de agua para el firmware: 59 x 59 celdas de 8 px; 1 = agua
     agua_p = np.asarray(Image.fromarray((agua * 255).astype(np.uint8)).resize((P, P), Image.NEAREST)) > 127
     C = 8; Nc = (P + C - 1) // C
     filas = []
@@ -229,14 +304,14 @@ def faro():
             if bloque.size and bloque.mean() > 0.75:
                 bits |= 1 << i
         filas.append(bits)
-    with open(os.path.join(RAIZ, "firmware", "main", "isla_mapa.inc"), "w", encoding="utf-8") as f:
-        f.write("/* GENERADO por herramientas/hacer_fondos_juegos.py: el agua de la isla (pantalla de 466, celdas de 8 px).\n"
-                " * Bit i de la fila j = la celda (i, j) es agua (los barquitos del faro navegan por ahí). No editar a mano. */\n")
-        f.write("#define ISLA_MAPA_C %d\n#define ISLA_MAPA_N %d\n" % (C, Nc))
-        f.write("static const uint64_t ISLA_AGUA[%d] = {\n" % Nc)
+    with open(os.path.join(RAIZ, "firmware", "main", "isla_mapa.inc"), "w", encoding="utf-8") as fo:
+        fo.write("/* GENERADO por herramientas/hacer_fondos_juegos.py: el agua de la pantalla del faro (466, celdas de 8 px).\n"
+                 " * Bit i de la fila j = la celda (i, j) es agua (los barquitos del faro navegan por ahí). No editar a mano. */\n")
+        fo.write("#define ISLA_MAPA_C %d\n#define ISLA_MAPA_N %d\n" % (C, Nc))
+        fo.write("static const uint64_t ISLA_AGUA[%d] = {\n" % Nc)
         for j in range(0, Nc, 3):
-            f.write("    " + ", ".join("0x%016XULL" % b for b in filas[j:j + 3]) + ",\n")
-        f.write("};\n")
+            fo.write("    " + ", ".join("0x%016XULL" % b_ for b_ in filas[j:j + 3]) + ",\n")
+        fo.write("};\n")
     print("listo: isla_mapa.inc")
     return out
 

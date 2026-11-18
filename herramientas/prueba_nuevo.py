@@ -16,8 +16,8 @@ Necesita el firmware 1.0.23 o más nuevo (las órdenes de prueba de lo nuevo).
 import re
 import time
 
-# los fondos publicados con la 1.0.19 (no cambiaron después): nombre -> bytes
-FONDOS = {"pj0": 83230, "pj1": 128776, "pj2": 85508, "pj3": 154152, "pj4": 133352, "pj5": 53898}
+# los fondos publicados (pj4, el faro, es la pantalla nueva de la 1.0.23): nombre -> bytes
+FONDOS = {"pj0": 83230, "pj1": 128776, "pj2": 85508, "pj3": 154152, "pj4": 78145, "pj5": 53898}
 JUEGOS = ((0, "ping pong"), (1, "tira y afloja"), (2, "memorice"), (3, "escondidas"), (4, "el faro"), (5, "buceo con marea"))
 
 

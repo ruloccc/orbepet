@@ -41,12 +41,15 @@ static void zi_marcador(void)
 }
 
 /* ======================================================================
- * EL FARO (fondo pj4: la isla DE NOCHE; la lámpara, el muelle y el mapa de agua salen de herramientas/hacer_fondos_juegos.py)
+ * EL FARO (fondo pj4: su propia pantalla DE NOCHE; la lámpara, el muelle y el mapa de agua salen de herramientas/hacer_fondos_juegos.py)
  * ==================================================================== */
-#define ZF_LX 386.0f   /* la lámpara del faro de la isla (fondo pj4: la isla de noche) */
-#define ZF_LY 128.0f
-#define ZF_MX 30.0f    /* la punta del muelle (a la izquierda de la isla, con el salvavidas): se llega por arriba o por abajo */
-#define ZF_MY 286.0f
+/* (1.0.24) pantalla propia del faro: el faro de la isla a la derecha, en la costa con su muelle; a la izquierda, mar abierto */
+#define ZF_LX 391.0f   /* la lámpara del faro (FARO2_LAMPARA en hacer_fondos_juegos.py) */
+#define ZF_LY 150.0f
+#define ZF_MX 206.0f   /* la punta del muelle, con el salvavidas (FARO2_MUELLE) */
+#define ZF_MY 330.0f
+#define ZF_CX 360.0f   /* a oscuras, la corriente lleva a los barquitos hacia la costa (y encallan) */
+#define ZF_CY 260.0f
 #define ZF_MR 40.0f    /* qué tan cerca de la punta cuenta como «llegó» */
 #define ZF_BOTES 3
 #define ZF_DURA 90000u
@@ -75,7 +78,7 @@ static void zf_empezar(void)
 {
     for (int i = 0; i < ZF_BOTES; i++) s_zf_est[i] = 0;
     s_zf_sale = s_zj_t + 2500u; /* (el primero, cuando ya se leyó cómo se juega) */
-    s_zf_ax = 300.0f; s_zf_ay = 300.0f;
+    s_zf_ax = 130.0f; s_zf_ay = 220.0f;
     s_zi_vidas = 3; s_zi_perdidos = 0; s_zi_triste = 0;
     for (int k = 0; k < 8; k++) { /* el haz: círculos de luz cada vez más grandes */
         lv_obj_t *o = zj_caja(20 + k, 10, 10, 0xFFF0B0, LV_RADIUS_CIRCLE);
@@ -87,7 +90,7 @@ static void zf_empezar(void)
     lv_obj_set_style_bg_opa(m, LV_OPA_TRANSP, 0); lv_obj_set_style_border_width(m, 3, 0); lv_obj_set_style_border_color(m, lv_color_hex(0xFFE27A), 0);
     zj_centro(m, ZF_MX, ZF_MY);
     zj_texto("ARRASTRA EL DEDO: LA LUZ DEL FARO LO SIGUE Y LOS BARQUITOS ILUMINADOS TAMBIÉN. ¡LLÉVALOS AL MUELLE!", 4500);
-    zd_mano(ICO_MANO_DESLIZA, 300.0f, 300.0f, 5000u);
+    zd_mano(ICO_MANO_DESLIZA, 130.0f, 220.0f, 5000u);
 }
 static void zf_dibujar_haz(void)
 {
@@ -121,8 +124,8 @@ static void zf_animar(float dt)
         for (int i = 0; i < ZF_BOTES; i++)
             if (s_zf_est[i] == 0) {
                 s_zf_est[i] = 1; s_zf_fase[i] = azar01() * 6.28f; s_zf_dir[i] = 0;
-                for (int k = 0; k < 30; k++) { /* aparece en el mar abierto, lejos del muelle (a la derecha, arriba o abajo) */
-                    const float a = -1.9f + azar01() * 3.8f; /* (de arriba a abajo pasando por la derecha) */
+                for (int k = 0; k < 30; k++) { /* aparece en el mar abierto, lejos del muelle (a la izquierda, arriba o abajo) */
+                    const float a = 3.14159f - 1.75f + azar01() * 3.3f; /* (1.0.24: de arriba a abajo pasando por la izquierda) */
                     s_zf_x[i] = CX + cosf(a) * 200.0f; s_zf_y[i] = CX + sinf(a) * 200.0f;
                     bool libre = true; /* agua alrededor (no recién al lado de una roca) */
                     for (int q = 0; q < 9 && libre; q++) libre = zf_agua(s_zf_x[i] + (float)(q % 3 - 1) * 20.0f, s_zf_y[i] + (float)(q / 3 - 1) * 20.0f);
@@ -170,7 +173,7 @@ static void zf_animar(float dt)
             const float v = d < 10.0f ? 0.0f : (s_nino ? 50.0f : 58.0f);
             vx = d > 0.1f ? vx / d * v : 0; vy = d > 0.1f ? vy / d * v : 0;
         } else { /* a oscuras: la corriente lo lleva despacito hacia la isla (si nadie lo guía, encalla) */
-            const float dx0 = CX - s_zf_x[i], dy0 = CX - s_zf_y[i], d0 = sqrtf(dx0 * dx0 + dy0 * dy0) + 0.01f;
+            const float dx0 = ZF_CX - s_zf_x[i], dy0 = ZF_CY - s_zf_y[i], d0 = sqrtf(dx0 * dx0 + dy0 * dy0) + 0.01f;
             const float v = s_nino ? 4.5f : 6.5f;
             vx = dx0 / d0 * v + 5.0f * sinf((float)s_zj_t / 1300.0f + s_zf_fase[i]);
             vy = dy0 / d0 * v;
@@ -197,7 +200,7 @@ static void zf_animar(float dt)
     zf_dibujar_haz();
     /* ella, en el balcón del faro, mirando el mar */
     if (s_zj_o[29]) { const int r = 76 + (int)(6.0f * sinf((float)s_zj_t / 250.0f)); lv_obj_set_size(s_zj_o[29], r, r); zj_centro(s_zj_o[29], ZF_MX, ZF_MY); }
-    zd_poner(0, s_zi_triste && s_zj_t - s_zi_triste < 1400u ? 5 : 1, 2, true, 416.0f, 160.0f); /* ella, en el balcón del faro */
+    zd_poner(0, s_zi_triste && s_zj_t - s_zi_triste < 1400u ? 5 : 1, 2, true, 431.0f, 190.0f); /* ella, en el balcón del faro */
     bool quedan = false;
     for (int i = 0; i < ZF_BOTES; i++) if (s_zf_est[i] == 1 || s_zf_est[i] == 2 || s_zf_est[i] == 3) quedan = true;
     if (s_zi_vidas <= 0 || (zj_tiempo() >= ZF_DURA - 12000u && !quedan) || zj_tiempo() >= ZF_DURA + 20000u) {

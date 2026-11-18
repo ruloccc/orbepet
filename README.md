@@ -807,8 +807,11 @@ En el orbe:
 ## 5. Estado
 
 
-## Versión 1.0.23 — pruebas de lo nuevo y Pochi no va a la isla
+## Versión 1.0.23 — pruebas de lo nuevo, Pochi no va a la isla y pantalla nueva del faro
 
+- **El faro tiene su propia pantalla:** antes era la isla entera de noche y el mar era un anillo angosto. Ahora es el MISMO
+  faro de la isla (recortado de la ilustración, sin espejo) en su costa con el muelle, a la derecha, y mar abierto a la
+  izquierda con las rocas de la isla. Los barquitos llegan por la izquierda. Se baja solo con la actualización (pj4).
 - **Pochi no va nunca a la isla** (no sabe nadar): no llega de visita ahí, sus paseos no pasan por la isla y, si estaba
   contigo cuando te vas a la isla, se queda en tierra y se va a su casa.
 - **Órdenes de prueba por cable** para lo de las versiones 1.0.16 a 1.0.23 (el juego no cambia): ZDABRIR, ZDINFO,

@@ -47,6 +47,13 @@ versión publicada está en la rama `compilados` (mascota.elf); para otra: poner
 esperar el flujo «Simbolos de una version» y `git fetch origin elf-<commit7>`; luego
 /home/claude/tc/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e mascota.elf <direcciones>.
 Al publicar a mano desde `compilados`: NO copiar mascota.elf al repo público (solo .bin, .json y recursos/).
+**1.0.23 (pruebas, Pochi y faro)** — Pochi: ui_pochi.inc no llega con s_escena o s_pet->escena == ESC_ISLA, sus
+paseos no incluyen la isla y si la mascota llega a la isla con Pochi, Pochi pasa a PO_SE_VA. Faro: herramientas/
+hacer_fondos_juegos.py faro() arma la pantalla nueva (FARO2_LAMPARA 391,150; FARO2_MUELLE 206,330) y regenera
+isla_mapa.inc; ui_isla.inc ZF_LX/LY/MX/MY/CX/CY, salen por la izquierda (ángulo π±), ella en (431,190). Órdenes de
+prueba por cable: ZDABRIR, ZDINFO, ISLATOQUE, RECURSOS, FONDODOS, OLOR, SOPLOS, FUSION, VELOCIDAD → herramientas/
+prueba_nuevo.py («Probar lo nuevo» y fase 29d de la PRUEBA TOTAL).
+
 **1.0.22 (más fluido)** — ui.c ui_inv_fusionar (LV_EVENT_INVALIDATE_AREA, registrado DESPUÉS del redondeo del BSP en
 services.c y en el simulador): con inv_p ≥ LV_INV_BUF_SIZE-4 une el área nueva con la que menos crece y la deja «adentro»
 (LVGL no la agrega). Antes, al pasar de 32 áreas LVGL invalidaba la pantalla entera (lv_refr.c lv_inv_area): eso eran los
