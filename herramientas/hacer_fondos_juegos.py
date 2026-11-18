@@ -1,0 +1,369 @@
+"""(1.0.19) Los fondos de los juegos de a dos y de la isla, hechos SOBRE las ilustraciones del juego (fondos_zonas/),
+para que se vean como el resto del orbe. Encima se pinta lo propio de cada juego, suave y a la misma resolución
+(se dibuja al doble y se achica: bordes lisos).
+
+  13_dos_pingpong.png    el prado en primavera con una mesa de ping pong al centro
+  14_dos_cuerda.png      el prado en otoño con el charco de barro al centro y dos banderitas
+  15_dos_memorice.png    la laguna con un mantel de cuadros al centro (las cartas van encima)
+  16_dos_escondidas.png  el bosque tal cual (los escondites son los del dibujo: tronco, arbusto, puente, piedras...)
+  17_isla_faro.png       la isla DE NOCHE (el mismo faro con la lámpara encendida, ventanas con luz, el farol del muelle)
+  18_isla_buceo.png      bajo el agua, dibujado suave (rayos de luz, arena, algas, corales, rocas)
+
+Además escribe firmware/main/isla_mapa.inc: el mapa de agua de la isla (dónde pueden navegar los barquitos del faro).
+
+Uso:   python herramientas/hacer_fondos_juegos.py   y luego   python herramientas/hacer_fondos_dos.py
+Las coordenadas (pantalla de 466) que usa firmware/main/ui_dos.inc y ui_isla.inc están aquí arriba: si cambian aquí,
+cambian allá."""
+import math
+import os
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFilter
+
+RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ZONAS = os.path.join(RAIZ, "fondos_zonas")
+SAL = os.path.join(RAIZ, "fondos_pantallas")
+P = 466
+K = 2            # se dibuja al doble
+G = P * K
+
+# --- lo que comparte con el firmware (pantalla) ---
+MESA = (114, 72, 352, 398)          # ping pong: x0, y0, x1, y1 de la mesa; la red en y 235
+CHARCO = (233, 250, 78, 44)         # tira y afloja: centro y radios del barro
+BANDERAS = (176, 290)               # x de las dos banderitas (y 250)
+MANTEL = (76, 96, 390, 392)         # memorice
+ESCONDITES = [(193, 210), (92, 236), (108, 302), (343, 262), (300, 336), (300, 186)]  # tronco, arbusto, puente, piedras, arbusto, árbol
+FARO_LAMPARA = (386, 128)           # la isla: la lámpara del faro
+MUELLE = (38, 282)                  # la punta del muelle
+
+
+def base(nombre, oscurecer=0.0, desenfoque=0.0):
+    im = Image.open(os.path.join(ZONAS, nombre)).convert("RGB").resize((G, G), Image.LANCZOS)
+    if desenfoque:
+        im = im.filter(ImageFilter.GaussianBlur(desenfoque * K))
+    if oscurecer:
+        im = Image.blend(im, Image.new("RGB", im.size, (0, 0, 0)), oscurecer)
+    return im.convert("RGBA")
+
+
+def s(v):
+    return int(round(v * K))
+
+
+def sombra(im, forma, desplaz=(6, 8), radio=10, opa=110):
+    """forma: función que dibuja en un ImageDraw (en negro) la silueta"""
+    capa = Image.new("L", im.size, 0)
+    forma(ImageDraw.Draw(capa))
+    capa = capa.filter(ImageFilter.GaussianBlur(radio * K))
+    capa = Image.eval(capa, lambda v: v * opa // 255)
+    neg = Image.new("RGBA", im.size, (20, 26, 18, 0))
+    neg.putalpha(capa)
+    desp = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    desp.paste(neg, (s(desplaz[0]), s(desplaz[1])))
+    return Image.alpha_composite(im, desp)
+
+
+def final(im, nombre):
+    out = im.convert("RGB").resize((P, P), Image.LANCZOS)
+    out.save(os.path.join(SAL, nombre))
+    print("listo:", nombre)
+    return out
+
+
+# ------------------------------------------------------------------------------------------------------- ping pong
+def pingpong():
+    im = base("prado_primavera.png", oscurecer=0.18, desenfoque=0.6)
+    x0, y0, x1, y1 = MESA
+    rr = 14
+    im = sombra(im, lambda d: d.rounded_rectangle([s(x0), s(y0), s(x1), s(y1)], s(rr), fill=255), (8, 12), 9, 130)
+    d = ImageDraw.Draw(im)
+    # el canto de la mesa (más oscuro) y la cubierta azul con un brillo arriba a la izquierda
+    d.rounded_rectangle([s(x0), s(y0), s(x1), s(y1 + 6)], s(rr), fill=(18, 52, 92, 255))
+    d.rounded_rectangle([s(x0), s(y0), s(x1), s(y1)], s(rr), fill=(36, 104, 168, 255))
+    brillo = Image.new("L", im.size, 0)
+    ImageDraw.Draw(brillo).ellipse([s(x0 - 80), s(y0 - 90), s(x0 + 170), s(y0 + 150)], fill=70)
+    brillo = brillo.filter(ImageFilter.GaussianBlur(30 * K))
+    mascara = Image.new("L", im.size, 0)
+    ImageDraw.Draw(mascara).rounded_rectangle([s(x0), s(y0), s(x1), s(y1)], s(rr), fill=255)
+    luz = Image.new("RGBA", im.size, (255, 255, 255, 0))
+    luz.putalpha(Image.fromarray(np.minimum(np.asarray(brillo), np.asarray(mascara))))
+    im = Image.alpha_composite(im, luz)
+    d = ImageDraw.Draw(im)
+    # las líneas blancas: borde, línea del medio (a lo largo)
+    w = s(3)
+    d.rounded_rectangle([s(x0 + 7), s(y0 + 7), s(x1 - 7), s(y1 - 7)], s(rr - 6), outline=(244, 248, 252, 255), width=w)
+    d.line([s((x0 + x1) / 2), s(y0 + 7), s((x0 + x1) / 2), s(y1 - 7)], fill=(244, 248, 252, 230), width=s(2))
+    # la red: sombra, malla y la cinta blanca de arriba, con los postes afuera de la mesa
+    ny = 235
+    d.rectangle([s(x0 - 10), s(ny + 3), s(x1 + 10), s(ny + 9)], fill=(10, 30, 50, 120))
+    d.rectangle([s(x0 - 10), s(ny - 7), s(x1 + 10), s(ny + 3)], fill=(30, 34, 40, 220))
+    for xx in range(x0 - 8, x1 + 10, 5):
+        d.line([s(xx), s(ny - 6), s(xx), s(ny + 2)], fill=(90, 96, 110, 255), width=1)
+    d.line([s(x0 - 10), s(ny - 2), s(x1 + 10), s(ny - 2)], fill=(90, 96, 110, 255), width=1)
+    d.rectangle([s(x0 - 10), s(ny - 9), s(x1 + 10), s(ny - 6)], fill=(250, 250, 252, 255))
+    for px in (x0 - 13, x1 + 9):
+        d.rounded_rectangle([s(px), s(ny - 12), s(px + 5), s(ny + 6)], s(2), fill=(60, 64, 72, 255))
+        d.rectangle([s(px + 1), s(ny - 11), s(px + 2), s(ny + 4)], fill=(150, 156, 168, 255))
+    # una pelotita de repuesto y una toalla sobre el pasto
+    d.ellipse([s(372), s(380), s(382), s(390)], fill=(255, 250, 236, 255), outline=(200, 190, 160, 255))
+    return final(im, "13_dos_pingpong.png")
+
+
+# ---------------------------------------------------------------------------------------------------- tira y afloja
+def cuerda():
+    im = base("prado_otono.png", oscurecer=0.12, desenfoque=0.4)
+    cx, cy, rx, ry = CHARCO
+    im = sombra(im, lambda d: d.ellipse([s(cx - rx - 6), s(cy - ry - 4), s(cx + rx + 6), s(cy + ry + 6)], fill=255), (0, 4), 6, 90)
+    d = ImageDraw.Draw(im)
+    # el borde de tierra húmeda y el barro (más oscuro al centro), con brillos y burbujas
+    d.ellipse([s(cx - rx - 8), s(cy - ry - 6), s(cx + rx + 8), s(cy + ry + 7)], fill=(120, 86, 52, 255))
+    d.ellipse([s(cx - rx), s(cy - ry), s(cx + rx), s(cy + ry)], fill=(92, 62, 36, 255))
+    centro = Image.new("L", im.size, 0)
+    ImageDraw.Draw(centro).ellipse([s(cx - rx * 0.7), s(cy - ry * 0.65), s(cx + rx * 0.7), s(cy + ry * 0.7)], fill=150)
+    centro = centro.filter(ImageFilter.GaussianBlur(12 * K))
+    osc = Image.new("RGBA", im.size, (52, 34, 18, 0))
+    osc.putalpha(centro)
+    im = Image.alpha_composite(im, osc)
+    d = ImageDraw.Draw(im)
+    for (bx, by, br) in ((-40, -16, 7), (30, -22, 5), (52, 10, 6), (-18, 18, 4), (8, -2, 3)):
+        d.ellipse([s(cx + bx - br), s(cy + by - br * 0.6), s(cx + bx + br), s(cy + by + br * 0.6)], outline=(140, 104, 66, 255), width=s(1))
+    for (hx, hy, hw) in ((-30, -24, 26), (14, -30, 18), (40, -8, 14)):
+        d.arc([s(cx + hx - hw), s(cy + hy - 6), s(cx + hx + hw), s(cy + hy + 6)], 200, 330, fill=(214, 184, 140, 220), width=s(2))
+    rs = np.random.RandomState(4)
+    for _ in range(26):  # salpicaduras de barro alrededor
+        a = rs.uniform(0, 6.283); q = rs.uniform(1.12, 1.45)
+        x, y = cx + math.cos(a) * rx * q, cy + math.sin(a) * ry * q
+        r = rs.uniform(1.5, 4)
+        d.ellipse([s(x - r), s(y - r * 0.7), s(x + r), s(y + r * 0.7)], fill=(98, 66, 38, 255))
+    # huellas que entran al barro
+    for (fx, fy) in ((cx - 120, cy + 14), (cx - 104, cy + 6), (cx + 104, cy + 8), (cx + 120, cy + 16)):
+        d.ellipse([s(fx - 4), s(fy - 3), s(fx + 4), s(fy + 3)], fill=(104, 74, 44, 200))
+    # las dos banderitas en estacas (la de ella amarilla a la izquierda, la de la visita azul a la derecha)
+    for (bxx, col) in ((BANDERAS[0], (255, 200, 60, 255)), (BANDERAS[1], (90, 160, 230, 255))):
+        d.ellipse([s(bxx - 5), s(cy + 44), s(bxx + 7), s(cy + 50)], fill=(40, 28, 16, 110))
+        d.rectangle([s(bxx - 1.5), s(cy - 28), s(bxx + 1.5), s(cy + 47)], fill=(110, 76, 44, 255))
+        d.rectangle([s(bxx - 1.5), s(cy - 28), s(bxx - 0.5), s(cy + 47)], fill=(160, 120, 76, 255))
+        d.polygon([(s(bxx + 1.5), s(cy - 28)), (s(bxx + 26), s(cy - 20)), (s(bxx + 1.5), s(cy - 11))], fill=col)
+        d.line([(s(bxx + 1.5), s(cy - 28)), (s(bxx + 26), s(cy - 20)), (s(bxx + 1.5), s(cy - 11))], fill=(60, 50, 40, 255), width=s(1))
+    return final(im, "14_dos_cuerda.png")
+
+
+# -------------------------------------------------------------------------------------------------------- memorice
+def memorice():
+    im = base("lago_verano.png", oscurecer=0.15, desenfoque=0.8)
+    x0, y0, x1, y1 = MANTEL
+    im = sombra(im, lambda d: d.rounded_rectangle([s(x0), s(y0), s(x1), s(y1)], s(8), fill=255), (6, 9), 8, 120)
+    capa = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(capa)
+    d.rounded_rectangle([s(x0), s(y0), s(x1), s(y1)], s(8), fill=(250, 246, 240, 255))
+    paso = 24  # el cuadrillé de picnic: franjas de media celda en las dos direcciones (más rojo donde se cruzan)
+    for xx in range(x0, x1, paso):
+        d.rectangle([s(xx), s(y0), s(xx + paso / 2), s(y1)], fill=(220, 70, 70, 120))
+    franjas = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    df = ImageDraw.Draw(franjas)
+    for yy in range(y0, y1, paso):
+        df.rectangle([s(x0), s(yy), s(x1), s(yy + paso / 2)], fill=(220, 70, 70, 120))
+    capa = Image.alpha_composite(capa, franjas)
+    d = ImageDraw.Draw(capa)
+    mascara = Image.new("L", im.size, 0)
+    ImageDraw.Draw(mascara).rounded_rectangle([s(x0), s(y0), s(x1), s(y1)], s(8), fill=255)
+    a = np.minimum(np.asarray(capa.split()[3]), np.asarray(mascara))
+    capa.putalpha(Image.fromarray(a))
+    im = Image.alpha_composite(im, capa)
+    d = ImageDraw.Draw(im)
+    # pliegues suaves y el ribete
+    d.rounded_rectangle([s(x0), s(y0), s(x1), s(y1)], s(8), outline=(180, 40, 40, 255), width=s(3))
+    for xx in range(x0 + 6, x1 - 4, 8):  # el borde cosido
+        d.line([s(xx), s(y0 + 5), s(xx + 4), s(y0 + 5)], fill=(255, 255, 255, 200), width=s(1))
+        d.line([s(xx), s(y1 - 5), s(xx + 4), s(y1 - 5)], fill=(255, 255, 255, 200), width=s(1))
+    return final(im, "15_dos_memorice.png")
+
+
+# ------------------------------------------------------------------------------------------------------ escondidas
+def escondidas():
+    im = base("bosque_verano.png", oscurecer=0.04)
+    return final(im, "16_dos_escondidas.png")
+
+
+# ------------------------------------------------------------------------------------------------- el faro (noche)
+def faro():
+    src = Image.open(os.path.join(ZONAS, "isla_verano.png")).convert("RGB").resize((G, G), Image.LANCZOS)
+    a = np.asarray(src).astype(np.float32)
+    agua = (a[..., 2] > a[..., 0] + 30) & (a[..., 2] > a[..., 1] + 5)
+    # la noche: oscuro y azulado (el agua un poco más clara que la tierra, para leer bien por dónde navegar)
+    lum = a.mean(axis=2, keepdims=True)
+    n = a * 0.30 + lum * 0.08
+    n[..., 0] *= 0.80; n[..., 1] *= 0.95; n[..., 2] = n[..., 2] * 1.25 + 14
+    n[agua] = n[agua] * 1.15 + np.array([4, 10, 22], np.float32)
+    im = Image.fromarray(np.clip(n, 0, 255).astype(np.uint8)).convert("RGBA")
+    def luz(x, y, r, col, fuerza):
+        global_ = Image.new("L", im.size, 0)
+        ImageDraw.Draw(global_).ellipse([s(x - r), s(y - r), s(x + r), s(y + r)], fill=int(255 * fuerza))
+        global_ = global_.filter(ImageFilter.GaussianBlur(r * K * 0.45))
+        c = Image.new("RGBA", im.size, col + (0,))
+        c.putalpha(global_)
+        return Image.alpha_composite(im, c)
+    lx, ly = FARO_LAMPARA
+    im = luz(lx, ly, 70, (255, 226, 150), 0.55)
+    im = luz(lx, ly, 22, (255, 240, 190), 0.9)
+    im = luz(MUELLE[0] + 26, MUELLE[1] - 18, 26, (255, 210, 120), 0.6)
+    d = ImageDraw.Draw(im)
+    d.rectangle([s(lx - 7), s(ly - 7), s(lx + 7), s(ly + 7)], fill=(255, 246, 200, 255))  # el vidrio encendido
+    for (wx, wy) in ((392, 186), (384, 214)):  # ventanitas con luz
+        d.rectangle([s(wx - 2), s(wy - 3), s(wx + 2), s(wy + 3)], fill=(255, 210, 110, 255))
+    rs = np.random.RandomState(3)
+    for _ in range(60):  # brillitos de luna en el agua
+        x, y = rs.uniform(0, P), rs.uniform(0, P)
+        if agua[int(y * K), int(x * K)]:
+            l = rs.uniform(3, 8)
+            d.line([s(x), s(y), s(x + l), s(y)], fill=(200, 220, 255, 120), width=s(1))
+    out = final(im, "17_isla_faro.png")
+    # el mapa de agua para el firmware: 58 x 58 celdas de 8 px; 1 = agua
+    agua_p = np.asarray(Image.fromarray((agua * 255).astype(np.uint8)).resize((P, P), Image.NEAREST)) > 127
+    C = 8; Nc = (P + C - 1) // C
+    filas = []
+    for j in range(Nc):
+        bits = 0
+        for i in range(Nc):
+            bloque = agua_p[j * C:(j + 1) * C, i * C:(i + 1) * C]
+            if bloque.size and bloque.mean() > 0.75:
+                bits |= 1 << i
+        filas.append(bits)
+    with open(os.path.join(RAIZ, "firmware", "main", "isla_mapa.inc"), "w", encoding="utf-8") as f:
+        f.write("/* GENERADO por herramientas/hacer_fondos_juegos.py: el agua de la isla (pantalla de 466, celdas de 8 px).\n"
+                " * Bit i de la fila j = la celda (i, j) es agua (los barquitos del faro navegan por ahí). No editar a mano. */\n")
+        f.write("#define ISLA_MAPA_C %d\n#define ISLA_MAPA_N %d\n" % (C, Nc))
+        f.write("static const uint64_t ISLA_AGUA[%d] = {\n" % Nc)
+        for j in range(0, Nc, 3):
+            f.write("    " + ", ".join("0x%016XULL" % b for b in filas[j:j + 3]) + ",\n")
+        f.write("};\n")
+    print("listo: isla_mapa.inc")
+    return out
+
+
+# ------------------------------------------------------------------------------------------------------------ buceo
+def buceo():
+    yy, xx = np.mgrid[0:G, 0:G].astype(np.float32) / K
+    t = yy / P
+    arriba, abajo = np.array([92, 196, 232], np.float32), np.array([10, 52, 104], np.float32)
+    a = arriba * (1 - t[..., None]) ** 1.0 + abajo * t[..., None]
+    # rayos de luz (bandas diagonales suaves que se apagan hacia abajo)
+    for k, x0 in enumerate((40, 120, 190, 270, 340)):
+        dist = np.abs((xx - (x0 + yy * 0.38)))
+        anch = 18 + 8 * (k % 2)
+        a += (np.clip(1 - dist / anch, 0, 1) ** 2 * (1 - t) ** 1.5 * 46)[..., None] * np.array([0.8, 1.0, 1.0])
+    im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).convert("RGBA")
+    d = ImageDraw.Draw(im)
+    # la superficie, arriba: una franja clara que ondula
+    pts = [(s(x), s(34 + 3 * math.sin(x * 0.07) + 2 * math.sin(x * 0.17))) for x in range(0, P + 1, 4)]
+    d.polygon([(0, 0)] + pts + [(G, 0)], fill=(150, 222, 244, 255))
+    d.line(pts, fill=(230, 248, 255, 255), width=s(3))
+    # arrecife lejano (siluetas desenfocadas)
+    lejos = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    dl = ImageDraw.Draw(lejos)
+    for (cx, cy, r) in ((40, 340, 60), (120, 360, 46), (300, 350, 52), (400, 336, 64), (210, 372, 40)):
+        dl.ellipse([s(cx - r), s(cy - r * 0.8), s(cx + r), s(cy + r * 0.8)], fill=(16, 64, 104, 200))
+    im = Image.alpha_composite(im, lejos.filter(ImageFilter.GaussianBlur(5 * K)))
+    d = ImageDraw.Draw(im)
+    # paredes de roca a los lados (con sombra y musgo), como un arrecife que encierra la escena
+    for lado in (0, 1):
+        pared = Image.new("RGBA", im.size, (0, 0, 0, 0))
+        dp = ImageDraw.Draw(pared)
+        for k2, (yy2, rr2) in enumerate(((150, 40), (200, 52), (258, 60), (318, 66), (372, 70), (420, 64))):
+            cx2 = (14 + rr2 * 0.4) if lado == 0 else (P - 14 - rr2 * 0.4)
+            dp.ellipse([s(cx2 - rr2), s(yy2 - rr2 * 0.7), s(cx2 + rr2), s(yy2 + rr2 * 0.7)], fill=(36, 66, 92, 255))
+            dp.ellipse([s(cx2 - rr2 * 0.7), s(yy2 - rr2 * 0.6), s(cx2 + rr2 * 0.3), s(yy2 - rr2 * 0.05)], fill=(62, 96, 124, 255))
+            dp.ellipse([s(cx2 - rr2 * 0.5), s(yy2 - rr2 * 0.68), s(cx2 + rr2 * 0.2), s(yy2 - rr2 * 0.42)], fill=(70, 140, 100, 255))
+        im = Image.alpha_composite(im, pared)
+    d = ImageDraw.Draw(im)
+    rs2 = np.random.RandomState(12)
+    for _ in range(40):  # anémonas y corales chiquitos pegados a las rocas
+        lado = rs2.randint(0, 2)
+        y2 = rs2.uniform(150, 420)
+        x2 = rs2.uniform(30, 70) if lado == 0 else P - rs2.uniform(30, 70)
+        c2 = [(240, 110, 140, 255), (255, 170, 90, 255), (214, 110, 210, 255), (250, 220, 100, 255), (110, 220, 200, 255)][rs2.randint(0, 5)]
+        r2 = rs2.uniform(2, 4.5)
+        d.ellipse([s(x2 - r2), s(y2 - r2), s(x2 + r2), s(y2 + r2)], fill=c2)
+    # la arena con dunas y ondas
+    pts = [(s(x), s(370 + 8 * math.sin(x * 0.03 + 0.6) + 4 * math.sin(x * 0.09))) for x in range(0, P + 1, 4)]
+    d.polygon(pts + [(G, G), (0, G)], fill=(222, 198, 140, 255))
+    d.line(pts, fill=(246, 230, 186, 255), width=s(3))
+    for j in range(8):
+        y0 = 392 + j * 10
+        for x in range(0, P, 26):
+            d.arc([s(x + (j % 2) * 13), s(y0), s(x + 22 + (j % 2) * 13), s(y0 + 6)], 200, 340, fill=(190, 164, 110, 200), width=s(1))
+    # reflejos de luz que tiemblan sobre la arena (una red suave)
+    luzarena = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    dla = ImageDraw.Draw(luzarena)
+    rs3 = np.random.RandomState(21)
+    for _ in range(70):
+        x2, y2 = rs3.uniform(20, P - 20), rs3.uniform(384, 460)
+        dla.arc([s(x2), s(y2), s(x2 + rs3.uniform(10, 24)), s(y2 + rs3.uniform(4, 8))], rs3.uniform(0, 180), rs3.uniform(200, 360), fill=(255, 250, 220, 120), width=s(1))
+    im = Image.alpha_composite(im, luzarena.filter(ImageFilter.GaussianBlur(0.6 * K)))
+    d = ImageDraw.Draw(im)
+    # un cofre medio enterrado y un ancla vieja
+    d.rounded_rectangle([s(142), s(402), s(176), s(424)], s(3), fill=(130, 84, 40, 255), outline=(70, 40, 18, 255), width=s(1))
+    d.pieslice([s(142), s(392), s(176), s(414)], 180, 360, fill=(150, 98, 48, 255), outline=(70, 40, 18, 255))
+    d.rectangle([s(157), s(400), s(161), s(410)], fill=(230, 196, 80, 255))
+    d.polygon([(s(130), s(426)), (s(190), s(426)), (s(186), s(430)), (s(134), s(430))], fill=(222, 198, 140, 255))
+    d.line([(s(330), s(372)), (s(344), s(420))], fill=(90, 98, 110, 255), width=s(4))
+    d.arc([s(322), s(400), s(362), s(430)], 20, 160, fill=(90, 98, 110, 255), width=s(4))
+    d.ellipse([s(325), s(364), s(335), s(374)], outline=(90, 98, 110, 255), width=s(2))
+    # algas largas a los lados (curvas suaves con hojas)
+    def alga(x0, alto, col, fase):
+        pts = []
+        for j in range(0, alto, 3):
+            pts.append((x0 + 7 * math.sin(j * 0.05 + fase), 392 - j))
+        for k2 in range(len(pts) - 1):
+            w = 5 - 3 * k2 / len(pts)
+            d.line([(s(pts[k2][0]), s(pts[k2][1])), (s(pts[k2 + 1][0]), s(pts[k2 + 1][1]))], fill=col, width=s(w))
+        for k2 in range(4, len(pts), 6):
+            x, y = pts[k2]
+            lado = 1 if (k2 // 6) % 2 else -1
+            d.ellipse([s(x + lado * 2 - (12 if lado < 0 else 0)), s(y - 4), s(x + lado * 2 + (12 if lado > 0 else 0)), s(y + 3)], fill=col)
+        x, y = pts[-1]
+        d.ellipse([s(x - 3), s(y - 3), s(x + 3), s(y + 3)], fill=(240, 200, 80, 255))
+    for (x0, alto, col, f) in ((70, 160, (40, 140, 80, 255), 0), (88, 210, (54, 160, 92, 255), 1), (104, 130, (40, 140, 80, 255), 2),
+                               (360, 190, (54, 160, 92, 255), 3), (378, 150, (40, 140, 80, 255), 4), (394, 110, (70, 176, 104, 255), 5),
+                               (200, 60, (54, 160, 92, 255), 6), (280, 50, (40, 140, 80, 255), 7)):
+        alga(x0, alto, col, f)
+    # corales (ramitas redondeadas y uno de cerebro), rocas con sombra, conchitas y una estrella de mar
+    def coral(cx, cy, col, n, sem):
+        r2 = np.random.RandomState(sem)
+        for _ in range(n):
+            x, y, a2 = cx + r2.uniform(-6, 6), cy, -math.pi / 2 + r2.uniform(-0.8, 0.8)
+            for j in range(r2.randint(10, 22)):
+                nx, ny = x + math.cos(a2) * 1.6, y + math.sin(a2) * 1.6
+                d.line([(s(x), s(y)), (s(nx), s(ny))], fill=col, width=s(4))
+                x, y = nx, ny
+                a2 += r2.uniform(-0.2, 0.2)
+            d.ellipse([s(x - 3), s(y - 3), s(x + 3), s(y + 3)], fill=col)
+    coral(128, 396, (240, 110, 140, 255), 5, 1); coral(156, 400, (255, 160, 90, 255), 4, 2)
+    coral(312, 398, (255, 136, 110, 255), 5, 3); coral(338, 394, (214, 110, 210, 255), 4, 4)
+    for (cx, cy, r, col) in ((232, 408, 14, (232, 160, 200, 255)), (180, 404, 9, (120, 210, 190, 255))):
+        d.ellipse([s(cx - r), s(cy - r * 0.8), s(cx + r), s(cy + r * 0.8)], fill=col, outline=(90, 40, 80, 255), width=s(1))
+        for k2 in range(3):
+            d.arc([s(cx - r + 3 + k2 * 2), s(cy - r * 0.8 + 3), s(cx + r - 3 - k2 * 2), s(cy + r * 0.8 - 3)], 190, 350, fill=(130, 70, 110, 200), width=s(1))
+    for (cx, cy, rx, ry) in ((206, 414, 18, 11), (280, 416, 12, 8), (60, 404, 16, 10)):
+        d.ellipse([s(cx - rx + 3), s(cy - ry + 5), s(cx + rx + 3), s(cy + ry + 5)], fill=(150, 126, 80, 200))
+        d.ellipse([s(cx - rx), s(cy - ry), s(cx + rx), s(cy + ry)], fill=(96, 112, 130, 255))
+        d.ellipse([s(cx - rx * 0.7), s(cy - ry * 0.85), s(cx + rx * 0.2), s(cy - ry * 0.1)], fill=(140, 156, 172, 255))
+        d.ellipse([s(cx - rx * 0.6), s(cy - ry * 1.0), s(cx + rx * 0.5), s(cy - ry * 0.5)], fill=(80, 150, 100, 255))
+    for a2 in range(5):  # estrella de mar
+        ang = math.radians(a2 * 72 - 90)
+        d.line([(s(254), s(430)), (s(254 + math.cos(ang) * 10), s(430 + math.sin(ang) * 10))], fill=(240, 120, 60, 255), width=s(4))
+    d.ellipse([s(250), s(426), s(258), s(434)], fill=(250, 150, 80, 255))
+    # burbujas que suben (con brillo) y pececitos lejanos
+    rs = np.random.RandomState(7)
+    for _ in range(28):
+        x, y, r = rs.uniform(30, P - 30), rs.uniform(60, 340), rs.uniform(1.5, 4.5)
+        d.ellipse([s(x - r), s(y - r), s(x + r), s(y + r)], outline=(220, 246, 255, 200), width=s(1))
+        d.ellipse([s(x - r * 0.5), s(y - r * 0.6), s(x - r * 0.1), s(y - r * 0.2)], fill=(255, 255, 255, 220))
+    for (fx, fy, dd) in ((150, 140, 1), (166, 148, 1), (320, 170, -1), (306, 180, -1), (290, 120, -1)):
+        d.ellipse([s(fx - 6), s(fy - 3), s(fx + 6), s(fy + 3)], fill=(30, 90, 140, 200))
+        d.polygon([(s(fx - 6 * dd), s(fy)), (s(fx - 11 * dd), s(fy - 4)), (s(fx - 11 * dd), s(fy + 4))], fill=(30, 90, 140, 200))
+    return final(im, "18_isla_buceo.png")
+
+
+if __name__ == "__main__":
+    pingpong(); cuerda(); memorice(); escondidas(); faro(); buceo()

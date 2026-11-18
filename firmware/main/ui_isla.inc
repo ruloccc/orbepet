@@ -1,9 +1,10 @@
 /* ======================================================================
  * (1.0.18) Los juegos de la isla (Jugar → EL MAR, solo en la isla). Usan el marco de ui_zjuegos.inc y las piezas de los
  * juegos de a dos (ui_dos.inc: zd_criatura, zd_poner, la portada, el fondo de la memoria de recursos: pj4 y pj5).
- *   EL FARO (de noche): el MISMO faro de la isla. Mueves su luz con el dedo; los barquitos que quedan dentro del haz
- *       navegan hacia donde apuntas. Hay que llevarlos al muelle sin chocar con las rocas. Los que quedan a oscuras se van
- *       con la corriente. 3 corazones; dura 75 s.
+ *   EL FARO (de noche): la isla misma, de noche, vista desde arriba (su faro, su muelle, sus rocas). Mueves la luz del
+ *       faro con el dedo; los barquitos que quedan dentro del haz navegan hacia donde apuntas. Hay que llevarlos al anillo
+ *       del muelle rodeando la isla, sin que encallen en la orilla o en las rocas. Los que quedan a oscuras se van con la
+ *       corriente hacia la isla. 3 corazones; dura 90 s.
  *   BUCEO CON MAREA: la llevas con el dedo bajo el agua a buscar perlas, conchas y caracoles. Las medusas pican (quitan
  *       aire); las burbujas grandes dan aire. Cuando se acaba el aire, sube. Marea nada con ella si ya la conocen.
  * Al final: cuántos barquitos / tesoritos, y si el mar le trajo una concha para su colección (pet_island_game).
@@ -40,44 +41,57 @@ static void zi_marcador(void)
 }
 
 /* ======================================================================
- * EL FARO (fondo pj4: la lámpara en (96, 168), las rocas y el muelle: los mismos de herramientas/dibujar_juegos_isla.py)
+ * EL FARO (fondo pj4: la isla DE NOCHE; la lámpara, el muelle y el mapa de agua salen de herramientas/hacer_fondos_juegos.py)
  * ==================================================================== */
-#define ZF_LX 96.0f
-#define ZF_LY 168.0f
-#define ZF_MX 344.0f
-#define ZF_MY 352.0f
+#define ZF_LX 386.0f   /* la lámpara del faro de la isla (fondo pj4: la isla de noche) */
+#define ZF_LY 128.0f
+#define ZF_MX 30.0f    /* la punta del muelle (a la izquierda de la isla, con el salvavidas): se llega por arriba o por abajo */
+#define ZF_MY 286.0f
+#define ZF_MR 40.0f    /* qué tan cerca de la punta cuenta como «llegó» */
 #define ZF_BOTES 3
-#define ZF_DURA 75000u
-static const int16_t ZF_ROCA[5][3] = {{196, 200, 15}, {300, 182, 13}, {236, 290, 17}, {372, 262, 13}, {170, 372, 13}};
-static float s_zf_x[ZF_BOTES], s_zf_y[ZF_BOTES], s_zf_fase[ZF_BOTES];
+#define ZF_DURA 90000u
+#include "isla_mapa.inc" /* (generado) dónde hay agua: los barquitos chocan con la orilla y las rocas */
+static bool zf_agua(float x, float y)
+{
+    const float dx = x - CX, dy = y - CX;
+    if (dx * dx + dy * dy > 224.0f * 224.0f) return true; /* (afuera del círculo: se maneja aparte) */
+    const int i = (int)x / ISLA_MAPA_C, j = (int)y / ISLA_MAPA_C;
+    if (i < 0 || j < 0 || i >= ISLA_MAPA_N || j >= ISLA_MAPA_N) return true;
+    return (ISLA_AGUA[j] >> i) & 1u;
+}
+static float s_zf_x[ZF_BOTES], s_zf_y[ZF_BOTES], s_zf_fase[ZF_BOTES], s_zf_dir[ZF_BOTES];
 static int8_t s_zf_est[ZF_BOTES];     /* 0 nada, 1 navegando, 2 se hunde, 3 llegó */
 static uint32_t s_zf_t[ZF_BOTES], s_zf_sale;
-static float s_zf_ax = 233.0f, s_zf_ay = 220.0f; /* hacia dónde apunta la luz */
+static float s_zf_ax = 233.0f, s_zf_ay = 233.0f; /* hacia dónde apunta la luz */
 static bool zf_iluminado(float x, float y)
 {
     const float bx = x - ZF_LX, by = y - ZF_LY, ax = s_zf_ax - ZF_LX, ay = s_zf_ay - ZF_LY;
     const float db = sqrtf(bx * bx + by * by), da = sqrtf(ax * ax + ay * ay);
-    if (db < 1 || da < 1 || db > da + 50.0f) return false;
+    if (db < 1 || da < 1 || db > da + 60.0f) return false;
     const float c = (bx * ax + by * ay) / (db * da);
-    return c > cosf(s_nino ? 0.30f : 0.22f);
+    return c > cosf(s_nino ? 0.32f : 0.24f);
 }
 static void zf_empezar(void)
 {
     for (int i = 0; i < ZF_BOTES; i++) s_zf_est[i] = 0;
     s_zf_sale = s_zj_t + 2500u; /* (el primero, cuando ya se leyó cómo se juega) */
-    s_zf_ax = 233.0f; s_zf_ay = 220.0f;
+    s_zf_ax = 300.0f; s_zf_ay = 300.0f;
     s_zi_vidas = 3; s_zi_perdidos = 0; s_zi_triste = 0;
     for (int k = 0; k < 8; k++) { /* el haz: círculos de luz cada vez más grandes */
         lv_obj_t *o = zj_caja(20 + k, 10, 10, 0xFFF0B0, LV_RADIUS_CIRCLE);
         lv_obj_set_style_bg_opa(o, (lv_opa_t)(46 - k * 3), 0);
     }
-    lv_obj_t *l = zj_caja(28, 34, 34, 0xFFE9A0, LV_RADIUS_CIRCLE); lv_obj_set_style_bg_opa(l, LV_OPA_50, 0);
+    lv_obj_t *l = zj_caja(28, 30, 30, 0xFFE9A0, LV_RADIUS_CIRCLE); lv_obj_set_style_bg_opa(l, LV_OPA_50, 0);
     zj_centro(l, ZF_LX, ZF_LY);
-    zj_texto("MUEVE LA LUZ CON EL DEDO: LOS BARQUITOS VAN HACIA ELLA. ¡LLÉVALOS AL MUELLE!", 4000);
+    lv_obj_t *m = zj_caja(29, 76, 76, 0xFFE27A, LV_RADIUS_CIRCLE); /* la meta: un anillo que late en la punta del muelle */
+    lv_obj_set_style_bg_opa(m, LV_OPA_TRANSP, 0); lv_obj_set_style_border_width(m, 3, 0); lv_obj_set_style_border_color(m, lv_color_hex(0xFFE27A), 0);
+    zj_centro(m, ZF_MX, ZF_MY);
+    zj_texto("ARRASTRA EL DEDO: LA LUZ DEL FARO LO SIGUE Y LOS BARQUITOS ILUMINADOS TAMBIÉN. ¡LLÉVALOS AL MUELLE!", 4500);
+    zd_mano(ICO_MANO_DESLIZA, 300.0f, 300.0f, 5000u);
 }
 static void zf_dibujar_haz(void)
 {
-    const float dx = s_zf_ax - ZF_LX, dy = s_zf_ay - ZF_LY, d = sqrtf(dx * dx + dy * dy) + 30.0f;
+    const float dx = s_zf_ax - ZF_LX, dy = s_zf_ay - ZF_LY, d = sqrtf(dx * dx + dy * dy) + 40.0f;
     const float ux = dx / (d - 30.0f > 1 ? d - 30.0f : 1), uy = dy / (d - 30.0f > 1 ? d - 30.0f : 1);
     for (int k = 0; k < 8; k++) {
         lv_obj_t *o = s_zj_o[20 + k];
@@ -94,20 +108,26 @@ static void zf_perder(int i, bool choque)
     s_zi_vidas--; s_zi_perdidos++; s_zi_triste = s_zj_t | 1u;
     zj_chispas(s_zf_x[i], s_zf_y[i], 10, 0xE8F4FF, 160.0f, 300.0f);
     accion(UI_ACCION_SONAR, choque ? SND_CHAPOTEO : SND_SUSPIRO);
-    zj_texto(choque ? "¡CHOCÓ CON UNA ROCA!" : "SE PERDIÓ EN LA OSCURIDAD...", 1400);
+    zj_texto(choque ? "¡ENCALLÓ! HAY QUE ALUMBRARLO ANTES" : "SE PERDIÓ EN LA OSCURIDAD...", 1400);
 }
 static void zf_animar(float dt)
 {
     if (s_zj_fase != 1) return;
     /* hacia dónde apunta la luz: el dedo (o, en las pruebas, sola) */
-    if (s_zj_dedo && !s_zj_trampa) { s_zf_ax = s_zj_dedo_x; s_zf_ay = s_zj_dedo_y; }
-    if (s_zf_ay < ZF_LY - 40.0f) s_zf_ay = ZF_LY - 40.0f;
+    if (s_zj_dedo && !s_zj_trampa) { s_zf_ax = s_zj_dedo_x; s_zf_ay = s_zj_dedo_y; zd_mano_fuera(); }
     /* llega un barquito nuevo por el horizonte */
     const bool queda_tiempo = zj_tiempo() < ZF_DURA - 12000u;
     if (queda_tiempo && (int32_t)(s_zj_t - s_zf_sale) >= 0) {
         for (int i = 0; i < ZF_BOTES; i++)
             if (s_zf_est[i] == 0) {
-                s_zf_est[i] = 1; s_zf_x[i] = 170.0f + azar01() * 220.0f; s_zf_y[i] = 128.0f; s_zf_fase[i] = azar01() * 6.28f;
+                s_zf_est[i] = 1; s_zf_fase[i] = azar01() * 6.28f; s_zf_dir[i] = 0;
+                for (int k = 0; k < 30; k++) { /* aparece en el mar abierto, lejos del muelle (a la derecha, arriba o abajo) */
+                    const float a = -1.9f + azar01() * 3.8f; /* (de arriba a abajo pasando por la derecha) */
+                    s_zf_x[i] = CX + cosf(a) * 200.0f; s_zf_y[i] = CX + sinf(a) * 200.0f;
+                    bool libre = true; /* agua alrededor (no recién al lado de una roca) */
+                    for (int q = 0; q < 9 && libre; q++) libre = zf_agua(s_zf_x[i] + (float)(q % 3 - 1) * 20.0f, s_zf_y[i] + (float)(q / 3 - 1) * 20.0f);
+                    if (libre) break;
+                }
                 lv_obj_t *o = zj_img(2 + i, art_icono(ICO_BOTE, 3)); zj_tinte(o, 0x000000, 0); lv_obj_set_style_opa(o, LV_OPA_COVER, 0);
                 accion(UI_ACCION_SONAR, SND_TOQUE);
                 break;
@@ -128,22 +148,32 @@ static void zf_animar(float dt)
             continue;
         }
         float vx, vy;
-        if (s_zj_trampa) { /* (pruebas) va derecho al muelle, esquivando las rocas */
-            vx = ZF_MX - s_zf_x[i]; vy = ZF_MY - s_zf_y[i];
-            const float d = sqrtf(vx * vx + vy * vy) + 0.01f;
-            vx = vx / d * 60.0f; vy = vy / d * 60.0f;
-            for (int r = 0; r < 5; r++) {
-                const float rx = s_zf_x[i] - ZF_ROCA[r][0], ry = s_zf_y[i] - ZF_ROCA[r][1], rd = sqrtf(rx * rx + ry * ry) + 0.01f;
-                if (rd < ZF_ROCA[r][2] + 46.0f) { const float f = (ZF_ROCA[r][2] + 46.0f - rd) * 4.0f; vx += rx / rd * f; vy += ry / rd * f; }
+        if (s_zj_trampa) { /* (pruebas) va al muelle rodeando la isla: si adelante hay tierra, gira (siempre hacia el mismo lado) */
+            const float base = atan2f(ZF_MY - s_zf_y[i], ZF_MX - s_zf_x[i]);
+            if (s_zf_dir[i] == 0) s_zf_dir[i] = s_zf_y[i] < CX ? 1.0f : -1.0f; /* por arriba o por abajo de la isla (girando hacia el oeste) */
+            float a = base, vel = 60.0f;
+            int k = 0;
+            for (; k < 28; k++) {
+                a = base + s_zf_dir[i] * 0.22f * (float)k;
+                bool libre = true;
+                for (int q = 3; q <= 30 && libre; q += 3) /* (cada 3 px: si no, corta las esquinas de la orilla) */
+                    libre = zf_agua(s_zf_x[i] + cosf(a) * (float)q, s_zf_y[i] + sinf(a) * (float)q) &&
+                            zf_agua(s_zf_x[i] + cosf(a) * (float)q - sinf(a) * 6.0f, s_zf_y[i] + sinf(a) * (float)q + cosf(a) * 6.0f) &&
+                            zf_agua(s_zf_x[i] + cosf(a) * (float)q + sinf(a) * 6.0f, s_zf_y[i] + sinf(a) * (float)q - cosf(a) * 6.0f);
+                if (libre) break;
             }
+            if (k == 28) vel = 0;
+            vx = cosf(a) * vel; vy = sinf(a) * vel;
         } else if (zf_iluminado(s_zf_x[i], s_zf_y[i])) { /* en la luz: navega hacia donde apunta */
             vx = s_zf_ax - s_zf_x[i]; vy = s_zf_ay - s_zf_y[i];
             const float d = sqrtf(vx * vx + vy * vy);
             const float v = d < 10.0f ? 0.0f : (s_nino ? 50.0f : 58.0f);
             vx = d > 0.1f ? vx / d * v : 0; vy = d > 0.1f ? vy / d * v : 0;
-        } else { /* a oscuras: la corriente se lo lleva despacito */
-            vx = 7.0f * sinf((float)s_zj_t / 1300.0f + s_zf_fase[i]);
-            vy = s_nino ? 4.5f : 6.5f;
+        } else { /* a oscuras: la corriente lo lleva despacito hacia la isla (si nadie lo guía, encalla) */
+            const float dx0 = CX - s_zf_x[i], dy0 = CX - s_zf_y[i], d0 = sqrtf(dx0 * dx0 + dy0 * dy0) + 0.01f;
+            const float v = s_nino ? 4.5f : 6.5f;
+            vx = dx0 / d0 * v + 5.0f * sinf((float)s_zj_t / 1300.0f + s_zf_fase[i]);
+            vy = dy0 / d0 * v;
         }
         s_zf_x[i] += vx * dt; s_zf_y[i] += vy * dt;
         const bool luz = s_zj_trampa || zf_iluminado(s_zf_x[i], s_zf_y[i]);
@@ -152,7 +182,7 @@ static void zf_animar(float dt)
         zj_centro(o, s_zf_x[i], s_zf_y[i] + 2.0f * sinf((float)s_zj_t / 260.0f + s_zf_fase[i]));
         /* ¿llegó al muelle? ¿chocó? ¿se perdió? */
         const float mx = s_zf_x[i] - ZF_MX, my = s_zf_y[i] - ZF_MY;
-        if (mx * mx + my * my < 28.0f * 28.0f) {
+        if (mx * mx + my * my < ZF_MR * ZF_MR) {
             s_zf_est[i] = 3; s_zf_t[i] = s_zj_t;
             s_zj_pts++;
             zj_mas(1, ZF_MX, ZF_MY - 30.0f, 0xFFF3B0);
@@ -160,17 +190,14 @@ static void zf_animar(float dt)
             accion(UI_ACCION_SONAR, SND_ALEGRE);
             continue;
         }
-        for (int r = 0; r < 5; r++) {
-            const float rx = s_zf_x[i] - ZF_ROCA[r][0], ry = s_zf_y[i] - ZF_ROCA[r][1], rr = ZF_ROCA[r][2] + 9.0f;
-            if (rx * rx + ry * ry < rr * rr) { zf_perder(i, true); break; }
-        }
-        if (s_zf_est[i] != 1) continue;
+        if (!zf_agua(s_zf_x[i], s_zf_y[i])) { zf_perder(i, true); continue; }
         const float cx = s_zf_x[i] - CX, cy = s_zf_y[i] - CX;
-        if (s_zf_y[i] > 430.0f || cx * cx + cy * cy > 222.0f * 222.0f) zf_perder(i, false);
+        if (cx * cx + cy * cy > 226.0f * 226.0f) zf_perder(i, false);
     }
     zf_dibujar_haz();
     /* ella, en el balcón del faro, mirando el mar */
-    zd_poner(0, s_zi_triste && s_zj_t - s_zi_triste < 1400u ? 5 : 1, 2, false, 124.0f, 184.0f);
+    if (s_zj_o[29]) { const int r = 76 + (int)(6.0f * sinf((float)s_zj_t / 250.0f)); lv_obj_set_size(s_zj_o[29], r, r); zj_centro(s_zj_o[29], ZF_MX, ZF_MY); }
+    zd_poner(0, s_zi_triste && s_zj_t - s_zi_triste < 1400u ? 5 : 1, 2, true, 416.0f, 160.0f); /* ella, en el balcón del faro */
     bool quedan = false;
     for (int i = 0; i < ZF_BOTES; i++) if (s_zf_est[i] == 1 || s_zf_est[i] == 2 || s_zf_est[i] == 3) quedan = true;
     if (s_zi_vidas <= 0 || (zj_tiempo() >= ZF_DURA - 12000u && !quedan) || zj_tiempo() >= ZF_DURA + 20000u) {
@@ -242,7 +269,8 @@ static void zb_empezar(void)
     lv_obj_t *ic = zj_img(26, art_icono(ICO_BURBUJA, 2)); lv_obj_set_pos(ic, CX - 88, 52);
     if (s_zb_marea) zj_img(27, art_icono_espejo(ICO_MAREA, 3));
     s_zb_otra = s_zj_t + 2500u; s_zb_burbuja = s_zj_t + 9000u;
-    zj_texto(s_zb_marea ? "LLÉVALA CON EL DEDO. ¡CUIDADO CON LAS MEDUSAS! MAREA TE AYUDA A BUSCAR" : "LLÉVALA CON EL DEDO. ¡CUIDADO CON LAS MEDUSAS!", 3800);
+    zj_texto(s_zb_marea ? "ARRASTRA EL DEDO PARA LLEVARLA. JUNTA PERLAS Y CONCHAS. ¡OJO CON LAS MEDUSAS! MAREA TE AYUDA" : "ARRASTRA EL DEDO PARA LLEVARLA. JUNTA PERLAS Y CONCHAS. ¡OJO CON LAS MEDUSAS!", 4200);
+    zd_mano(ICO_MANO_DESLIZA, CX, 200.0f, 5000u);
 }
 static void zb_animar(float dt)
 {
@@ -259,7 +287,7 @@ static void zb_animar(float dt)
     else if (s_zj_trampa) {
         float best = 1e9f;
         for (int i = 0; i < ZB_COSAS; i++) if (s_zb_cq[i] >= 0) { const float dx = s_zb_cx[i] - s_zb_x, dy = s_zb_cy[i] - s_zb_y, d = dx * dx + dy * dy; if (d < best) { best = d; tx = s_zb_cx[i]; ty = s_zb_cy[i]; } }
-    } else if (s_zj_dedo) { tx = s_zj_dedo_x; ty = s_zj_dedo_y; }
+    } else if (s_zj_dedo) { tx = s_zj_dedo_x; ty = s_zj_dedo_y; zd_mano_fuera(); }
     {
         const float dx = tx - s_zb_x, dy = ty - s_zb_y, d = sqrtf(dx * dx + dy * dy), v = (s_zb_sube ? 120.0f : 150.0f) * dt;
         if (d > v) { s_zb_x += dx / d * v; s_zb_y += dy / d * v; s_zb_vx = dx; } else if (!s_zb_sube) { s_zb_x = tx; s_zb_y = ty; }
@@ -344,8 +372,8 @@ static void zi_portada(void)
 {
     zj_titulo(s_zj_jg == ZJ_FARO ? "EL FARO" : "BUCEO CON MAREA");
     lv_obj_t *c = caja(s_zj);
-    lv_obj_set_size(c, 300, 200);
-    lv_obj_align(c, LV_ALIGN_CENTER, 0, 6);
+    lv_obj_set_size(c, 320, 250);
+    lv_obj_align(c, LV_ALIGN_CENTER, 0, 10);
     lv_obj_set_style_bg_color(c, lv_color_hex(0x0E1C38), 0);
     lv_obj_set_style_bg_opa(c, LV_OPA_80, 0);
     lv_obj_set_style_radius(c, 24, 0);
@@ -355,9 +383,10 @@ static void zi_portada(void)
     lv_obj_t *ic = icono(c, s_zj_jg == ZJ_FARO ? ICO_FARO : (marea ? ICO_MAREA : ICO_CONCHA), 4);
     lv_obj_align(ic, LV_ALIGN_TOP_MID, 50, 18);
     if (!s_nino) {
-        lv_obj_t *t = texto_c(c, s_zj_jg == ZJ_FARO ? "LLEVA LOS BARQUITOS AL MUELLE CON LA LUZ" : "PERLAS, CONCHAS Y CARACOLES", 0xCFE8FF, 2, 280);
-        lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 100);
-        lv_obj_t *t2 = texto_c(c, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 280); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
+        lv_obj_t *t = zj_texto_c(c, 0, s_zj_jg == ZJ_FARO ? "MUEVE LA LUZ CON EL DEDO. LOS BARQUITOS ILUMINADOS LA SIGUEN: LLÉVALOS AL ANILLO DEL MUELLE."
+                                                    : "LLÉVALA CON EL DEDO A JUNTAR PERLAS Y CONCHAS. LAS MEDUSAS QUITAN AIRE; LAS BURBUJAS DAN AIRE.", 0xCFE8FF, 2, 296);
+        lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 92);
+        lv_obj_t *t2 = zj_texto_c(c, 1, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 280); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
     }
     s_zj_o[45] = c;
 }

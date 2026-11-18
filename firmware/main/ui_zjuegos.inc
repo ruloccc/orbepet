@@ -17,6 +17,18 @@
 static lv_obj_t *s_zj, *s_zj_fondo, *s_zj_tit, *s_zj_tit_img, *s_zj_txt, *s_zj_txt_img, *s_zj_x, *s_zj_hud, *s_zj_hud_img, *s_zj_barra, *s_zj_barra_f;
 static lv_obj_t *s_zj_o[ZJ_N], *s_zj_ch[ZJ_CHISPAS], *s_zj_fin, *s_zj_mas, *s_zj_mas_img;
 static art_img_t s_zj_tit_art, s_zj_txt_art, s_zj_hud_art, s_zj_mas_art, s_zj_pet_art[3], s_zj_fin_art[3];
+/* (1.0.19) los textos de las portadas: propios del juego. Antes usaban los de los paneles (texto_c), y si se abría y
+ * cerraba un panel encima de la portada, esos textos se liberaban mientras todavía se veían */
+static art_img_t s_zj_ptxt[4];
+static lv_obj_t *zj_texto_c(lv_obj_t *padre, int k, const char *s, uint32_t color, int escala, int ancho)
+{
+    lv_obj_t *img = lv_image_create(padre);
+    lv_obj_remove_flag(img, LV_OBJ_FLAG_CLICKABLE);
+    if (k < 0 || k >= 4) return img;
+    art_texto_centrado(&s_zj_ptxt[k], gtxt(s), color, fuente_escala(escala), ancho);
+    if (s_zj_ptxt[k].px) lv_image_set_src(img, &s_zj_ptxt[k].dsc);
+    return img;
+}
 static lv_timer_t *s_zj_timer;
 static int s_zj_jg, s_zj_paso, s_zj_cuenta, s_zj_trampa, s_zj_fase, s_zj_pts, s_zj_pts_vis = -1, s_zj_vidas, s_zj_ronda, s_zj_combo, s_zj_estrellas;
 static uint32_t s_zj_t, s_zj_t0, s_zj_txt_hasta, s_zj_fin_t, s_zj_juego_t, s_zj_dura, s_zj_mas_t;
@@ -72,9 +84,25 @@ static void zj_titulo(const char *t)
     lv_obj_align(s_zj_tit, LV_ALIGN_TOP_MID, 0, 40);
     ocultar(s_zj_tit, false);
 }
+/* (1.0.19) ¡el PÁNICO de la 1.0.18 en el buceo! El mismo lugar de s_zj_o[] se usaba a veces como caja (una perla) y a
+ * veces como imagen (una concha): ponerle una imagen a algo que no es imagen escribía fuera del objeto y corrompía la
+ * memoria (se caía después, al mover una medusa o al esconder las instrucciones). Ahora, si el tipo no calza, se borra y
+ * se crea de nuevo. */
+static void zj_tipo(int i, bool imagen)
+{
+    lv_obj_t *o = s_zj_o[i];
+    if (o && lv_obj_check_type(o, &lv_image_class) != imagen) {
+#ifdef ESP_PLATFORM
+        static int avisos;
+        if (avisos++ < 3) hal_log("juego: el lugar %d pasó de %s a %s (se crea de nuevo)", i, imagen ? "caja" : "imagen", imagen ? "imagen" : "caja");
+#endif
+        lv_obj_delete(o); s_zj_o[i] = NULL;
+    }
+}
 static lv_obj_t *zj_img(int i, const lv_image_dsc_t *d)
 {
     if (i < 0 || i >= ZJ_N) return NULL;
+    zj_tipo(i, true);
     if (!s_zj_o[i]) { s_zj_o[i] = lv_image_create(s_zj); lv_obj_remove_flag(s_zj_o[i], LV_OBJ_FLAG_CLICKABLE); }
     poner_src(s_zj_o[i], d);
     ocultar(s_zj_o[i], false);
@@ -83,6 +111,7 @@ static lv_obj_t *zj_img(int i, const lv_image_dsc_t *d)
 static lv_obj_t *zj_caja(int i, int w, int h, uint32_t color, int radio)
 {
     if (i < 0 || i >= ZJ_N) return NULL;
+    zj_tipo(i, false);
     if (!s_zj_o[i]) { s_zj_o[i] = caja(s_zj); }
     lv_obj_t *o = s_zj_o[i];
     lv_obj_set_size(o, w, h);
@@ -1168,8 +1197,8 @@ static void zj_portada(void)
     if (!s_nino) {
         char b[48];
         if (rec > 0) snprintf(b, sizeof b, "%s %d", gtxt("RÉCORD:"), rec); else snprintf(b, sizeof b, "%s", gtxt("¡A JUGAR!"));
-        lv_obj_t *t = texto_c(c, b, 0xCFE8FF, 2, 240); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 72);
-        lv_obj_t *t2 = texto_c(c, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 240); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
+        lv_obj_t *t = zj_texto_c(c, 0, b, 0xCFE8FF, 2, 240); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 72);
+        lv_obj_t *t2 = zj_texto_c(c, 1, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 240); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
     }
     s_zj_o[45] = c;
 }
@@ -1247,6 +1276,7 @@ static void zj_cerrar(bool gano)
     s_zj_fondo = s_zj_tit = s_zj_tit_img = s_zj_txt = s_zj_txt_img = s_zj_x = s_zj_hud = s_zj_hud_img = s_zj_barra = s_zj_barra_f = s_zj_fin = s_zj_mas = s_zj_mas_img = NULL;
     art_img_free(&s_zj_tit_art); art_img_free(&s_zj_txt_art); art_img_free(&s_zj_hud_art); art_img_free(&s_zj_mas_art); art_img_free(&s_zg_sopla_art);
     for (int k = 0; k < 3; k++) { art_img_free(&s_zj_pet_art[k]); art_img_free(&s_zj_fin_art[k]); }
+    for (int k = 0; k < 4; k++) art_img_free(&s_zj_ptxt[k]);
     zd_liberar();
     ocultar(s_zj, true);
     if (s_zj_pant >= 0) art_pantalla_liberar(s_zj_pant);
@@ -1289,6 +1319,7 @@ int ui_zj_dbg(int q)
     case 3: return s_zj_paso;
     case 4: return s_zj_fase;
     case 5: return s_zj_pts;
+    case 100: case 101: case 102: return s_zf_est[q - 100] * 1000000 + (int)s_zf_x[q - 100] * 1000 + (int)s_zf_y[q - 100]; /* (1.0.19) los barquitos del faro */
     case 6: return s_zj_estrellas;
     case 7: return s_zj_vidas;
     case 8: return s_zj_ronda;

@@ -1,4 +1,4 @@
-"""(1.0.17) Empaqueta los fondos de los juegos de a dos para la MEMORIA DE RECURSOS del orbe (no van en el programa: no
+"""(1.0.17) Empaqueta los fondos de los juegos de a dos y de la isla (los PNG los hace herramientas/hacer_fondos_juegos.py) para la MEMORIA DE RECURSOS del orbe (no van en el programa: no
 caben). Mismo formato que las pantallas (paleta + LZSS, ver hacer_pantallas.py), con una cabecera:
 
     'P' 'J' 1 alfa  w(u16) h(u16) x(u16) y(u16)  [cantidad de colores] [paleta RGB] [LZSS]
@@ -7,7 +7,7 @@ Escribe:
   firmware/recursos/pj0.bin .. pj3.bin   -> se copian al orbe por USB (probador) o los baja el modo Wi-Fi
   firmware/main/fondos_dos_sim.inc       -> los mismos datos para el simulador del PC (el firmware NO lo usa)
 
-Uso:   python herramientas/hacer_fondos_dos.py
+Uso:   python herramientas/hacer_fondos_juegos.py (dibuja los PNG) y luego python herramientas/hacer_fondos_dos.py
 """
 import os
 import struct

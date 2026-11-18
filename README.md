@@ -807,6 +807,31 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.19 — arreglo de los juegos nuevos (pánico, fondos, instrucciones)
+
+- **Pánico al jugar** (1.0.18, buceo): el mismo lugar de la lista de objetos del juego (`s_zj_o[]`) se usaba a veces
+  como caja (una perla) y a veces como imagen (una concha o una burbuja). Ponerle una imagen a algo que no es imagen
+  escribía fuera del objeto y corrompía la memoria; el orbe se caía después, en otra parte (al mover una medusa o al
+  esconder las instrucciones). Ahora `zj_img`/`zj_caja` revisan el tipo y, si no calza, crean el objeto de nuevo (vale
+  para todos los juegos). Se encontró traduciendo el FALLO_BT del registro con los símbolos de la 1.0.18 (ver abajo).
+- **Fondos nuevos, hechos sobre las ilustraciones del juego** (antes eran un pixel art aparte que se veía tosco):
+  ping pong en el prado de primavera con una mesa azul y su red; tira y afloja en el prado de otoño con un charco de
+  barro y dos banderitas; memorice en la laguna con un mantel de cuadros; escondidas en el bosque (los escondites son
+  los del dibujo: el tronco hueco, los arbustos, el puente, las piedras y el árbol); **el faro es la isla misma, de
+  noche**, con la lámpara encendida: los barquitos rodean la isla hasta el muelle y encallan en la orilla y las rocas
+  de verdad (mapa de agua `isla_mapa.inc`); el buceo, dibujado suave con rocas, corales, cofre y ancla.
+  (`herramientas/hacer_fondos_juegos.py` → PNG; `hacer_fondos_dos.py` → `pj0..pj5.bin`.) Se bajan solos con BUSCAR
+  ACTUALIZACIÓN (los seis cambiaron).
+- **Se entiende cómo se juega**: portadas con las reglas en dos o tres renglones claros, una **manito** que muestra qué
+  hacer (tocar o arrastrar) los primeros segundos, anillos que marcan los escondites y la meta del faro, y avisos de
+  turno en el memorice. Las instrucciones quedan siempre encima (antes la criatura se ponía sobre ellas).
+- Las portadas tienen sus propios textos (antes usaban los de los paneles: si se abría y cerraba un panel encima de
+  la portada, se liberaban mientras se veían).
+- **Símbolos para los pánicos**: la compilación guarda `mascota.elf` en la rama `compilados`, y el flujo «Simbolos de
+  una version» (`.github/simbolos.txt` = el commit) compila una versión vieja y deja su `mascota.elf` en la rama
+  `elf-<commit>`. Con eso, `xtensa-esp32s3-elf-addr2line -pfiaC -e mascota.elf <direcciones del FALLO_BT>` dice el
+  archivo y la línea.
+
 ## Versión 1.0.18 — el faro y el buceo en la isla, el mundo descansa, hedionda
 
 - **Jugar en la isla**: primero salen los juegos de la zona (con estrellita y nombre dorado) y después los de siempre

@@ -1,7 +1,7 @@
 # PARTE — estado del trabajo (17-nov-2026, 16:30)
 
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4). **Responder siempre en español.**
-Versión en curso: **1.0.18** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
+Versión en curso: **1.0.19** (así se numeran ahora: 1.0.09 = el «firmware 109»; siguen 1.0.10, 1.0.11...).
 Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
@@ -38,6 +38,17 @@ la mayoría de los errores de concordancia van a estar en frases que mezclan las
 ---
 
 ## 2. Qué se hizo en las últimas versiones
+
+**1.0.19 (arreglo de los juegos)** — PÁNICO de la 1.0.18 en el buceo: s_zj_o[i] usado como caja y como imagen
+(zj_tipo lo arregla). Fondos rehechos sobre fondos_zonas (herramientas/hacer_fondos_juegos.py; el faro = la isla de
+noche + isla_mapa.inc). Manito de ayuda (zd_mano), anillos, portadas claras, textos propios (zj_texto_c).
+CÓMO TRADUCIR UN PÁNICO: el registro trae «FALLO_BT: 0x42...». Saber qué versión corría (si no, probar). El .elf de la
+versión publicada está en la rama `compilados` (mascota.elf); para otra: poner el commit en .github/simbolos.txt, push,
+esperar el flujo «Simbolos de una version» y `git fetch origin elf-<commit7>`; luego
+/home/claude/tc/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e mascota.elf <direcciones>.
+Al publicar a mano desde `compilados`: NO copiar mascota.elf al repo público (solo .bin, .json y recursos/).
+PENDIENTE (pedido del usuario, para la próxima): mandar los errores desde el orbe (ver la propuesta en la respuesta del
+18-nov: modo Wi-Fi → issue en un repo privado «orbepet-informes» con un token de solo issues guardado en NVS).
 
 **1.0.18 (el faro y el buceo)** — ui_isla.inc (ZJ_FARO 10, ZJ_BUCEO 11, dentro del marco de ui_dos.inc), fondos
 pj4/pj5 (herramientas/dibujar_juegos_isla.py; el faro es el MISMO de la isla). Menú Jugar: primero los de la zona.

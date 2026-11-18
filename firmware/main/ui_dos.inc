@@ -22,6 +22,34 @@ static bool zd_es(int jg) { return jg >= ZJ_PING && jg <= ZJ_BUCEO; } /* (1.0.18
 static bool zi_es(int jg) { return jg == ZJ_FARO || jg == ZJ_BUCEO; } /* (1.0.18) los de la isla (ui_isla.inc) */
 static int zd_n(void) { return s_zj_jg - ZJ_PING; } /* 0..3 = PET_DOS_* */
 
+/* (1.0.19) una manito que muestra qué hacer (tocar o arrastrar) los primeros segundos; se va sola al usar el dedo */
+static uint32_t s_zd_mano_hasta;
+static float s_zd_mano_x, s_zd_mano_y;
+static int s_zd_mano_ico;
+static void zd_mano(int ico, float x, float y, uint32_t ms)
+{
+    s_zd_mano_ico = ico; s_zd_mano_x = x; s_zd_mano_y = y; s_zd_mano_hasta = s_zj_t + ms;
+    lv_obj_t *o = zj_img(37, art_icono((art_icono_t)ico, 4));
+    lv_obj_move_foreground(o);
+}
+static void zd_mano_fuera(void) { s_zd_mano_hasta = 0; if (s_zj_o[37]) ocultar(s_zj_o[37], true); }
+static void zd_mano_animar(void)
+{
+    lv_obj_t *o = s_zj_o[37];
+    if (!o) return;
+    if (!s_zd_mano_hasta || (int32_t)(s_zj_t - s_zd_mano_hasta) >= 0 || s_zj_fase != 1) { ocultar(o, true); return; }
+    const float f = (float)s_zj_t / 260.0f;
+    const float dx = s_zd_mano_ico == ICO_MANO_DESLIZA ? 40.0f * sinf(f * 0.6f) : 0.0f, dy = s_zd_mano_ico == ICO_MANO ? 7.0f * fabsf(sinf(f)) : 0.0f;
+    ocultar(o, false);
+    zj_centro(o, s_zd_mano_x + dx + 14.0f, s_zd_mano_y + dy + 20.0f); /* (la punta del dedo queda arriba a la izquierda del ícono) */
+}
+/* (1.0.19) las instrucciones, el marcador y la X siempre encima de todo (antes la criatura quedaba sobre las instrucciones) */
+static void zd_encima(void)
+{
+    if (s_zj_txt && !lv_obj_has_flag(s_zj_txt, LV_OBJ_FLAG_HIDDEN)) lv_obj_move_foreground(s_zj_txt);
+    if (s_zj_x) lv_obj_move_foreground(s_zj_x);
+}
+
 /* ---------- quién es la visita ---------- */
 static bool dos_hay_visita(void)
 {
@@ -117,8 +145,8 @@ static void zd_punto(int quien, float x, float y)
 /* ======================================================================
  * 1) PING PONG (fondo: la cancha de tierra, de y 66 a 404 y x 96 a 370; la red en y 235)
  * ==================================================================== */
-#define ZPP_X0 106.0f
-#define ZPP_X1 360.0f
+#define ZPP_X0 122.0f  /* (1.0.19) los bordes de la mesa del fondo nuevo (x 114 a 352) */
+#define ZPP_X1 344.0f
 #define ZPP_YE 368.0f  /* la paleta de ella */
 #define ZPP_YR 102.0f  /* la de la visita */
 #define ZPP_GANA (s_nino ? 3 : 5)
@@ -146,7 +174,8 @@ static void zpp_empezar(void)
     o = zj_caja(4, 14, 14, 0xFFFDF0, LV_RADIUS_CIRCLE);
     lv_obj_set_style_border_width(o, 1, 0); lv_obj_set_style_border_color(o, lv_color_hex(0xC8C0A0), 0);
     zpp_saque((int)(azar() % 2));
-    zj_texto("MUEVE SU PALETA CON EL DEDO. ¡GANA EL PRIMERO EN LLEGAR A 5!", 3500);
+    zj_texto("ARRASTRA EL DEDO A LOS LADOS PARA MOVER SU PALETA (LA DE ABAJO)", 3500);
+    zd_mano(ICO_MANO_DESLIZA, CX, ZPP_YE - 40.0f, 5000u);
 }
 static void zpp_animar(float dt)
 {
@@ -155,7 +184,7 @@ static void zpp_animar(float dt)
     /* la paleta de ella: sigue el dedo (o, en las pruebas, la pelota) */
     float obj = s_zpp_e;
     if (s_zj_trampa) obj = s_zpp_bx;
-    else if (s_zj_dedo) obj = s_zj_dedo_x;
+    else if (s_zj_dedo) { obj = s_zj_dedo_x; zd_mano_fuera(); }
     float paso = 1100.0f * dt;
     if (obj > s_zpp_e + paso) s_zpp_e += paso; else if (obj < s_zpp_e - paso) s_zpp_e -= paso; else s_zpp_e = obj;
     if (s_zpp_e < ZPP_X0 + media - 12) s_zpp_e = ZPP_X0 + media - 12;
@@ -224,7 +253,7 @@ static void zpp_animar(float dt)
 /* ======================================================================
  * 2) TIRA Y AFLOJA (fondo: el barro al centro (233, 252), las banderitas en x 176 y 290)
  * ==================================================================== */
-#define ZC_Y 262.0f
+#define ZC_Y 244.0f  /* (1.0.19) a la altura del charco del fondo nuevo (centro 233, 250) */
 #define ZC_BANDERA 57.0f   /* la cinta llega a una bandera: 233 ∓ 57 */
 static float s_zc_off;     /* dónde está la cinta (negativo: hacia ella) */
 static int s_zc_fase;      /* 0 tira parejo, 1 tira fuerte, 2 cansada */
@@ -237,7 +266,8 @@ static void zc_empezar(void)
     lv_obj_t *o = zj_caja(3, 10, 24, 0xE0483C, 3);
     lv_obj_set_style_border_width(o, 2, 0); lv_obj_set_style_border_color(o, lv_color_hex(0xFFF0E0), 0);
     lv_obj_t *g = zj_img(4, art_icono(ICO_GOTA, 2)); ocultar(g, true); /* la gotita: la visita se cansó */
-    zj_texto("¡TOCA RÁPIDO PARA TIRAR! CUANDO SE CANSE, TIRA CON TODO", 3500);
+    zj_texto("TOCA MUY RÁPIDO PARA TIRAR. LLEVA LA CINTA ROJA HASTA TU BANDERA AMARILLA", 3800);
+    zd_mano(ICO_MANO, 140.0f, 320.0f, 4500u);
 }
 static void zc_toque(void)
 {
@@ -245,6 +275,7 @@ static void zc_toque(void)
     const float f = (s_nino ? 9.0f : 6.0f) * (s_zc_fase == 2 ? 1.8f : 1.0f);
     s_zc_off -= f;
     s_zc_tiron = s_zj_t;
+    zd_mano_fuera();
     if (s_zc_fase == 2 && !(azar() % 3)) zj_chispas(CX - 125.0f + s_zc_off, ZC_Y + 20, 2, 0xA07850, 90.0f, 300.0f);
 }
 static void zc_animar(float dt)
@@ -261,7 +292,7 @@ static void zc_animar(float dt)
             s_zc_fase = s_zc_fase == 0 ? 1 : (s_zc_fase == 1 ? 2 : 0);
             s_zc_hasta = s_zj_t + (s_zc_fase == 1 ? 1300u : (s_zc_fase == 2 ? 1700u : 2500u + azar() % 2000u));
             if (s_zc_fase == 1) { zj_texto("¡TIRA FUERTE!", 1200); accion(UI_ACCION_SONAR, SND_GRUNIDO); }
-            if (s_zc_fase == 2) { zj_texto("¡SE CANSÓ! ¡AHORA!", 1500); accion(UI_ACCION_SONAR, SND_SUSPIRO); }
+            if (s_zc_fase == 2) { zj_texto("¡SE CANSÓ! ¡TOCA RÁPIDO AHORA!", 1500); accion(UI_ACCION_SONAR, SND_SUSPIRO); }
         }
         ocultar(s_zj_o[4], s_zc_fase != 2);
         if (s_zc_off <= -ZC_BANDERA || s_zc_off >= ZC_BANDERA || zj_tiempo() > 45000) {
@@ -351,7 +382,8 @@ static void zm_empezar(void)
         zm_pintar(i);
     }
     s_zm_turno = (int)(azar() % 2); s_zm_a = s_zm_b2 = -1; s_zm_hasta = 0; s_zm_pensar = s_zj_t + 1200u;
-    zj_texto(s_zm_turno ? "EMPIEZA LA VISITA" : "¡EMPIEZAS TÚ! DA VUELTA DOS CARTAS", 2200);
+    zj_texto(s_zm_turno ? "EMPIEZA LA VISITA. CUANDO TE TOQUE, DA VUELTA DOS CARTAS" : "¡EMPIEZAS TÚ! TOCA DOS CARTAS: SI SON IGUALES, SON TUYAS", 3000);
+    if (!s_zm_turno) { float x, y; zm_pos(5, &x, &y); zd_mano(ICO_MANO, x, y, 4500u); }
 }
 static void zm_dar_vuelta(int i)
 {
@@ -370,6 +402,7 @@ static int zm_bajo(int x, int y)
 static void zm_toque(int x, int y)
 {
     if (s_zj_fase != 1 || s_zm_turno != 0 || s_zm_hasta) return;
+    zd_mano_fuera();
     zm_dar_vuelta(zm_bajo(x, y));
 }
 /* qué carta da vuelta la visita (o ella, en las pruebas): si se acuerda de un par, ese; si no, una que no ha visto */
@@ -415,6 +448,7 @@ static void zm_animar(float dt)
             if (azar01() < (s_nino ? 0.5f : 0.85f)) s_zm_sabe[a] = 1; /* la visita mira y (casi siempre) se acuerda */
             if (azar01() < (s_nino ? 0.5f : 0.85f)) s_zm_sabe[b] = 1;
             s_zm_turno = 1 - s_zm_turno;
+            zj_texto(s_zm_turno ? "NO ERAN IGUALES: LE TOCA A LA VISITA" : "¡TE TOCA! DA VUELTA DOS CARTAS", 1500);
         }
         zm_pintar(a); zm_pintar(b);
         int quedan = 0;
@@ -434,14 +468,31 @@ static void zm_animar(float dt)
 /* ======================================================================
  * 4) ESCONDIDAS (fondo: el árbol, los arbustos, la roca, el tronco y el pastizal)
  * ==================================================================== */
-#define ZE_SITIOS 5
-static const int16_t ZE_XY[ZE_SITIOS][2] = {{118, 150}, {356, 168}, {238, 108}, {132, 330}, {338, 334}};
-static const art_icono_t ZE_ICO_FALTA[ZE_SITIOS] = {ICO_ARBOLITO, ICO_HIERBA, ICO_PIEDRA, ICO_HOJAS, ICO_HIERBA};
-#define ZE_BX 233.0f
-#define ZE_BY 262.0f
+#define ZE_SITIOS 6   /* (1.0.19) los escondites del bosque (fondo pj3): el tronco hueco, el arbusto, el puente, las piedras, otro arbusto y el árbol */
+static const int16_t ZE_XY[ZE_SITIOS][2] = {{193, 210}, {92, 236}, {108, 302}, {343, 262}, {300, 336}, {300, 186}};
+static const art_icono_t ZE_ICO_FALTA[ZE_SITIOS] = {ICO_HOJAS, ICO_HIERBA, ICO_PIEDRA, ICO_PIEDRA, ICO_HIERBA, ICO_ARBOLITO};
+#define ZE_BX 236.0f
+#define ZE_BY 292.0f
 static int s_ze_paso;     /* 10 la visita se esconde, 11 ella busca, 20 ella elige, 21 ella va, 22 la visita busca, 30 se ve el resultado */
 static int s_ze_donde, s_ze_quedan, s_ze_meta, s_ze_vuelta, s_ze_rondas;
 static uint8_t s_ze_mirado;
+/* (1.0.19) los escondites se marcan con un anillo que late cuando hay que elegir uno (así se entiende dónde tocar) */
+static void ze_anillos(bool ver)
+{
+    for (int i = 0; i < ZE_SITIOS; i++) {
+        lv_obj_t *o = s_zj_o[30 + i];
+        if (!o) {
+            if (!ver) continue;
+            o = zj_caja(30 + i, 44, 44, 0xFFFFFF, LV_RADIUS_CIRCLE);
+            lv_obj_set_style_bg_opa(o, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(o, 3, 0);
+            lv_obj_set_style_border_color(o, lv_color_hex(0xFFE27A), 0);
+        }
+        const bool v = ver && !(s_ze_mirado & (1u << i));
+        ocultar(o, !v);
+        if (v) { const int r = 40 + (int)(6.0f * sinf((float)s_zj_t / 220.0f + (float)i)); lv_obj_set_size(o, r, r); zj_centro(o, ZE_XY[i][0], ZE_XY[i][1]); }
+    }
+}
 static float s_ze_x[2], s_ze_y[2];
 static bool s_ze_oculta[2];
 static uint32_t s_ze_t, s_ze_pista;
@@ -462,12 +513,13 @@ static void ze_ronda(void)
         zd_poner(0, 3, 3, false, s_ze_x[0], s_ze_y[0]); /* ella, con los ojos cerrados, encima de la oscuridad */
         if (s_zj_o[0]) lv_obj_move_foreground(s_zj_o[0]);
         lv_obj_move_foreground(s_zj_x);
-        zj_texto("¡CIERRA LOS OJOS! 1, 2, 3...", 2800);
+        zj_texto("¡A CERRAR LOS OJOS! LA VISITA SE ESCONDE... 1, 2, 3", 2800);
         accion(UI_ACCION_SONAR, SND_CONTAR);
     } else { /* se esconde ella: tú eliges dónde */
         s_ze_paso = 20;
         s_ze_quedan = s_nino ? 1 : 2;
-        zj_texto("¿DÓNDE SE ESCONDE? TOCA UN LUGAR", 3000);
+        zj_texto("AHORA SE ESCONDE ELLA: TOCA UN ANILLO PARA ELEGIR DÓNDE", 3200);
+        zd_mano(ICO_MANO, ZE_XY[0][0], ZE_XY[0][1], 4000u);
     }
 }
 static void ze_empezar(void)
@@ -489,8 +541,8 @@ static void ze_toque(int x, int y)
     if (s_zj_fase != 1) return;
     const int s = ze_sitio(x, y);
     if (s < 0) return;
-    if (s_ze_paso == 11 && s_ze_meta < 0 && !(s_ze_mirado & (1u << s))) { s_ze_meta = s; accion(UI_ACCION_SONAR, SND_TOQUE); }
-    else if (s_ze_paso == 20) { s_ze_donde = s; s_ze_meta = s; s_ze_paso = 21; accion(UI_ACCION_SONAR, SND_TOQUE); }
+    if (s_ze_paso == 11 && s_ze_meta < 0 && !(s_ze_mirado & (1u << s))) { s_ze_meta = s; zd_mano_fuera(); accion(UI_ACCION_SONAR, SND_TOQUE); }
+    else if (s_ze_paso == 20) { zd_mano_fuera(); s_ze_donde = s; s_ze_meta = s; s_ze_paso = 21; accion(UI_ACCION_SONAR, SND_TOQUE); }
 }
 /* camina hacia (tx, ty): true al llegar */
 static bool ze_caminar(int q, float tx, float ty, float dt)
@@ -518,7 +570,8 @@ static void ze_animar(float dt)
         if ((int32_t)(s_zj_t - s_ze_t) >= 0) {
             ocultar(s_zj_o[2], true);
             s_ze_paso = 11; s_ze_t = s_zj_t + 25000u; s_ze_pista = s_zj_t + 1500u;
-            zj_texto("¿DÓNDE ESTÁ? TOCA DONDE QUIERAS BUSCAR", 2600);
+            zj_texto("¿DÓNDE ESTÁ? TOCA UN ANILLO PARA BUSCAR AHÍ (MIRA DÓNDE SE MUEVEN LAS HOJAS)", 3200);
+            zd_mano(ICO_MANO, ZE_XY[2][0], ZE_XY[2][1], 4000u);
         }
         break;
     case 11: /* ella busca */
@@ -578,6 +631,7 @@ static void ze_animar(float dt)
         break;
     default: break;
     }
+    ze_anillos((s_ze_paso == 11 && s_ze_meta < 0) || s_ze_paso == 20);
     /* las dos */
     for (int q = 0; q < 2; q++) {
         int k = 0;
@@ -671,8 +725,8 @@ static void zd_portada(void)
     if (zi_es(s_zj_jg)) { zi_portada(); return; }
     zj_titulo(zd_nombre(s_zj_jg));
     lv_obj_t *c = caja(s_zj);
-    lv_obj_set_size(c, 300, 200);
-    lv_obj_align(c, LV_ALIGN_CENTER, 0, 6);
+    lv_obj_set_size(c, 320, 250);
+    lv_obj_align(c, LV_ALIGN_CENTER, 0, 10);
     lv_obj_set_style_bg_color(c, lv_color_hex(0x1A1430), 0);
     lv_obj_set_style_bg_opa(c, LV_OPA_80, 0);
     lv_obj_set_style_radius(c, 24, 0);
@@ -683,11 +737,15 @@ static void zd_portada(void)
         lv_image_set_src(im, d);
         lv_obj_align(im, LV_ALIGN_TOP_MID, q ? 72 : -72, 12);
     }
-    lv_obj_t *vs = texto_c(c, "VS", 0xFFE27A, 3, 80); lv_obj_align(vs, LV_ALIGN_TOP_MID, 0, 40);
+    lv_obj_t *vs = zj_texto_c(c, 2, "VS", 0xFFE27A, 3, 80); lv_obj_align(vs, LV_ALIGN_TOP_MID, 0, 40);
     if (!s_nino) {
-        static const char *const REGLA[4] = {"EL PRIMERO EN LLEGAR A 5", "TOCA RÁPIDO PARA TIRAR", "DOS CARTAS POR TURNO", "TE ESCONDES Y BUSCAS"};
-        lv_obj_t *t = texto_c(c, REGLA[zd_n() & 3], 0xCFE8FF, 2, 280); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 104);
-        lv_obj_t *t2 = texto_c(c, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 280); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
+        static const char *const REGLA[4] = {
+            "ARRASTRA EL DEDO A LOS LADOS PARA MOVER SU PALETA (ABAJO). NO DEJES PASAR LA PELOTA. GANA EL PRIMERO EN LLEGAR A 5.",
+            "TOCA MUY RÁPIDO PARA TIRAR. CUANDO LA VISITA SE CANSE (GOTITA), ¡CON TODO! LLEVA LA CINTA A TU BANDERA AMARILLA.",
+            "TOCA DOS CARTAS. SI SON IGUALES SON TUYAS Y SIGUES; SI NO, LE TOCA A LA VISITA. GANA QUIEN JUNTE MÁS PARES.",
+            "POR TURNOS: TOCA EL ANILLO DONDE CREES QUE SE ESCONDIÓ LA VISITA. DESPUÉS ELIGES DÓNDE SE ESCONDE ELLA."};
+        lv_obj_t *t = zj_texto_c(c, 0, REGLA[zd_n() & 3], 0xCFE8FF, 2, 296); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 92);
+        lv_obj_t *t2 = zj_texto_c(c, 1, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 280); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
     }
     s_zj_o[45] = c;
 }
@@ -713,11 +771,10 @@ static void zd_fondo(void)
     case ZJ_MEMO:
         o = caja(s_zj); lv_obj_set_size(o, 334, 306); lv_obj_set_pos(o, 66, 86); lv_obj_set_style_bg_color(o, lv_color_hex(0xDCE8F8), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
         break;
-    case ZJ_FARO: /* (sin el fondo: el mar de noche, el faro y las rocas, sencillos) */
+    case ZJ_FARO: /* (sin el fondo: el mar de noche y la isla, sencillos) */
         lv_obj_set_style_bg_color(s_zj, lv_color_hex(0x0E2546), 0);
-        o = caja(s_zj); lv_obj_set_size(o, 24, 160); lv_obj_set_pos(o, 84, 170); lv_obj_set_style_bg_color(o, lv_color_hex(0xCFC3AC), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
-        for (int k = 0; k < 5; k++) { o = caja(s_zj); const int r = ZF_ROCA[k][2]; lv_obj_set_size(o, r * 2, r * 2); lv_obj_set_pos(o, ZF_ROCA[k][0] - r, ZF_ROCA[k][1] - r); lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0); lv_obj_set_style_bg_color(o, lv_color_hex(0x444A60), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0); }
-        o = caja(s_zj); lv_obj_set_size(o, 140, 14); lv_obj_set_pos(o, 330, 350); lv_obj_set_style_bg_color(o, lv_color_hex(0x6E4A2A), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+        o = caja(s_zj); lv_obj_set_size(o, 340, 300); lv_obj_set_pos(o, 76, 86); lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(o, lv_color_hex(0x2E4A2A), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
         break;
     case ZJ_BUCEO:
         lv_obj_set_style_bg_color(s_zj, lv_color_hex(0x1E6AA0), 0);
@@ -728,7 +785,7 @@ static void zd_fondo(void)
 }
 static void zd_empezar(void)
 {
-    s_zd_b = 0; s_zd_vis = -1; s_zd_fin_t = 0; s_zd_res = -1;
+    s_zd_b = 0; s_zd_vis = -1; s_zd_fin_t = 0; s_zd_res = -1; s_zd_mano_hasta = 0;
     switch (s_zj_jg) {
     case ZJ_PING: zpp_empezar(); break;
     case ZJ_CUERDA: zc_empezar(); break;
@@ -761,6 +818,8 @@ static void zd_animar(float dt)
     default: if (zi_es(s_zj_jg)) zi_animar(dt); break;
     }
     if (s_zj_fase == 1) zd_marcador();
+    zd_mano_animar();
+    zd_encima();
     if (s_zj_fase == 1 && zj_tiempo() > 240000) { s_zd_res = s_zj_pts > s_zd_b ? 2 : (s_zj_pts == s_zd_b ? 1 : 0); s_zd_fin_t = s_zj_t; s_zj_fase = 3; } /* (por si nadie juega) */
 }
 static void zd_liberar(void)
