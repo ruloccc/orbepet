@@ -13,7 +13,7 @@
  *  - Los juegos (ui_zjuegos.inc) se abren en su propia pantalla desde la casita o desde el mirador.
  * ==================================================================== */
 enum { ZO_NADA = 0, ZO_CLARO, ZO_CASITA, ZO_MIRADOR };
-enum { ZJ_NADA = 0, ZJ_HORNO, ZJ_CAMITA, ZJ_NUBE, ZJ_CORONA, ZJ_PIEDRA };
+enum { ZJ_NADA = 0, ZJ_HORNO, ZJ_CAMITA, ZJ_NUBE, ZJ_CORONA, ZJ_PIEDRA, ZJ_PING, ZJ_CUERDA, ZJ_MEMO, ZJ_ESCONDE }; /* (1.0.17: los de a dos, ui_dos.inc) */
 static int s_zo, s_zo_pend = -1, s_zo_cosa = -1, s_zo_pose = -1;
 static uint32_t s_zo_t0, s_zo_txt_hasta, s_zo_quieta;
 static float s_zo_x, s_zo_y, s_zo_tx, s_zo_ty;
@@ -383,6 +383,9 @@ static void zona_tras_panel(void) { if (s_zo && s_zo_capa && !zj_activo()) ocult
 static void zona_bajo_panel(void) { if (s_zo && s_zo_capa) ocultar(s_zo_capa, true); if (s_zj && zj_activo()) ocultar(s_zj, true); }
 /* (ui_zjuegos.inc) mientras se juega, lo de abajo (la casita o el mundo) se aparta para no gastar memoria ni cuadros */
 static void lw_refrescar(void);
+/* (1.0.17) un juego en pantalla aparte tapa todo el mundo (y el mundo está escondido): el cielo, los animales, las luces,
+ * la lluvia, la niebla, el humo y la tierra no se animan; así el juego tiene todo el procesador */
+static bool mundo_en_pausa(void) { return zj_activo() && !s_zo && s_panel == PANEL_NINGUNO; }
 static void zj_mundo_ver(bool si)
 {
     if (s_zo) {

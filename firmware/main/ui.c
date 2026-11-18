@@ -8649,9 +8649,36 @@ static void ficha_magica(lv_obj_t *b, uint32_t arriba, uint32_t abajo, int radio
     lv_obj_set_style_radius(b, radio, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
 }
+static bool dos_hay_visita(void); /* (1.0.17, ui_dos.inc) */
+static void zj_abrir(int jg);
+static void dos_cb(lv_event_t *e)
+{
+    const int j = (int)(intptr_t)lv_event_get_user_data(e);
+    cerrar_panel();
+    zj_abrir(6 + j); /* ZJ_PING.. (ui_zonas.inc) */
+}
+/* (1.0.17) con una visita, el menú de juegos es otro: los cuatro de a dos */
+static void panel_jugar_dos(void)
+{
+    if (!s_nino) { lv_obj_t *t = texto(s_tarjeta, "¡A JUGAR LOS DOS!", 0xFFE9A0, 2, 0); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 22); }
+    static const art_icono_t ICO[4] = {ICO_PELOTA, ICO_MANO_TIENE, ICO_FRUTA_MANZANA, ICO_ESCONDIDAS};
+    static const char *const TXT[4] = {"PING PONG", "TIRA Y AFLOJA", "MEMORICE", "ESCONDIDAS"};
+    static const uint32_t COL[4][2] = {{0xFFB45C, 0xD8702A}, {0xFF7A7A, 0xC83C48}, {0x6AB8FF, 0x2E78C8}, {0x6ADC8A, 0x2E9A52}};
+    const int D = s_nino ? 88 : 76;
+    for (int i = 0; i < 4; i++) {
+        lv_obj_t *b = boton(s_tarjeta, D, D, dos_cb, i);
+        ficha_magica(b, COL[i][0], COL[i][1], LV_RADIUS_CIRCLE);
+        lv_obj_set_ext_click_area(b, 8);
+        lv_obj_align(b, LV_ALIGN_TOP_MID, (i % 2 ? 1 : -1) * (s_nino ? 62 : 80), (s_nino ? 72 : 60) + (i / 2) * (s_nino ? 112 : 116));
+        lv_obj_t *ic = icono(b, ICO[i], 3);
+        lv_obj_center(ic);
+        if (!s_nino) { lv_obj_t *t = texto(s_tarjeta, TXT[i], 0xFFF3C8, 2, 0); lv_obj_align_to(t, b, LV_ALIGN_OUT_BOTTOM_MID, 0, 3); }
+    }
+}
 static void panel_jugar(void)
 {
     abrir_tarjeta(PANEL_JUGAR, 350, 350);
+    if (dos_hay_visita()) { panel_jugar_dos(); return; }
     if (!s_nino) { lv_obj_t *t = texto(s_tarjeta, "¿A QUÉ JUGAMOS?", 0xFFE9A0, 2, 0); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 22); }
     static const art_icono_t ICO[6] = {ICO_PELOTA, ICO_ESCONDIDAS, ICO_CANASTA, ICO_HONGO, ICO_PATITA, ICO_CRISTAL};
     static const char *const TXT[6] = {"PELOTA", "ESCONDE", "FRUTAS", "HONGOS", "TRUCOS", "CRISTALES"};
@@ -9540,6 +9567,7 @@ static art_icono_t icono_diario(const entrada_diario_t *e)
     case DIA_LUGAR: return a ? ICO_NUBE : ICO_CUCHARA_PALO;
     case DIA_EXCURSION: return e->b == 7 ? ICO_PAPELITO : (a ? ICO_CONDOR : ICO_CHUCAO);
     case DIA_PASEO_JUNTOS: return ICO_HUELLA; /* (fw 104) */
+    case DIA_JUEGO_DOS: return ICO_PELOTA; /* (1.0.17) */
     case DIA_HIELO: return ICO_GOTA;         /* (fw 104) se derritió: queda una gotita */
     case DIA_FINAL: return ICO_ESTRELLA;
     case DIA_GUSTO: case DIA_GUSTO_SEM: return ICO_CORAZON;
@@ -16732,6 +16760,7 @@ static void tick_cb(lv_timer_t *t)
     tick_cb_cuerpo();
 #endif
 }
+static bool mundo_en_pausa(void); /* (1.0.17, ui_zonas.inc) un juego tapa el mundo entero: lo de adorno no se anima */
 static void tick_cb_cuerpo(void)
 {
 #ifdef ESP_PLATFORM
@@ -16747,6 +16776,7 @@ static void tick_cb_cuerpo(void)
     }
 #endif
     s_ms += TICK_MS;
+    const bool pausa = mundo_en_pausa();
     animar_pesca_juego();
     animar_musica(); /* (v38) el reproductor de canciones */
     g_dbg_fase = 1;
@@ -16756,7 +16786,7 @@ static void tick_cb_cuerpo(void)
     g_dbg_fase = 3;
     animar_cruce();
     g_dbg_fase = 4;
-    animar_cielo();
+    if (!pausa) animar_cielo();
     g_dbg_fase = 5;
     animar_moscas(&s_mascota);
     g_dbg_fase = 6;
@@ -16792,16 +16822,16 @@ static void tick_cb_cuerpo(void)
     g_dbg_fase = 19;
     animar_pasajero();
     g_dbg_fase = 20;
-    animar_fauna();
+    if (!pausa) animar_fauna();
     g_dbg_fase = 21;
     animar_mascota();
     g_dbg_fase = 22;
     if (s_pet) animar_enferma(&s_mascota, s_pet);
     olor_actualizar(); /* (fw 103) el olor del zorrillo: vahos y moscas, encima de ella */
     g_dbg_fase = 23;
-    animar_humo();
+    if (!pausa) animar_humo();
     g_dbg_fase = 24;
-    animar_animales();
+    if (!pausa) animar_animales();
     g_dbg_fase = 25;
     animar_pochi();
     g_dbg_fase = 26;
@@ -16829,7 +16859,7 @@ static void tick_cb_cuerpo(void)
     g_dbg_fase = 32;
     animar_obj_mundo();
     g_dbg_fase = 33;
-    animar_niebla();
+    if (!pausa) animar_niebla();
     g_dbg_fase = 34;
     animar_tapete();
     g_dbg_fase = 35;
@@ -16844,11 +16874,11 @@ static void tick_cb_cuerpo(void)
     g_dbg_fase = 39;
     animar_visita();
     g_dbg_fase = 40;
-    animar_luces();
+    if (!pausa) animar_luces();
     g_dbg_fase = 41;
-    animar_particulas();
+    if (!pausa) animar_particulas();
     g_dbg_fase = 42;
-    animar_tierra();
+    if (!pausa) animar_tierra();
     g_dbg_fase = 43;
     seguir_globos();
 }

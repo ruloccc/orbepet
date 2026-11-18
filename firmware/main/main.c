@@ -496,6 +496,7 @@ static void poner_hora(int32_t local)
  *   MASCOTA CRIATURA <especie> <etapa> <base64>  -> MASCOTA OK (el cuerpo dibujado: ver art_cuerpo_desde_bytes);
  *                                   CRIATURA <especie> <etapa> FABRICA lo devuelve
  *   MASCOTA ESPECIE <especie> NOMBRE <texto> | ESPECIE <especie> FABRICA -> MASCOTA OK
+ *   MASCOTA ARCHIVO <pjN.bin> INICIO|DATOS|FIN|TIENE -> como SONIDO, para los archivos de la memoria de recursos (1.0.17)
  *   MASCOTA CAMBIOS              -> MASCOTA CAMBIOS I <íconos> S <sonidos> A <ambientes> C <especie*10+etapa> N <especies> */
 
 static EXT_RAM_BSS_ATTR char s_usb_txt[PET_RESPALDO_MAX + 64];
@@ -698,6 +699,55 @@ static void comando_sonido(const char *l, bool ambiente)
         s_rx = NULL; s_rx_id = -1;
         printf(ok ? "MASCOTA OK\n" : "MASCOTA ERROR no llego completo\n");
     } else printf("MASCOTA ERROR sonido\n");
+}
+
+/* (1.0.17) MASCOTA ARCHIVO <pjN.bin> INICIO <bytes> | DATOS <desde> <base64> | FIN <crc32 hex> | TIENE
+ * un archivo de la memoria de recursos (por ahora solo los fondos de los juegos de a dos: pj0.bin..pj9.bin).
+ * TIENE -> MASCOTA ARCHIVO <nombre> <bytes> <crc32> (o -1 0 si no está). */
+static char s_rx_nom[16];
+static bool archivo_valido(const char *n) { return strlen(n) == 7 && n[0] == 'p' && n[1] == 'j' && n[2] >= '0' && n[2] <= '9' && !strcmp(n + 3, ".bin"); }
+static void comando_archivo(const char *l)
+{
+    char nom[16] = {0};
+    int i = 0;
+    while (l[i] && l[i] != ' ' && i < 15) { nom[i] = l[i]; i++; }
+    const char *q = l[i] == ' ' ? l + i + 1 : NULL;
+    if (!archivo_valido(nom) || !q) { printf("MASCOTA ERROR archivo\n"); return; }
+    if (!strcmp(q, "TIENE")) {
+        const int t = hal_res_size(nom);
+        uint32_t c = 0;
+        if (t > 0) {
+            uint8_t *b = heap_caps_malloc((size_t)t, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (b && hal_res_read(nom, b, t) == t) c = crc32_bytes(b, t);
+            free(b);
+        }
+        printf("MASCOTA ARCHIVO %s %d %08lx\n", nom, t, (unsigned long)c);
+    } else if (!strncmp(q, "INICIO ", 7)) {
+        const int n = atoi(q + 7);
+        if (n <= 0 || n > 600 * 1024) { printf("MASCOTA ERROR largo\n"); return; }
+        free(s_rx);
+        s_rx = heap_caps_malloc((size_t)n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!s_rx) { printf("MASCOTA ERROR memoria\n"); return; }
+        s_rx_cap = n; s_rx_n = 0; s_rx_id = -2; s_rx_amb = false;
+        snprintf(s_rx_nom, sizeof s_rx_nom, "%s", nom);
+        printf("MASCOTA OK\n");
+    } else if (!strncmp(q, "DATOS ", 6)) {
+        const int desde = atoi(q + 6);
+        const char *b = strchr(q + 6, ' ');
+        if (!s_rx || s_rx_id != -2 || strcmp(nom, s_rx_nom) || !b || desde != s_rx_n) { printf("MASCOTA ERROR orden\n"); return; }
+        const int k = pet_base64_decode(b + 1, s_rx + s_rx_n, s_rx_cap - s_rx_n);
+        if (k <= 0) { printf("MASCOTA ERROR datos\n"); return; }
+        s_rx_n += k;
+        printf("MASCOTA OK %d\n", s_rx_n);
+    } else if (!strncmp(q, "FIN ", 4)) {
+        const uint32_t crc = (uint32_t)strtoul(q + 4, NULL, 16);
+        const bool ok = s_rx && s_rx_id == -2 && !strcmp(nom, s_rx_nom) && s_rx_n == s_rx_cap && crc32_bytes(s_rx, s_rx_n) == crc &&
+                        hal_res_save(nom, s_rx, s_rx_n);
+        free(s_rx);
+        s_rx = NULL; s_rx_id = -1;
+        if (ok) hal_log("recursos: llegó %s por el cable", nom);
+        printf(ok ? "MASCOTA OK\n" : "MASCOTA ERROR no llego completo\n");
+    } else printf("MASCOTA ERROR archivo\n");
 }
 
 static void comando_icono(const char *l)
@@ -1746,6 +1796,8 @@ static void comando_usb(const char *l)
         comando_sonido(l + 7, false);
     } else if (!strncmp(l, "AMBIENTE ", 9)) {
         comando_sonido(l + 9, true);
+    } else if (!strncmp(l, "ARCHIVO ", 8)) {
+        comando_archivo(l + 8);
     } else if (!strncmp(l, "CRIATURA ", 9)) {
         comando_criatura(l + 9);
     } else if (!strncmp(l, "ESPECIE ", 8)) {
@@ -1861,6 +1913,7 @@ void app_main(void)
     hal_photos_init();
     PASO(12);
     hal_res_init();
+    art_lector(hal_res_read, hal_res_size); /* (1.0.17) los fondos de los juegos de a dos viven en la memoria de recursos */
     PASO(13);
     hal_log_init();
     { const char *dg = ota_diagnostico(); if (dg) hal_evento("ACTUALIZACIÓN (modo Wi-Fi): %s", dg); } /* (1.0.11) */
@@ -2097,6 +2150,7 @@ void app_main(void)
             case UI_ACCION_COLOR: pet_set_color(&s_pet, m.arg); break;
             case UI_ACCION_ECLOSIONAR: pet_hatch(&s_pet, t); break;
             case UI_ACCION_HUEVO_EMPIEZA: pet_egg_start(&s_pet, t); break; /* (1.0.10) */
+            case UI_ACCION_JUEGO_DOS: pet_duo_game(&s_pet, m.arg & 15, (m.arg >> 4) & 3, t); break; /* (1.0.17) */
             case UI_ACCION_HABILIDAD: pet_ability_use(&s_pet, m.arg & 1, t); break;
             case UI_ACCION_BALLENA: pet_whale_ride(&s_pet, m.arg, t); break;
             case UI_ACCION_EVOLUCION: if (m.arg) pet_evo_accept(&s_pet, t); else pet_evo_defer(&s_pet); break;

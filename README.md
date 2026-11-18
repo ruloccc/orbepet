@@ -807,6 +807,34 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.17 — juegos de a dos con las visitas
+
+- **Con una visita** (el amigo del barrio o un visitante), **JUGAR** muestra cuatro juegos para los dos en vez de los de
+  siempre (sin visita, el menú queda igual):
+  - **PING PONG:** mueves su paleta con el dedo (abajo); la visita juega arriba y se pone más rápida. Gana el primero
+    en llegar a 5 (3 en modo infante, con paleta más ancha).
+  - **TIRA Y AFLOJA:** toca rápido para tirar. La visita tira fuerte a ratos («¡TIRA FUERTE!») y después se cansa
+    (gotita): ahí cada toque vale casi el doble. Gana quien lleva la cinta a su bandera; el otro cae al barro.
+  - **MEMORICE:** 16 cartas (12 en infante) en el mantel, por turnos; la visita se acuerda de las que vio.
+  - **ESCONDIDAS:** por turnos. Se esconde la visita (la pantalla se oscurece mientras cuentas) y la buscas: las hojas
+    se mueven donde está; tienes 2 intentos. Después tú eliges dónde se esconde ella y la visita la busca. 6 rondas.
+- Cada juego: portada con las dos frente a frente, marcador con sus caritas, tarjeta final (¡GANASTE!, ¡EMPATE! o
+  GANÓ <amigo>) con OTRA VEZ y la X. Divierte (más si gana), suma amistad con el amigo del barrio y queda en el diario
+  una vez al día (motor: `pet_duo_game`, `DIA_JUEGO_DOS`; la partida no cambia de versión: usa 3 bytes de reserva).
+- **El mundo de atrás se detiene** mientras se juega cualquier juego en pantalla aparte: el cielo, los animales, las
+  luces, la lluvia, la niebla, el humo y la tierra no se animan (todo el procesador para el juego).
+- **Fondos nuevos con detalle** (cancha de tierra, barro con la laguna, mantel de picnic, claro con escondites) en la
+  **memoria de recursos** (`/res/pj0.bin`..`pj3.bin`, ~50 KB cada uno), no en el programa. Llegan:
+  - **por Wi-Fi:** Ajustes → Versión → BUSCAR ACTUALIZACIÓN. Si ya tienes la última versión, baja los fondos que falten
+    («BAJANDO LOS FONDOS NUEVOS… 1 DE 4»). `version.json` trae la lista (`"recursos"`: nombre, bytes y crc32) y los
+    archivos están en `orbepet-firmware/recursos/`.
+  - **por cable:** el probador los copia solo después de instalar (comando USB `MASCOTA ARCHIVO pjN.bin
+    INICIO|DATOS|FIN|TIENE`; solo manda los que faltan o cambiaron).
+  - Si faltan, el juego funciona igual con un fondo pintado sencillo.
+- Dibujos: `herramientas/dibujar_juegos_dos.py` (los PNG en `fondos_pantallas/13..16_dos_*.png`) y
+  `herramientas/hacer_fondos_dos.py` (los empaqueta en `firmware/recursos/` y en el simulador). Prueba:
+  `node sim/web/pruebas/dos.js`.
+
 ## Versión 1.0.16 — ya no se cae al crear una mascota nueva
 
 - **Pánico al crear una mascota** (desde el 108): al cambiar o estrenar mascota, `po_fuera()` escondía la imagen de

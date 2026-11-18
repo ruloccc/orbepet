@@ -254,6 +254,7 @@ static bool json_txt(const char *j, const char *clave, char *out, size_t n)
     return *p == '"';
 }
 
+static EXT_RAM_BSS_ATTR char s_json[2048]; /* (1.0.17) version.json entero: también trae la lista de "recursos" */
 static bool leer_version_publicada(char *ver, size_t nv, char *nombre, size_t nn)
 {
     char url[160];
@@ -275,6 +276,7 @@ static bool leer_version_publicada(char *ver, size_t nv, char *nombre, size_t nn
         const int n = esp_http_client_read_response(c, buf, 2047);
         if (st == 200 && n > 0) {
             buf[n] = 0;
+            snprintf(s_json, sizeof s_json, "%s", buf);
             ok = json_txt(buf, "version", ver, nv) && fw_codigo(ver) > 0;
             if (!json_txt(buf, "nombre", nombre, nn)) nombre[0] = 0;
         } else diag("version.json: estado %d, %d bytes", st, n);
@@ -325,6 +327,109 @@ static bool descargar(void)
     if (e != ESP_OK) { diag("descarga: falló (error 0x%x), RAM %u KB", (unsigned)e, ram_kb()); return false; }
     diag("instalada la %s (estaba en la %s)", d.version, FW_VERSION);
     return true;
+}
+
+/* ------------------------------------------------------------------ (1.0.17) los archivos de la memoria de recursos
+ * version.json trae "recursos": "pj0.bin:45213:248a13e3 pj1.bin:...": nombre, bytes y crc32. Se bajan los que faltan o
+ * cambiaron (desde OTA_URL_BASE "recursos/") a la PSRAM, se revisan y se guardan. Así los fondos de los juegos de a dos
+ * llegan por el aire: no ocupan lugar en el programa. */
+static uint32_t crc32_bytes(const uint8_t *d, int n)
+{
+    uint32_t c = 0xFFFFFFFFu;
+    for (int i = 0; i < n; i++) {
+        c ^= d[i];
+        for (int k = 0; k < 8; k++) c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1u)));
+    }
+    return ~c;
+}
+static bool s_res_montada;
+/* el archivo nom ya está y es ese (mismo largo y crc) */
+static bool recurso_igual(const char *nom, int tam, uint32_t crc)
+{
+    if (hal_res_size(nom) != tam) return false;
+    uint8_t *b = heap_caps_malloc((size_t)tam, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!b) return false;
+    const bool ok = hal_res_read(nom, b, tam) == tam && crc32_bytes(b, tam) == crc;
+    free(b);
+    return ok;
+}
+static bool recurso_bajar(const char *nom, int tam, uint32_t crc)
+{
+    char url[192];
+    snprintf(url, sizeof url, OTA_URL_BASE "recursos/%s?n=%08lx", nom, (unsigned long)esp_random());
+    esp_http_client_config_t hc = {
+        .url = url,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .timeout_ms = 20000,
+        .buffer_size = 4096,
+        .buffer_size_tx = 1024,
+    };
+    uint8_t *b = heap_caps_malloc((size_t)tam, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!b) { diag("recurso %s: sin memoria", nom); return false; }
+    esp_http_client_handle_t c = esp_http_client_init(&hc);
+    int va = 0, st = 0;
+    if (c && esp_http_client_open(c, 0) == ESP_OK) {
+        esp_http_client_fetch_headers(c);
+        st = esp_http_client_get_status_code(c);
+        while (st == 200 && va < tam && !s_cancelar) {
+            const int k = esp_http_client_read(c, (char *)b + va, tam - va);
+            if (k <= 0) break;
+            va += k;
+            uso();
+        }
+    }
+    if (c) { esp_http_client_close(c); esp_http_client_cleanup(c); }
+    bool ok = st == 200 && va == tam && crc32_bytes(b, tam) == crc;
+    if (ok) ok = hal_res_save(nom, b, tam);
+    if (!ok) diag("recurso %s: no se pudo (estado %d, %d de %d bytes)", nom, st, va, tam);
+    free(b);
+    return ok;
+}
+/* devuelve cuántos se bajaron, o -1 si alguno falló */
+static int recursos_al_dia(void)
+{
+    static char lista[512];
+    if (!json_txt(s_json, "recursos", lista, sizeof lista) || !lista[0]) return 0;
+    if (!s_res_montada) {
+        if (ram_kb() < 8) { diag("recursos: poca RAM interna (%u KB)", ram_kb()); return -1; }
+        s_res_montada = hal_res_init() == ESP_OK;
+        if (!s_res_montada) { diag("recursos: no se pudo abrir la memoria de recursos"); return -1; }
+    }
+    struct { char n[24]; int t; uint32_t c; } r[8];
+    int nr = 0, faltan = 0;
+    for (char *q = lista; *q && nr < 8;) {
+        while (*q == ' ') q++;
+        if (!*q) break;
+        char *fin = strchr(q, ' ');
+        if (fin) *fin = 0;
+        char *a = strchr(q, ':'), *b2 = a ? strchr(a + 1, ':') : NULL;
+        if (a && b2 && a - q < (int)sizeof r[0].n && !strchr(q, '/')) {
+            *a = 0;
+            snprintf(r[nr].n, sizeof r[nr].n, "%s", q);
+            r[nr].t = atoi(a + 1);
+            r[nr].c = (uint32_t)strtoul(b2 + 1, NULL, 16);
+            if (r[nr].t > 0 && r[nr].t <= 600 * 1024) {
+                if (recurso_igual(r[nr].n, r[nr].t, r[nr].c)) r[nr].t = -r[nr].t; /* (negativo: ya está) */
+                else faltan++;
+                nr++;
+            }
+        }
+        if (!fin) break;
+        q = fin + 1;
+    }
+    if (!faltan) return 0;
+    int hechos = 0, k = 0;
+    for (int i = 0; i < nr; i++) {
+        if (r[i].t < 0) continue;
+        char t[64];
+        snprintf(t, sizeof t, "%d DE %d", ++k, faltan);
+        msg("BAJANDO LOS FONDOS NUEVOS...", t, false, true);
+        if (s_cancelar) return -1;
+        if (!recurso_bajar(r[i].n, r[i].t, r[i].c)) return -1;
+        hechos++;
+    }
+    diag("recursos: %d bajados", hechos);
+    return hechos;
 }
 
 /* ------------------------------------------------------------------ el modo */
@@ -444,9 +549,16 @@ void ota_modo(void)
                 salir("sin respuesta de internet");
             }
             if (fw_codigo(s_nueva) <= fw_codigo(FW_VERSION)) {
+                const int rb = recursos_al_dia(); /* (1.0.17) los fondos que faltan (la versión nueva los pide en su primer viaje) */
+                revisar_cancelar();
+                if (rb < 0) {
+                    msg("NO PUDE BAJAR LOS FONDOS", "EL JUEGO FUNCIONA IGUAL. PRUEBA DE NUEVO MÁS RATO", false, true);
+                    if (esperar(8000)) salir("CANCELAR");
+                    salir("recursos fallidos");
+                }
                 char t[96];
                 snprintf(t, sizeof t, "TIENES LA %s, LA ÚLTIMA PUBLICADA", FW_VERSION);
-                msg("¡ESTÁS AL DÍA!", t, false, true);
+                msg(rb > 0 ? "¡LISTO! FONDOS NUEVOS" : "¡ESTÁS AL DÍA!", t, false, true);
                 diag("al día (publicada %s)", s_nueva);
                 if (esperar(6000)) salir("CANCELAR");
                 salir("al día");

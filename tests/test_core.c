@@ -4792,6 +4792,37 @@ static void test_fw104(void)
         p.dormida = 1;
         CHECK(pet_walk_together(&p, 4000, t + 50u * H) == 0, "(fw 104) dormida no cuenta");
     }
+    /* --- (1.0.17) los juegos de a dos con una visita --- */
+    {
+        static pet_t p;
+        nueva(&p, 22, T0);
+        uint32_t t = T0 + 3u * 24u * H + 11u * H;
+        pet_update(&p, t);
+        p.dormida = 0;
+        p.vecino.presente = 1; p.vecino.amistad = 50.0f;
+        const float div0 = p.necesidad[NEED_DIVERSION] = 30;
+        int nd = 0;
+        CHECK(pet_duo_game(&p, PET_DOS_PING, 2, t) == 1, "(1.0.17) el ping pong cuenta");
+        CHECK(p.necesidad[NEED_DIVERSION] > div0, "(1.0.17) jugar con la visita la entretiene");
+        CHECK(p.vecino.amistad > 50.0f, "(1.0.17) suma amistad con el amigo del barrio");
+        CHECK(p.dos_jugadas == 1 && p.dos_ganadas == 1, "(1.0.17) cuenta la partida y la ganada (%d %d)", p.dos_jugadas, p.dos_ganadas);
+        for (int k = 0; k < p.diario_n; k++) nd += pet_diary_get(&p, k)->tipo == DIA_JUEGO_DOS;
+        CHECK(nd == 1, "(1.0.17) queda en el diario (%d)", nd);
+        CHECK(pet_duo_game(&p, PET_DOS_MEMO, 0, t + 600u) == 1 && p.dos_ganadas == 1 && p.dos_jugadas == 2, "(1.0.17) perder también cuenta");
+        nd = 0;
+        for (int k = 0; k < p.diario_n; k++) nd += pet_diary_get(&p, k)->tipo == DIA_JUEGO_DOS;
+        CHECK(nd == 1, "(1.0.17) una vez al día en el diario (%d)", nd);
+        CHECK(pet_duo_game(&p, PET_DOS_COUNT, 2, t) == 0, "(1.0.17) un juego que no existe no cuenta");
+        char b2[200];
+        for (int j = 0; j < PET_DOS_COUNT; j++)
+            for (int r = 0; r < 3; r++) {
+                const entrada_diario_t e = {t, DIA_JUEGO_DOS, (int8_t)j, (int8_t)r, 0};
+                pet_diary_text(&p, &e, b2, sizeof b2);
+                CHECK(b2[0] && !strchr(b2, '{') && !strchr(b2, '%'), "(1.0.17) texto del diario de a dos: %s", b2);
+            }
+        p.dormida = 1;
+        CHECK(pet_duo_game(&p, PET_DOS_PING, 2, t + 900u) == 0, "(1.0.17) dormida no juega");
+    }
 }
 
 int main(void)

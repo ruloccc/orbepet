@@ -1174,6 +1174,8 @@ class App(tk.Tk):
                                "Cuando aparezca el juego en la pantalla, aprieta Aceptar.")
             self.poner_etapa("Poniendo la hora y la fecha en la placa")
             probar.poner_hora(puerto)
+            self.poner_etapa("Copiando los fondos de los juegos de a dos")
+            probar.enviar_recursos(puerto)
             t_fin = time.time()
             self.cola.put(self.buscar_puertos)
             self.poner_etapa("")

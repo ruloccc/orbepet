@@ -565,6 +565,7 @@ EXPORT(sim_frame) int sim_frame(uint32_t dt_ms)
         case UI_ACCION_COLOR: pet_set_color(&s_pet, arg); break;
         case UI_ACCION_ECLOSIONAR: pet_hatch(&s_pet, t); break;
         case UI_ACCION_HUEVO_EMPIEZA: pet_egg_start(&s_pet, t); break; /* (1.0.10) */
+        case UI_ACCION_JUEGO_DOS: { const int r = pet_duo_game(&s_pet, arg & 15, (arg >> 4) & 3, t); log_linea(t, "terminó un juego de a dos (%s)", r ? "contó" : "no contó", 0); break; } /* (1.0.17) */
             case UI_ACCION_HABILIDAD: pet_ability_use(&s_pet, arg & 1, t); break;
         case UI_ACCION_BALLENA: log_linea(t, pet_whale_ride(&s_pet, arg, t) ? "paseo en la ballena: trajo polvo de estrellas" : "paseo en la ballena por el firmamento", 0, 0); break;
         case UI_ACCION_BAILE:        case UI_ACCION_EVOLUCION: if (arg) pet_evo_accept(&s_pet, t); else pet_evo_defer(&s_pet); log_linea(t, arg ? "decidiste que crezca" : "todavia no: lo puedes hacer en Ajustes", 0, 0); break;
@@ -1092,6 +1093,10 @@ EXPORT(sim_zj_estado) int sim_zj_estado(void) { extern int ui_zj_estado(void); r
 EXPORT(sim_zj_tocar) void sim_zj_tocar(int x, int y) { extern void ui_zj_tocar(int, int); ui_zj_tocar(x, y); }
 EXPORT(sim_zona_salir) void sim_zona_salir(void) { extern void ui_demo_zona_salir(void); ui_demo_zona_salir(); }
 EXPORT(sim_zj_dbg) int sim_zj_dbg(int q) { extern int ui_zj_dbg(int); return ui_zj_dbg(q); }
+/* (1.0.17) los juegos de a dos */
+EXPORT(sim_zd_abrir) void sim_zd_abrir(int n) { extern void ui_zd_abrir(int); ui_zd_abrir(n); }
+EXPORT(sim_zd_estado) int sim_zd_estado(void) { extern int ui_zd_estado(void); return ui_zd_estado(); }
+EXPORT(sim_dos_jugadas) int sim_dos_jugadas(void) { return s_pet.dos_jugadas * 1000 + s_pet.dos_ganadas; }
 /* (v40) las excursiones sola y lo escondido de los lugares secretos */
 void ui_demo_excursion(int z); int ui_excursion(void);
 EXPORT(sim_excursion) void sim_excursion(int z) /* 0 al claro, 1 al mirador, -1 que vuelva ya */

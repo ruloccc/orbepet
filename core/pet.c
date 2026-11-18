@@ -6471,6 +6471,23 @@ void pet_ice_test(pet_t *p, int que, uint32_t t)
         push_event(p, EV_HIELO, 1, 0, t);
     }
 }
+int pet_duo_game(pet_t *p, int juego, int resultado, uint32_t t)
+{
+    if (!p || p->etapa == STAGE_HUEVO || p->dormida || (unsigned)juego >= PET_DOS_COUNT) return 0;
+    if (resultado < 0) resultado = 0;
+    if (resultado > 2) resultado = 2;
+    if (p->dos_jugadas < 255) p->dos_jugadas++;
+    if (resultado == 2 && p->dos_ganadas < 255) p->dos_ganadas++;
+    sumar(p, NEED_DIVERSION, 12.0f + 4.0f * (float)resultado);
+    sumar(p, NEED_ENERGIA, -3);
+    impulsar(p, EMO_ALEGRIA, 0.4f + 0.15f * (float)resultado, CAUSA_JUGAMOS);
+    if (resultado == 2) impulsar(p, EMO_ORGULLO, 0.5f, CAUSA_JUGAMOS);
+    if (p->vecino.presente) { p->vecino.amistad += 2.0f; if (p->vecino.amistad > 100.0f) p->vecino.amistad = 100.0f; }
+    p->ultima_interaccion = t;
+    const uint8_t hoy = (uint8_t)(1u + ((uint32_t)dia_local(p, t) & 0x7Fu));
+    if (p->dos_dia != hoy) { p->dos_dia = hoy; anotar(p, DIA_JUEGO_DOS, juego, resultado, t); }
+    return 1;
+}
 int pet_walk_together(pet_t *p, uint32_t pasos, uint32_t t)
 {
     if (p->etapa == STAGE_HUEVO || p->dormida || pasos < 800u || pasos > 30000u) return 0;
@@ -7894,6 +7911,13 @@ const char *pet_diary_text(const pet_t *p, const entrada_diario_t *e, char *buf,
         static const char *const Z[] = {"¡Hoy salimos a caminar de verdad! Como %d00 pasos juntos", "Me llevaste de paseo: %d00 pasos mirando el mundo de afuera",
                                         "Caminamos juntos un buen rato (%d00 pasos). Volví con las patitas cansadas y feliz", "Paseo de verdad: %d00 pasos. ¡Qué grande es el mundo de afuera!"};
         snprintf(buf, (size_t)n, VARIANTE(Z), a);
+        break; }
+    case DIA_JUEGO_DOS: { /* (1.0.17) */
+        static const char *const J[PET_DOS_COUNT] = {"ping pong", "tira y afloja", "memorice", "escondidas"};
+        const char *j = (unsigned)a < PET_DOS_COUNT ? J[a] : "un juego";
+        if (b == 2) snprintf(buf, (size_t)n, "Jugamos %s con una visita y ¡gané yo!", j);
+        else if (b == 1) snprintf(buf, (size_t)n, "Jugamos %s con una visita: quedamos empatados", j);
+        else snprintf(buf, (size_t)n, "Jugamos %s con una visita. Perdí, pero nos reímos harto", j);
         break; }
     case DIA_HIELO: snprintf(buf, (size_t)n, "Mi trocito de hielo se derritió... Quedó una gotita. El próximo invierno pescaré otro"); break; /* (fw 104) */
     case DIA_LUGAR: snprintf(buf, (size_t)n, a ? "Subimos al mirador de las nubes, en la cima del cerro" : "El sendero que se mueve nos llevó a una casita escondida"); break;

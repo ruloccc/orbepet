@@ -942,6 +942,10 @@ static void zp_animar(float dt)
     }
 }
 
+static void zj_otra_cb(lv_event_t *e);
+static void zj_fin_x_cb(lv_event_t *e);
+#include "ui_dos.inc" /* (1.0.17) los juegos de a dos con una visita */
+
 /* ---------- el final: puntaje, récord, estrellas y premios ---------- */
 static const int16_t ZJ_ESTRELLAS[6][3] = { /* puntos para 1, 2 y 3 estrellas (adultos) */
     {0, 0, 0}, {120, 200, 255}, {60, 160, 260}, {60, 140, 240}, {25, 55, 90}, {40, 80, 105}};
@@ -956,7 +960,6 @@ static int zj_estrellas_de(int jg, int pts)
     if (s_nino && e < 1) e = 1; /* los más chiquitos siempre ganan algo */
     return e;
 }
-static void zj_otra_cb(lv_event_t *e);
 static void zj_fin_x_cb(lv_event_t *e) { (void)e; zj_cerrar(true); }
 static void zj_terminar(void)
 {
@@ -1060,7 +1063,7 @@ static void zj_toque_cb(lv_event_t *e)
     case ZJ_PIEDRA: zp_toque(pt.x, pt.y); break;
     case ZJ_HORNO: zg_toque(pt.x, pt.y); break;
     case ZJ_CAMITA: zk_toque(pt.x, pt.y); break;
-    default: break;
+    default: if (zd_es(s_zj_jg)) zd_toque(pt.x, pt.y); break;
     }
 }
 static void zj_x_cb(lv_event_t *e) { (void)e; zj_cerrar(false); }
@@ -1083,11 +1086,11 @@ static void zj_timer_cb(lv_timer_t *t)
         case ZJ_PIEDRA: zp_animar(dt); break;
         case ZJ_HORNO: zg_animar(dt); break;
         case ZJ_CAMITA: zk_animar(dt); break;
-        default: break;
+        default: if (zd_es(s_zj_jg)) zd_animar(dt); break;
         }
         if (s_zj_fase == 1 && s_zj_dura && zj_tiempo() >= (int)s_zj_dura && s_zj_jg != ZJ_NUBE && s_zj_jg != ZJ_PIEDRA && s_zj_jg != ZJ_HORNO) zj_terminar();
         if (s_zj_fase == 1 && s_zj_jg == ZJ_HORNO && zj_tiempo() > 120000) zj_terminar(); /* (por si nadie juega) */
-        zj_hud();
+        if (!zd_es(s_zj_jg)) zj_hud();
     }
     zj_chispas_animar(dt);
     zj_mas_animar();
@@ -1181,7 +1184,7 @@ static void zj_empezar_juego(void)
     case ZJ_PIEDRA: s_zj_dura = 0; zp_empezar(); break;
     case ZJ_HORNO: s_zj_dura = 0; zg_empezar(); break;
     case ZJ_CAMITA: s_zj_dura = s_nino ? 30000u : 42000u; zk_empezar(); break;
-    default: break;
+    default: s_zj_dura = 0; if (zd_es(s_zj_jg)) zd_empezar(); break;
     }
     if (s_zj_dura) { /* la barrita del tiempo */
         s_zj_barra = caja(s_zj); lv_obj_set_size(s_zj_barra, 160, 12); lv_obj_align(s_zj_barra, LV_ALIGN_TOP_MID, 0, 74);
@@ -1190,13 +1193,13 @@ static void zj_empezar_juego(void)
     }
     ocultar(s_zj_tit, true);
     lv_obj_move_foreground(s_zj_txt); lv_obj_move_foreground(s_zj_hud); lv_obj_move_foreground(s_zj_mas); lv_obj_move_foreground(s_zj_x);
-    zj_hud();
+    if (!zd_es(s_zj_jg)) zj_hud();
     accion(UI_ACCION_SONAR, SND_SILBATO);
 }
 static void zj_mundo_ver(bool si); /* (ui_zonas.inc: el mundo o la casita se apartan mientras se juega) */
 static void zj_abrir(int jg)
 {
-    if (!s_pet || jg <= ZJ_NADA || jg > ZJ_PIEDRA) return;
+    if (!s_pet || jg <= ZJ_NADA || jg > ZJ_ESCONDE) return;
     zj_crear();
     if (s_zj_jg) zj_cerrar(false);
     static const int8_t PANT[6] = {-1, 11, 12, 8, 9, 10};
@@ -1205,8 +1208,20 @@ static void zj_abrir(int jg)
     s_zj_fin = NULL; s_zj_barra = s_zj_barra_f = NULL; s_zj_dedo = false; s_zj_dura = 0; s_zj_vidas = 0;
     memset(s_zj_chv, 0, sizeof s_zj_chv); memset(s_zj_f, 0, sizeof s_zj_f); memset(s_zj_g, 0, sizeof s_zj_g); memset(s_zj_v, 0, sizeof s_zj_v); memset(s_zj_tipo, 0, sizeof s_zj_tipo);
     zj_mundo_ver(false); /* el fondo del mundo o de la casita se suelta: hace lugar al del juego */
-    s_zj_pant = PANT[jg];
     s_zj_fondo = lv_image_create(s_zj); lv_obj_remove_flag(s_zj_fondo, LV_OBJ_FLAG_CLICKABLE);
+    if (zd_es(jg)) { /* (1.0.17) los de a dos: su fondo viene de la memoria de recursos */
+        lv_obj_set_style_bg_color(s_zj, lv_color_hex(0x10161A), 0);
+        s_zj_pant = ART_PANT_DOS + (jg - ZJ_PING);
+        zd_fondo();
+        zj_piezas_encima();
+        zd_portada();
+        ocultar(s_zj, false);
+        lv_obj_move_foreground(s_zj);
+        if (!s_zj_timer) s_zj_timer = lv_timer_create(zj_timer_cb, ZJ_MS, NULL);
+        accion(UI_ACCION_SONAR, SND_HOLA_AMIGO);
+        return;
+    }
+    s_zj_pant = PANT[jg];
     int px = 0, py = 0;
     const bool afuera = jg == ZJ_NUBE || jg == ZJ_CORONA || jg == ZJ_PIEDRA;
     const lv_image_dsc_t *f = afuera ? art_pantalla_clima(s_zj_pant, (int)s_fondo_periodo < 0 ? 0 : (int)s_fondo_periodo, 0, 0, &px, &py) : art_pantalla(s_zj_pant, &px, &py);
@@ -1232,6 +1247,7 @@ static void zj_cerrar(bool gano)
     s_zj_fondo = s_zj_tit = s_zj_tit_img = s_zj_txt = s_zj_txt_img = s_zj_x = s_zj_hud = s_zj_hud_img = s_zj_barra = s_zj_barra_f = s_zj_fin = s_zj_mas = s_zj_mas_img = NULL;
     art_img_free(&s_zj_tit_art); art_img_free(&s_zj_txt_art); art_img_free(&s_zj_hud_art); art_img_free(&s_zj_mas_art); art_img_free(&s_zg_sopla_art);
     for (int k = 0; k < 3; k++) { art_img_free(&s_zj_pet_art[k]); art_img_free(&s_zj_fin_art[k]); }
+    zd_liberar();
     ocultar(s_zj, true);
     if (s_zj_pant >= 0) art_pantalla_liberar(s_zj_pant);
     s_zj_pant = -1;
@@ -1259,7 +1275,7 @@ void ui_zj_tocar(int x, int y)
     case ZJ_PIEDRA: zp_toque(x, y); break;
     case ZJ_HORNO: zg_toque(x, y); break;
     case ZJ_CAMITA: zk_toque(x, y); break;
-    default: break;
+    default: if (zd_es(s_zj_jg)) zd_toque(x, y); break;
     }
 }
 /* jg * 100 + 50 si terminó (con estrellas) + puntos (hasta 49) */
@@ -1280,3 +1296,6 @@ int ui_zj_dbg(int q)
     default: return 0;
     }
 }
+/* (pruebas) 1.0.17: abre un juego de a dos (0..3) aunque no haya visita; el estado: fase * 1000 + ella * 10 + la visita */
+void ui_zd_abrir(int n) { if (n >= 0 && n < 4) zj_abrir(ZJ_PING + n); }
+int ui_zd_estado(void) { return zd_es(s_zj_jg) ? s_zj_fase * 1000 + s_zj_pts * 10 + s_zd_b : -1; }

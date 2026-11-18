@@ -90,8 +90,17 @@ jobs:
           sudo chown -R "$(id -u)" salida
           S=$(sha256sum salida/mascota.bin | cut -d' ' -f1)
           T=$(stat -c %s salida/mascota.bin)
-          printf '{\n  "version": "%s",\n  "nombre": "%s",\n  "tam": %s,\n  "sha256": "%s",\n  "fecha": "%s",\n  "commit": "%s"\n}\n' \
-            "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.nombre }}" "$T" "$S" "$(date -u +%Y-%m-%dT%H:%MZ)" "${GITHUB_SHA::7}" > salida/version.json
+          # (1.0.17) los archivos de la memoria de recursos (fondos de los juegos de a dos): nombre:bytes:crc32 (el orbe baja los que le faltan)
+          mkdir -p salida/recursos
+          R=""
+          for f in firmware/recursos/*.bin; do
+            [ -f "$f" ] || continue
+            cp "$f" salida/recursos/
+            R="$R $(basename "$f"):$(stat -c %s "$f"):$(python3 -c "import sys,zlib;print('%08x'%zlib.crc32(open(sys.argv[1],'rb').read()))" "$f")"
+          done
+          R="${R# }"
+          printf '{\n  "version": "%s",\n  "nombre": "%s",\n  "tam": %s,\n  "sha256": "%s",\n  "fecha": "%s",\n  "commit": "%s",\n  "recursos": "%s"\n}\n' \
+            "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.nombre }}" "$T" "$S" "$(date -u +%Y-%m-%dT%H:%MZ)" "${GITHUB_SHA::7}" "$R" > salida/version.json
           cat salida/version.json
 
       - uses: actions/upload-artifact@v4
@@ -105,7 +114,7 @@ jobs:
         run: |
           # una sola versión a la vez (sin historia): así el repositorio no crece. Claude la lee desde aquí si hace falta
           # publicar a mano (cuando no está el secreto ORBEPET_FIRMWARE_TOKEN).
-          mkdir comp && cp salida/* comp/ && cd comp
+          mkdir comp && cp -r salida/* comp/ && cd comp
           git init -q -b compilados
           git config user.name "orbepet-ci"; git config user.email "ci@orbepet.invalid"
           git add -A && git commit -q -m "Compilado ${{ steps.ver.outputs.version }} (${GITHUB_SHA::7})"
@@ -123,11 +132,12 @@ jobs:
           fi
           git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/ruloccc/orbepet-firmware.git" pub
           cp salida/mascota.bin salida/version.json pub/
+          mkdir -p pub/recursos && cp salida/recursos/*.bin pub/recursos/ 2>/dev/null || true
           cd pub
           git config user.name "orbepet-ci"; git config user.email "ci@orbepet.invalid"
-          git add mascota.bin version.json
+          git add mascota.bin version.json recursos
           git commit -m "Versión $V — $N" || echo "sin cambios"
           git push origin HEAD:main
           cd ..
-          GH_TOKEN="$TOKEN" gh release create "v$V" salida/* --repo ruloccc/orbepet-firmware --title "$V — $N" \
+          GH_TOKEN="$TOKEN" gh release create "v$V" salida/*.bin salida/*.json --repo ruloccc/orbepet-firmware --title "$V — $N" \
             --notes "Firmware $V ($N). El orbe la baja solo desde Ajustes → Versión → Actualizar. Para grabar por cable: bootloader.bin, partition-table.bin, ota_data_initial.bin y mascota.bin."

@@ -989,6 +989,65 @@ def placa_responde(puerto, seg=12):
             pass
     return False
 
+def enviar_recursos(puerto, seg=20):
+    """(1.0.17) Copia a la memoria de recursos de la placa los archivos de firmware/recursos (los fondos de los juegos de a dos)
+    que le falten o estén distintos. Solo manda lo que cambió (la placa dice qué tiene). Devuelve cuántos mandó, o -1 si falló."""
+    import base64, glob, zlib
+    archivos = sorted(glob.glob(os.path.join(FW, "recursos", "pj*.bin")))
+    if not archivos:
+        return 0
+    fin = time.time() + seg
+    s = None
+    while time.time() < fin and s is None:
+        try:
+            s = serial.Serial()
+            s.port, s.baudrate, s.timeout = puerto, 115200, 0.3
+            s.dtr = False
+            s.rts = False
+            s.open()
+        except Exception:
+            s = None
+            time.sleep(0.5)
+    if s is None:
+        print("No pude abrir el puerto para mandar los fondos.")
+        return -1
+    def pedir(linea, espera, t=6.0):
+        s.reset_input_buffer()
+        s.write((linea + "\n").encode())
+        t_fin, buf = time.time() + t, b""
+        while time.time() < t_fin:
+            buf += s.read(400)
+            for l in buf.decode("utf-8", "replace").splitlines():
+                if l.startswith(espera) or l.startswith("MASCOTA ERROR"):
+                    return l.strip()
+        return ""
+    mandados = 0
+    try:
+        for ruta in archivos:
+            nom = os.path.basename(ruta)
+            datos = open(ruta, "rb").read()
+            crc = "%08x" % zlib.crc32(datos)
+            r = pedir(f"MASCOTA ARCHIVO {nom} TIENE", f"MASCOTA ARCHIVO {nom}")
+            if r.split()[3:5] == [str(len(datos)), crc]:
+                continue
+            print(f"Mandando {nom} ({len(datos) // 1024} KB) a la memoria de recursos…")
+            if not pedir(f"MASCOTA ARCHIVO {nom} INICIO {len(datos)}", "MASCOTA OK").startswith("MASCOTA OK"):
+                print(f"  la placa no aceptó {nom}: {r}")
+                return -1
+            for i in range(0, len(datos), 2400):
+                b = base64.b64encode(datos[i:i + 2400]).decode()
+                if not pedir(f"MASCOTA ARCHIVO {nom} DATOS {i} {b}", "MASCOTA OK").startswith("MASCOTA OK"):
+                    print(f"  se cortó al mandar {nom}")
+                    return -1
+            if not pedir(f"MASCOTA ARCHIVO {nom} FIN {crc}", "MASCOTA OK", 15.0).startswith("MASCOTA OK"):
+                print(f"  {nom} no llegó completo")
+                return -1
+            mandados += 1
+    finally:
+        s.close()
+    print(f"Fondos de los juegos de a dos: {mandados} enviados" if mandados else "Fondos de los juegos de a dos: ya estaban")
+    return mandados
+
 def poner_hora(puerto, seg=15):
     """Le pone a la placa la hora y la fecha de este computador (con su zona horaria). Reintenta unos segundos: acaba de arrancar."""
     ahora = int(time.time())

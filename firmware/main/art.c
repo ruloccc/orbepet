@@ -6509,7 +6509,7 @@ const lv_image_dsc_t *art_fondo(art_periodo_t periodo, uint32_t decor, art_estac
 
 
 /* ---- fondos de pantalla como foto: paleta + LZSS en la flash; se descomprimen al abrir la pantalla y se sueltan al cerrarla ---- */
-#define PANT_MAX 16 /* (v97) 8 → 16: las pantallas de los juegos de los lugares secretos */
+#define PANT_MAX 20 /* (v97) 8 → 16: las pantallas de los juegos de los lugares secretos; (1.0.17) 20: + los 4 de los juegos de a dos */
 static EXT_RAM_BSS_ATTR struct { lv_image_dsc_t dsc; void *px; } s_pant[PANT_MAX];
 static uint32_t s_pant_clave[PANT_MAX];
 /* (v97) la interfaz dice qué pantalla está en uso (la del lugar secreto o del juego de ahora): esa no se suelta para hacer lugar */
@@ -6588,6 +6588,105 @@ static const lv_image_dsc_t *pant_cargar(int id, int *x, int *y, int periodo, in
     if (y) *y = PA_TABLA[id].y;
     return &s_pant[id].dsc;
 }
+/* ---- (1.0.17) los fondos de los juegos de a dos: archivos en la memoria de recursos ---- */
+static int (*s_lec_leer)(const char *, void *, int);
+static int (*s_lec_tam)(const char *);
+void art_lector(int (*leer)(const char *nombre, void *buf, int cap), int (*tam)(const char *nombre)) { s_lec_leer = leer; s_lec_tam = tam; }
+#ifndef ESP_PLATFORM
+#include "fondos_dos_sim.inc" /* (el simulador no tiene memoria de recursos: los trae adentro) */
+#endif
+/* lee pjN.bin entero (en la PSRAM). *n = su largo. NULL si no está o no se puede leer */
+static uint8_t *dos_leer(int n, uint32_t *largo)
+{
+#ifndef ESP_PLATFORM
+    if (!s_lec_leer && n >= 0 && n < (int)(sizeof PJ_SIM / sizeof PJ_SIM[0])) {
+        uint8_t *b = malloc(PJ_SIM[n].n);
+        if (b) { memcpy(b, PJ_SIM[n].d, PJ_SIM[n].n); *largo = PJ_SIM[n].n; }
+        return b;
+    }
+#endif
+    if (!s_lec_leer || !s_lec_tam) return NULL;
+    char nom[16];
+    snprintf(nom, sizeof nom, "pj%d.bin", n);
+    const int t = s_lec_tam(nom);
+    if (t < 16 || t > 600 * 1024) return NULL;
+#ifdef ESP_PLATFORM
+    uint8_t *b = heap_caps_malloc((size_t)t, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    uint8_t *b = malloc((size_t)t);
+#endif
+    if (!b) return NULL;
+    if (s_lec_leer(nom, b, t) != t) { free(b); return NULL; }
+    *largo = (uint32_t)t;
+    return b;
+}
+bool art_fondo_dos_hay(int n)
+{
+#ifndef ESP_PLATFORM
+    if (!s_lec_leer) return n >= 0 && n < (int)(sizeof PJ_SIM / sizeof PJ_SIM[0]);
+#endif
+    if (!s_lec_tam) return false;
+    char nom[16];
+    snprintf(nom, sizeof nom, "pj%d.bin", n);
+    return s_lec_tam(nom) >= 16;
+}
+const lv_image_dsc_t *art_fondo_dos(int n, int *x, int *y)
+{
+    const int id = ART_PANT_DOS + n;
+    if (n < 0 || id >= PANT_MAX) return NULL;
+    static int16_t pos[PANT_MAX - ART_PANT_DOS][2];
+    if (s_pant[id].px) { if (x) *x = pos[n][0]; if (y) *y = pos[n][1]; return &s_pant[id].dsc; }
+#ifdef ESP_PLATFORM
+    if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < 1500u * 1024u) /* (igual que art_pantalla: poca PSRAM, se sueltan las otras) */
+        for (int k = 0; k < PANT_MAX; k++) if (k != id && !art_pantalla_en_uso(k)) art_pantalla_liberar(k);
+#endif
+    uint32_t largo = 0;
+    uint8_t *f = dos_leer(n, &largo);
+    if (!f) return NULL;
+    const lv_image_dsc_t *res = NULL;
+    if (largo > 12 && f[0] == 'P' && f[1] == 'J' && f[2] == 1) {
+        const int alfa = f[3], w = f[4] | f[5] << 8, h = f[6] | f[7] << 8;
+        pos[n][0] = (int16_t)(f[8] | f[9] << 8); pos[n][1] = (int16_t)(f[10] | f[11] << 8);
+        const uint8_t *d = f + 12;
+        const unsigned np = d[0];
+        uint8_t *idx = (w > 0 && h > 0 && w <= 466 && h <= 466) ? malloc((size_t)w * h) : NULL;
+        if (idx && 1 + np * 3 < largo - 12 && fd_lz(d + 1 + np * 3, f + largo, idx, (uint32_t)w * h)) {
+            void *px = malloc((size_t)w * h * (alfa ? 4 : 2));
+            if (px) {
+                if (alfa) {
+                    uint32_t pal[256];
+                    pal[0] = 0;
+                    for (unsigned i = 1; i < np && i < 256; i++) pal[i] = 0xFF000000u | ((uint32_t)d[1 + i * 3] << 16) | ((uint32_t)d[2 + i * 3] << 8) | d[3 + i * 3];
+                    uint32_t *o = px;
+                    for (int i = 0; i < w * h; i++) o[i] = pal[idx[i]];
+                } else {
+                    uint16_t pal[256] = {0};
+                    for (unsigned i = 0; i < np && i < 256; i++) {
+                        const uint32_t c = A(((uint32_t)d[1 + i * 3] << 16) | ((uint32_t)d[2 + i * 3] << 8) | d[3 + i * 3]);
+                        pal[i] = (uint16_t)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x1F));
+                    }
+                    uint16_t *o = px;
+                    for (int i = 0; i < w * h; i++) o[i] = pal[idx[i]];
+                }
+                memset(&s_pant[id].dsc, 0, sizeof(lv_image_dsc_t));
+                s_pant[id].dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+                s_pant[id].dsc.header.cf = alfa ? LV_COLOR_FORMAT_ARGB8888 : LV_COLOR_FORMAT_RGB565;
+                s_pant[id].dsc.header.w = (uint32_t)w;
+                s_pant[id].dsc.header.h = (uint32_t)h;
+                s_pant[id].dsc.header.stride = (uint32_t)(w * (alfa ? 4 : 2));
+                s_pant[id].dsc.data_size = (uint32_t)(w * h * (alfa ? 4 : 2));
+                s_pant[id].dsc.data = px;
+                s_pant[id].px = px;
+                res = &s_pant[id].dsc;
+            }
+        }
+        free(idx);
+    }
+    free(f);
+    if (res) { if (x) *x = pos[n][0]; if (y) *y = pos[n][1]; }
+    return res;
+}
+
 void art_pantalla_liberar(int id)
 {
     if (id < 0 || id >= PANT_MAX || !s_pant[id].px) return;

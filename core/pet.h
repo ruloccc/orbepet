@@ -287,6 +287,7 @@ typedef enum {
     DIA_EXCURSION,    /* (v40) fue sola de paseo: a = 0 el claro, 1 el mirador; b = lo que trajo (PET_ZH_*; 101b: 4..6 = PET_ZH_* + 3, se lo quedó) */
     DIA_PASEO_JUNTOS, /* (fw 104) salieron a caminar de verdad: a = pasos / 100 (tope 255) */
     DIA_HIELO,        /* (fw 104) a = 1 el trocito de hielo se derritió (encontrarlo queda en DIA_TESORO) */
+    DIA_JUEGO_DOS,    /* (1.0.17) jugó con una visita: a = PET_DOS_* (el juego), b = 0 perdió, 1 empate, 2 ganó */
     DIA_COUNT
 } diario_t;
 #define PET_DIARIO 32
@@ -1477,7 +1478,10 @@ typedef struct {
     uint8_t paseo_dia;                        /* 1 + día & 0x7F de paseo_n */
     uint8_t paseo_n;                          /* paseos de verdad premiados hoy (máx. 2) */
     uint8_t terca_act;                        /* 1 + la acción que acaba de negar (a la segunda obedece) */
-    uint8_t reserva104[3];
+    /* (1.0.17, en los 3 bytes de reserva104: parten en cero, no cambia la versión) los juegos de a dos con las visitas */
+    uint8_t dos_jugadas;                      /* partidas de a dos (hasta 255) */
+    uint8_t dos_ganadas;                      /* las que ganó ella (hasta 255) */
+    uint8_t dos_dia;                          /* 1 + día & 0x7F de la última que quedó en el diario (una por día) */
     uint32_t terca_t;                         /* cuándo la negó */
 
     uint32_t crc;            /* siempre el último campo */
@@ -1778,6 +1782,12 @@ enum { PET_JLR_RECORD = 1, PET_JLR_ESTRELLAS = 2, PET_JLR_PREMIO = 4, PET_JLR_RE
 int pet_place_game_record(const pet_t *p, int jg);
 int pet_place_game_stars(const pet_t *p, int jg);
 int pet_place_game_result(pet_t *p, int jg, int puntos, int estrellas, uint32_t ahora); /* bits PET_JLR_* */
+/* (1.0.17) los juegos de a dos con una visita (el amigo del barrio o un visitante): ping pong, tira y afloja, memorice
+ * y escondidas. resultado: 0 perdió ella, 1 empate, 2 ganó ella. Divierte (más si gana, pero perder con un amigo
+ * también es lindo), cansa un poco y suma amistad con el amigo del barrio si está. Una vez al día queda en el diario.
+ * Devuelve 1 si contó (0: huevo, dormida o juego que no existe). */
+enum { PET_DOS_PING = 0, PET_DOS_CUERDA, PET_DOS_MEMO, PET_DOS_ESCONDE, PET_DOS_COUNT };
+int pet_duo_game(pet_t *p, int juego, int resultado, uint32_t ahora);
 void pet_place_game_prize(int *ramitas, int *musgo, int *objeto);                      /* lo que ganó en la última ronda */
 int pet_place_game_seed(const pet_t *p, int jg, uint32_t ahora);                       /* cambia cada día (la piedra tibia) */
 
