@@ -738,7 +738,12 @@ static void tarea_sonido(void *arg)
                 snprintf(r, sizeof r, "s%u.pcm", s);
                 sfx_n = hal_res_read(r, pcm, max * 2) / 2;
             }
-            if (sfx_n <= 0) sfx_n = sfx_render((sound_t)s, pcm, max, BOARD_AUDIO_HZ);
+            if (sfx_n <= 0) { /* (1.0.24) sintetizar con prioridad baja: con 10 le quitaba el núcleo 0 al dibujo (sonido 68: cuadro de 1,4 s) */
+                const UBaseType_t pr = uxTaskPriorityGet(NULL);
+                vTaskPrioritySet(NULL, 2);
+                sfx_n = sfx_render((sound_t)s, pcm, max, BOARD_AUDIO_HZ);
+                vTaskPrioritySet(NULL, pr);
+            }
             sfx_pos = 0;
             sfx_gain = (float)s_vol_tipo[(q & SND_SUAVE) ? 1 : pet_sound_group((sound_t)s)] / 100.0f; /* SND_SUAVE: va con el volumen de efectos, no con el de las alarmas */
           }
@@ -756,7 +761,13 @@ static void tarea_sonido(void *arg)
                 amb_n = hal_res_read(r, amb, amb_max * 2) / 2;
                 if (amb_n < 0) amb_n = 0;
             }
-            if (!amb_n && pedido != AMB_NADA) amb_n = sfx_ambient((ambiente_t)pedido, amb, amb_max, BOARD_AUDIO_HZ);
+            if (!amb_n && pedido != AMB_NADA) { /* (1.0.24) 8 s de ambiente se arman de una vez: con prioridad baja, para que el dibujo
+                                                  * no espere (el ambiente 5 congelaba la pantalla hasta 3,9 s en el informe del 18-nov) */
+                const UBaseType_t pr = uxTaskPriorityGet(NULL);
+                vTaskPrioritySet(NULL, 2);
+                amb_n = sfx_ambient((ambiente_t)pedido, amb, amb_max, BOARD_AUDIO_HZ);
+                vTaskPrioritySet(NULL, pr);
+            }
             amb_pos = 0;
         }
         voces = false;
