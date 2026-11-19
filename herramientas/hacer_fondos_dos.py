@@ -36,7 +36,15 @@ def main():
         sim.append("static const uint8_t PJ_SIM_%d[%d] = {%s};\n" % (i, len(datos), ",".join(str(b) for b in datos)))
         filas.append("{PJ_SIM_%d, %d}" % (i, len(datos)))
         print("  pj%d.bin  %s  %d KB  crc %08x" % (i, nom, len(datos) // 1024, zlib.crc32(datos) & 0xFFFFFFFF))
-    sim.append("static const struct { const uint8_t *d; uint32_t n; } PJ_SIM[%d] = {%s};\n" % (len(NOMBRES), ", ".join(filas)))
+    # (1.0.32) pj7.bin: los dibujos de la colección de la pesca (los hace herramientas/iconos_nuevos/peces48.py)
+    n = len(NOMBRES)
+    extra = os.path.join(sal, "pj%d.bin" % n)
+    if os.path.exists(extra):
+        datos = open(extra, "rb").read()
+        sim.append("static const uint8_t PJ_SIM_%d[%d] = {%s};\n" % (n, len(datos), ",".join(str(b) for b in datos)))
+        filas.append("{PJ_SIM_%d, %d}" % (n, len(datos)))
+        print("  pj%d.bin  (los peces)  %d KB  crc %08x" % (n, len(datos) // 1024, zlib.crc32(datos) & 0xFFFFFFFF))
+    sim.append("static const struct { const uint8_t *d; uint32_t n; } PJ_SIM[%d] = {%s};\n" % (len(filas), ", ".join(filas)))
     open(os.path.join(RAIZ, "firmware", "main", "fondos_dos_sim.inc"), "w", encoding="utf-8").write("".join(sim))
     print("listo:", sal)
 

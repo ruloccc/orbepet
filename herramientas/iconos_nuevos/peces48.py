@@ -1,6 +1,9 @@
 # (1.0.32) La colección de la pesca: 30 animales del agua dibujados a 48 px (como los íconos HD), con borde oscuro.
-# Uso: python3 peces48.py <salida.inc> [carpeta_vista_previa]
-#   → escribe firmware/main/peces_hd.inc (paleta ARGB + índices; 0 = transparente) y una hoja de vista previa.
+# Uso: python3 peces48.py <salida pj7.bin> [carpeta_vista_previa]   (normalmente: firmware/recursos/pj7.bin)
+#   → escribe el archivo de la MEMORIA DE RECURSOS pj7.bin (no va en el programa: no cabía, faltaban 43 KB) y una hoja
+#     de vista previa. Formato: 'P' 'Z' 1 cantidad, y por cada animal: colores (1 byte), paleta ARGB (4 por color),
+#     largo (u16) y los índices 48x48 comprimidos con LZSS (herramientas/lzss.py; 0 = transparente). Después correr
+#     herramientas/hacer_fondos_dos.py para que el simulador lo traiga adentro.
 # El orden es el de la tabla PECES en core/peces.inc (no cambiarlo: el número es el bit guardado en la partida).
 import math, os, sys
 from PIL import Image, ImageDraw
@@ -390,25 +393,21 @@ def cuantizar(img, n):
 if __name__ == '__main__':
     salida = sys.argv[1]
     previa = sys.argv[2] if len(sys.argv) > 2 else None
-    out = ['/* GENERADO por herramientas/iconos_nuevos/peces48.py: los 30 animales de la colección de la pesca a 48x48',
-           ' * (paleta ARGB + índices; 0 = transparente). El orden es el de PECES en core/peces.inc. No editar a mano. */']
-    tab = []
+    import struct
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    from lzss import lz_encode
+    blob = bytearray(b'PZ' + bytes([1, 30]))
     hoja = Image.new('RGBA', (S * 3 * 10, S * 3 * 3), (40, 70, 110, 255))
     for i, im in enumerate(todos()):
         im = acabar(im)
         palb, idx, used = cuantizar(im, 24)
-        out.append(f'static const uint8_t PZ_{i}_PAL[{len(palb)}] = {{' + ','.join(map(str, palb)) + '};')
-        out.append(f'static const uint8_t PZ_{i}_IDX[{S * S}] = {{' + ','.join(map(str, idx)) + '};')
-        tab.append(f'    {{PZ_{i}_PAL, {used}, PZ_{i}_IDX}},')
+        lz = lz_encode(bytes(idx))
+        blob += bytes([used]) + bytes(palb) + struct.pack('<H', len(lz)) + lz
         if previa:
             pal = {0: (0, 0, 0, 0)}
             for k in range(used): pal[k + 1] = tuple(palb[k * 4 + 1:k * 4 + 4]) + (255,)
             pv = Image.new('RGBA', (S, S)); pv.putdata([pal[v] for v in idx])
             hoja.alpha_composite(pv.resize((S * 3, S * 3), Image.NEAREST), ((i % 10) * S * 3, (i // 10) * S * 3))
-    out.append('#define PECES_HD_N %d' % len(tab))
-    out.append('static const struct { const uint8_t *pal; int n; const uint8_t *idx; } PECES_HD[PECES_HD_N] = {')
-    out += tab
-    out.append('};')
-    open(salida, 'w').write('\n'.join(out) + '\n')
+    open(salida, 'wb').write(bytes(blob))
     if previa: hoja.save(os.path.join(previa, 'peces.png'))
-    print('listo', len(tab))
+    print('listo', salida, len(blob), 'bytes')

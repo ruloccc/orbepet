@@ -1350,7 +1350,7 @@ static void comando_probar(const char *l)
         printf("MASCOTA PROBAR ISLATOQUE OK hizo=%d\n", hizo ? 1 : 0);
     } else if (!strcmp(l, "RECURSOS")) { /* (1.0.23) los fondos de los juegos en la memoria de recursos: nombre:bytes (-1 = falta) */
         printf("MASCOTA PROBAR RECURSOS OK");
-        for (int k = 0; k < 7; k++) { char nom[12]; snprintf(nom, sizeof nom, "pj%d.bin", k); printf(" pj%d=%d", k, hal_res_size(nom)); }
+        for (int k = 0; k < 8; k++) { char nom[12]; snprintf(nom, sizeof nom, "pj%d.bin", k); printf(" pj%d=%d", k, hal_res_size(nom)); }
         printf("\n");
     } else if (sscanf(l, "FONDODOS %d", &a) == 1) { /* (1.0.23) arma el fondo pj<a> (como al abrir el juego): ok y cuánta PSRAM quedó */
         const lv_image_dsc_t *f = NULL;

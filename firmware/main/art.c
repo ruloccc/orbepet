@@ -3504,31 +3504,67 @@ uint32_t art_iconos_soltar(bool (*en_uso)(const void *src))
 const lv_image_dsc_t *art_icono(art_icono_t ico, int escala) { return icono_gen(ico, escala, false); }
 void art_icono_en(art_img_t *img, art_icono_t ico, int escala) { if ((unsigned)ico < ICO_COUNT) ico_render(img, ico, escala, false); }
 const lv_image_dsc_t *art_icono_espejo(art_icono_t ico, int escala) { return icono_gen(ico, escala, true); }
-/* (1.0.32) los 30 animales de la colección de la pesca (48 px, herramientas/iconos_nuevos/peces48.py): como los íconos,
- * a la escala pedida (4 = 48 px) y guardados (dos tamaños por animal). gris: la silueta de los que faltan. */
-#include "peces_hd.inc"
+/* (1.0.32) los 30 animales de la colección de la pesca (48 px, herramientas/iconos_nuevos/peces48.py). No van en el
+ * programa (no cabían): están en la memoria de recursos como pj7.bin (los baja BUSCAR ACTUALIZACIÓN o el probador por
+ * cable). Se lee al primer uso (~22 KB, comprimido) y se guardan dos tamaños por animal. Si falta, el pez o el cangrejo
+ * de siempre. gris: la silueta de los que faltan en la colección. */
+#define PECES_HD_N 30
+static uint8_t *dos_leer(int n, uint32_t *largo); /* (más abajo) */
+static bool fd_lz(const uint8_t *src, const uint8_t *fin, uint8_t *dst, uint32_t total);
 static EXT_RAM_BSS_ATTR struct { art_img_t img; uint8_t escala, gris; } s_pez_img[PECES_HD_N][2];
-void art_peces_soltar(void) /* (1.0.32) suelta los dibujos guardados (al cerrar el cofre o la pesca: ~280 KB con los 30) */
+static uint8_t *s_pz_arch;
+static uint32_t s_pz_largo;
+static const uint8_t *s_pz_ini[PECES_HD_N];
+static bool pz_cargar(void)
+{
+    if (s_pz_arch) return true;
+    uint32_t n = 0;
+    uint8_t *f = dos_leer(7, &n);
+    if (!f) return false;
+    if (n < 4 || f[0] != 'P' || f[1] != 'Z' || f[2] != 1 || f[3] < PECES_HD_N) { free(f); return false; }
+    const uint8_t *p = f + 4, *fin = f + n;
+    for (int k = 0; k < PECES_HD_N; k++) {
+        if (p >= fin) { free(f); return false; }
+        s_pz_ini[k] = p;
+        const int nc = p[0];
+        if (p + 1 + nc * 4 + 2 > fin) { free(f); return false; }
+        const uint32_t lz = (uint32_t)p[1 + nc * 4] | ((uint32_t)p[2 + nc * 4] << 8);
+        p += 1 + nc * 4 + 2 + lz;
+    }
+    if (p > fin) { free(f); return false; }
+    s_pz_arch = f; s_pz_largo = n;
+    return true;
+}
+void art_peces_soltar(void) /* (1.0.32) suelta los dibujos guardados y el archivo (al cerrar el cofre o la pesca) */
 {
     for (int k = 0; k < PECES_HD_N; k++)
         for (int i = 0; i < 2; i++)
             if (s_pez_img[k][i].img.px) { lv_image_cache_drop(&s_pez_img[k][i].img.dsc); art_img_free(&s_pez_img[k][i].img); }
+    free(s_pz_arch); s_pz_arch = NULL;
 }
 const lv_image_dsc_t *art_pez(int k, int escala, bool gris)
 {
     if ((unsigned)k >= PECES_HD_N || escala < 1 || escala > 12) return NULL;
     for (int i = 0; i < 2; i++) if (s_pez_img[k][i].img.px && s_pez_img[k][i].escala == escala && s_pez_img[k][i].gris == gris) return &s_pez_img[k][i].img.dsc;
-    int libre = s_pez_img[k][0].img.px ? 1 : 0;
+    if (!pz_cargar()) return art_icono(k >= 22 && k <= 26 ? ICO_CANGREJO : (k == 27 ? ICO_PEZ_DORADO : ICO_PEZ), escala); /* (sin pj7.bin) */
+    const uint8_t *p = s_pz_ini[k];
+    const int nc = p[0];
+    const uint32_t lz = (uint32_t)p[1 + nc * 4] | ((uint32_t)p[2 + nc * 4] << 8);
+    uint8_t *idx = malloc(48 * 48);
+    if (!idx) return NULL;
+    if (!fd_lz(p + 1 + nc * 4 + 2, p + 1 + nc * 4 + 2 + lz, idx, 48 * 48)) { free(idx); return NULL; }
+    const int libre = s_pez_img[k][0].img.px ? 1 : 0;
     uint32_t pal[256];
     memset(pal, 0, sizeof pal);
-    for (int j = 0; j < PECES_HD[k].n; j++) {
-        const uint8_t *p = PECES_HD[k].pal + j * 4;
-        uint32_t c = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+    for (int j = 0; j < nc; j++) {
+        const uint8_t *q = p + 1 + j * 4;
+        uint32_t c = ((uint32_t)q[0] << 24) | ((uint32_t)q[1] << 16) | ((uint32_t)q[2] << 8) | q[3];
         if (gris) { const uint32_t l = (((c >> 16) & 255) * 3 + ((c >> 8) & 255) * 6 + (c & 255)) / 10; const uint32_t v = 40 + l / 5; c = 0xFF000000u | (v << 16) | (v << 8) | (v + 30); }
         pal[j + 1] = c;
     }
     if (s_pez_img[k][libre].img.px) lv_image_cache_drop(&s_pez_img[k][libre].img.dsc);
-    ico_muestrear(&s_pez_img[k][libre].img, pal, PECES_HD[k].idx, escala, false, 48);
+    ico_muestrear(&s_pez_img[k][libre].img, pal, idx, escala, false, 48);
+    free(idx);
     s_pez_img[k][libre].escala = (uint8_t)escala;
     s_pez_img[k][libre].gris = gris;
     return s_pez_img[k][libre].img.px ? &s_pez_img[k][libre].img.dsc : NULL;

@@ -6,11 +6,16 @@
 > PESCA_CANGREJO y PESCA_PEZ_DORADO (minijuego y pesca sola), ×1,6 a los que no tiene; el pez arcoíris (28) solo con
 > p->raro == RARO_ARCOIRIS. Guardado en peces_a[2] y peces_b[2] (eran _res38 y _pad40: parten en cero, misma versión 42).
 > EV_PESCA b = comió | (1+cuál)<<1 | nuevo<<6 (ojo: antes b era solo «comió»); DIA_PESCA b = 1+cuál. Dibujos 48 px:
-> herramientas/iconos_nuevos/peces48.py → firmware/main/peces_hd.inc, art_pez(k, escala, gris) con caché que se suelta
+> herramientas/iconos_nuevos/peces48.py → firmware/recursos/pj7.bin (ver OJO abajo), art_pez(k, escala, gris) con caché que se suelta
 > en cerrar_panel y pez_cerrar (art_peces_soltar). UI: celebración de la pesca con el animal y «¡NUEVO EN TU COLECCIÓN!»;
 > globo de la pesca sola; Cofre: 9.º botón PECES (s_cofre_vista 3, peces_cb → nota_mostrar_src con el dibujo); panel de
 > prueba 90 «peces». Pruebas: test_core 1490 (bloque 1.0.32), pruebas/peces.js nueva (sim_pez_dar, sim_pez_forzar,
 > sim_peces). Todo verde; regresión regrabada (version, mas-ajustes, baul y peces nuevo).
+> **OJO, ESPACIO:** con los dibujos dentro del programa la compilación falló (mascota.bin 0x7da8a0, la partición es
+> 0x7d0000: faltaban 43 KB). Se movieron a la memoria de recursos: pj7.bin (formato 'PZ', LZSS, ~25 KB;
+> peces48.py lo escribe y hacer_fondos_dos.py lo mete en fondos_dos_sim.inc para el simulador). art_pez lo lee con
+> dos_leer(7) al primer uso; si falta, dibuja ICO_PEZ/ICO_CANGREJO. Al programa le quedan ~30 KB libres: lo grande
+> nuevo (dibujos, fondos) tiene que ir a recursos.
 
 
 > **1.0.31 «EL TOBOGAN DEL ARCOIRIS» (19-nov 18:40).** (a) El usuario aclaró el buceo: se abre con la piedra izquierda Y
