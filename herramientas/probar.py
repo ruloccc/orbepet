@@ -1336,7 +1336,10 @@ def ejecutar():
         if que in ("todo", "finales"): finales(p, sal)
         if que in ("todo", "actividades"): actividades(p, sal)
         if que in ("todo", "cantar"): cantar(p, sal)
-        if que == "rendimiento": rendimiento(p, sal)
+        if que == "rendimiento":
+            rendimiento(p, sal)
+            etapa("Bajando el registro de la placa")
+            leer_registro(p)  # (1.0.24) queda en registro_placa_*.txt: sin él no se ve por qué se cayó algo (p. ej. el final regular)
         if que in ("nuevo", "nuevo_auto"):  # (1.0.23) lo de las versiones 1.0.16 a 1.0.23
             import prueba_nuevo
             p.cmd("MARCA PRUEBA LO NUEVO INICIO", 0.1)
