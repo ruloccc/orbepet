@@ -6190,6 +6190,7 @@ static void caca_cb(lv_event_t *e)
 
 static void zj_abrir(int jg); /* (ui_zjuegos.inc) */
 static bool po_tapita_toque(int x, int y); /* (1.0.30) ui_pochi.inc */
+static bool arco_toque(int x, int y);       /* (1.0.31) más abajo, junto al arcoíris */
 static art_periodo_t periodo_de(const pet_t *p, uint32_t utc);
 /* (1.0.21) en la isla, tocar el faro abre su juego y tocar el agua sobre la piedra de la izquierda, el buceo (también están en Jugar) */
 static bool isla_toque(int x, int y)
@@ -6200,8 +6201,16 @@ static bool isla_toque(int x, int y)
         zj_abrir(10); /* ZJ_FARO */
         return true;
     }
-    const int dx = x - 39, dy = y - 165; /* (1.0.30) sólo la piedra de la izquierda (antes servía casi toda el agua de ese lado) */
-    if (dx * dx + dy * dy < 26 * 26) { zj_abrir(11); return true; } /* ZJ_BUCEO */
+    /* (1.0.31) el buceo: la piedra de la izquierda (x 10-80, y 150-190) y TODA el agua que está encima de ella, hasta la
+     * orilla de la isla (medida en la pantalla de la isla: la arena empieza en x≈125 a y=100, 97 a y=120, 80 a y=140) */
+    { const float ex = ((float)x - 45.0f) / 40.0f, ey = ((float)y - 170.0f) / 21.0f;
+      if (ex * ex + ey * ey < 1.0f) { zj_abrir(11); return true; } } /* ZJ_BUCEO: la piedra */
+    if (y >= 84 && y <= 160) {
+        static const int16_t ORILLA[8] = {150, 125, 108, 97, 88, 80, 78, 76}; /* x de la arena en y = 90, 100, ... 160 */
+        int k = (y - 90) / 10; if (k < 0) k = 0; if (k > 6) k = 6;
+        const int y0 = 90 + k * 10, x_or = ORILLA[k] + (ORILLA[k + 1] - ORILLA[k]) * (y - y0) / 10;
+        if (x < (x_or < 112 ? x_or : 112) - 4) { zj_abrir(11); return true; } /* ZJ_BUCEO: el agua sobre la piedra */
+    }
     return false;
 }
 
@@ -6218,6 +6227,7 @@ static void fondo_cb(lv_event_t *e)
     if (colocar_toque(pt.x, pt.y)) return;                    /* pones un juguete */
     if (s_juego != JG_NADA) { esco_toque(pt.x, pt.y); return; } /* jugando no se la llama */
     if (po_tapita_toque(pt.x, pt.y)) { s_toque1_x = -1000; return; } /* (1.0.30) le tiras la tapita a Pochi */
+    if (arco_toque(pt.x, pt.y)) { s_toque1_x = -1000; return; } /* (1.0.31) tocar el arcoíris: el tobogán */
     if (isla_toque(pt.x, pt.y)) { s_toque1_x = -1000; return; }
     int d = decor_en(pt.x, pt.y);                            /* tres toques sobre una decoración: guardarla */
     if (d >= 0 && toques_seguidos(4000 + d) >= 3) { mostrar_quitar(QUITAR_DECOR, d, pt.x + 20, pt.y - 30); s_toque1_x = -1000; return; }
@@ -8712,7 +8722,7 @@ static void jugar_cb(lv_event_t *e)
     int j = (int)(intptr_t)lv_event_get_user_data(e);
     if (j == 3) { panel_trucos(); return; }
     if (j == 9) { panel_crismenu(); return; } /* los cristales (en la cueva): el juego de memoria, tocar libre, las canciones (v38) */
-    if (j == 10 || j == 11) { cerrar_panel(); zj_abrir(j == 10 ? 10 : 11); return; } /* (1.0.18) la isla: el faro (ZJ_FARO) y el buceo (ZJ_BUCEO) */
+    if (j == 10 || j == 11 || j == 12) { cerrar_panel(); zj_abrir(j); return; } /* (1.0.31: 12 el tobogán del arcoíris, ZJ_ARCOIRIS) */
     if (j == 4) j = JUEGO_HONGOS;
     cerrar_panel();
     s_juego_pedido = j;
@@ -8837,10 +8847,11 @@ static void panel_jugar(void)
         L[n++] = (jg_menu_t){ICO_FARO, faro_apagado ? "DE NOCHE" : "FARO", 10, 0xFFD87A, 0x2E4A8A};
         L[n++] = (jg_menu_t){ICO_MAREA, "BUCEO", 11, 0x6AD8E0, 0x1E6AA0};
     }
+    if (afuera && s_pet && s_pet->raro == RARO_ARCOIRIS && s_escena != ESC_CUEVA) L[n++] = (jg_menu_t){ICO_ARCOIRIS, "ARCOÍRIS", 12, 0xFF9AC8, 0x7A5AD8}; /* (1.0.31) solo mientras hay arcoíris */
     const int propios = n;
     for (int i = 0; i < 5; i++) L[n++] = SIEMPRE[i];
-    /* filas: 5 → 2 + 3, 6 → 3 + 3, 7 → 3 + 4 */
-    const int arriba = n == 5 ? 2 : 3, D = s_nino ? (n > 6 ? 72 : 88) : (n > 6 ? 64 : 72);
+    /* filas: 5 → 2 + 3, 6 → 3 + 3, 7 → 3 + 4, 8 → 4 + 4 */
+    const int arriba = n == 5 ? 2 : (n == 8 ? 4 : 3), D = s_nino ? (n > 6 ? 72 : 88) : (n > 6 ? 64 : 72);
     for (int i = 0; i < n; i++) {
         const int fila = i < arriba ? 0 : 1, cant = fila == 0 ? arriba : n - arriba, pos = fila == 0 ? i : i - arriba;
         const bool faro_dia = L[i].que == 10 && faro_apagado;
@@ -9493,6 +9504,16 @@ static bool arco_pintar(void) /* las 7 bandas, con bordes suaves y las puntas qu
     s_arco_opa = -1;
     return true;
 }
+/* (1.0.31) tocar el arcoíris (sus bandas: radio 223-301 alrededor de (CX, 360), sobre y 330) abre el tobogán */
+static bool arco_toque(int x, int y)
+{
+    if (!s_pet || s_pet->raro != RARO_ARCOIRIS || !s_arco_px || s_arco_opa < 128 || s_interior || s_escena == ESC_CUEVA) return false;
+    if (s_pet->dormida || s_pet->etapa == STAGE_HUEVO || s_panel != PANEL_NINGUNO || zj_activo()) return false;
+    const float dx = (float)x - (float)CX, dy = (float)y - 360.0f, d = sqrtf(dx * dx + dy * dy);
+    if (y > 330 || d < 216.0f || d > 308.0f || -dy / d < 0.40f) return false;
+    zj_abrir(12); /* ZJ_ARCOIRIS */
+    return true;
+}
 static void arco_soltar(void)
 {
     if (!s_arco_px) return;
@@ -9730,7 +9751,7 @@ static art_icono_t icono_diario(const entrada_diario_t *e)
     case DIA_EXCURSION: return e->b == 7 ? ICO_PAPELITO : (a ? ICO_CONDOR : ICO_CHUCAO);
     case DIA_PASEO_JUNTOS: return ICO_HUELLA; /* (fw 104) */
     case DIA_JUEGO_DOS: return ICO_PELOTA; /* (1.0.17) */
-    case DIA_JUEGO_ISLA: return e->a == 0 ? ICO_FARO : ICO_MAREA; /* (1.0.18) */
+    case DIA_JUEGO_ISLA: return e->a == 0 ? ICO_FARO : (e->a == 2 ? ICO_ARCOIRIS : ICO_MAREA); /* (1.0.18; 1.0.31 el arcoíris) */
     case DIA_HIELO: return ICO_GOTA;         /* (fw 104) se derritió: queda una gotita */
     case DIA_FINAL: return ICO_ESTRELLA;
     case DIA_GUSTO: case DIA_GUSTO_SEM: return ICO_CORAZON;

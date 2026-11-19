@@ -19,7 +19,8 @@ from hacer_pantallas import empaquetar  # noqa: E402
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NOMBRES = ["13_dos_pingpong.png", "14_dos_cuerda.png", "15_dos_memorice.png", "16_dos_escondidas.png",
-           "17_isla_faro.png", "18_isla_buceo.png"]  # (1.0.18) pj4 y pj5: los juegos de la isla
+           "17_isla_faro.png", "18_isla_buceo.png",  # (1.0.18) pj4 y pj5: los juegos de la isla
+           "19_arcoiris.png"]  # (1.0.31) pj6: el tobogán del arcoíris
 
 
 def main():

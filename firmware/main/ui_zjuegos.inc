@@ -1228,7 +1228,7 @@ static void zj_empezar_juego(void)
 static void zj_mundo_ver(bool si); /* (ui_zonas.inc: el mundo o la casita se apartan mientras se juega) */
 static void zj_abrir(int jg)
 {
-    if (!s_pet || jg <= ZJ_NADA || jg > ZJ_BUCEO) return;
+    if (!s_pet || jg <= ZJ_NADA || jg > ZJ_ARCOIRIS) return;
     zj_crear();
     if (s_zj_jg) zj_cerrar(false);
     static const int8_t PANT[6] = {-1, 11, 12, 8, 9, 10};
@@ -1247,7 +1247,7 @@ static void zj_abrir(int jg)
         ocultar(s_zj, false);
         lv_obj_move_foreground(s_zj);
         if (!s_zj_timer) s_zj_timer = lv_timer_create(zj_timer_cb, ZJ_MS, NULL);
-        accion(UI_ACCION_SONAR, zi_es(jg) ? SND_SALPICON : SND_HOLA_AMIGO);
+        accion(UI_ACCION_SONAR, jg == ZJ_ARCOIRIS ? SND_HADAS : (zi_es(jg) ? SND_SALPICON : SND_HOLA_AMIGO));
         return;
     }
     s_zj_pant = PANT[jg];
@@ -1328,5 +1328,5 @@ int ui_zj_dbg(int q)
     }
 }
 /* (pruebas) 1.0.17: abre un juego de a dos (0..3) aunque no haya visita; el estado: fase * 1000 + ella * 10 + la visita */
-void ui_zd_abrir(int n) { if (n >= 0 && n < 6) zj_abrir(ZJ_PING + n); } /* (4 y 5: el faro y el buceo) */
+void ui_zd_abrir(int n) { if (n >= 0 && n < 7) zj_abrir(ZJ_PING + n); } /* (4 y 5: el faro y el buceo; 6: el arcoíris) */
 int ui_zd_estado(void) { return zd_es(s_zj_jg) ? s_zj_fase * 1000 + (s_zj_pts > 99 ? 99 : s_zj_pts) * 10 + (s_zd_b > 9 ? 9 : s_zd_b) : -1; }

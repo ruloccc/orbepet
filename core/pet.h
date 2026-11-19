@@ -1800,7 +1800,7 @@ int pet_duo_game(pet_t *p, int juego, int resultado, uint32_t ahora);
  * conchas). puntos: barquitos a salvo o cosas encontradas. Divierte, cansa un poco; con buen puntaje encuentra una pieza
  * de la colección de conchas (si le falta alguna). Queda en el diario (una vez por juego cada vez que se enciende el orbe).
  * Devuelve 1 si contó, 2 si además encontró una concha nueva para su colección. */
-enum { PET_ISLA_FARO = 0, PET_ISLA_BUCEO, PET_ISLA_COUNT };
+enum { PET_ISLA_FARO = 0, PET_ISLA_BUCEO, PET_ISLA_ARCOIRIS, PET_ISLA_COUNT }; /* (1.0.31: el tobogán del arcoíris, aunque no es de la isla) */
 int pet_island_game(pet_t *p, int juego, int puntos, uint32_t ahora);
 void pet_place_game_prize(int *ramitas, int *musgo, int *objeto);                      /* lo que ganó en la última ronda */
 int pet_place_game_seed(const pet_t *p, int jg, uint32_t ahora);                       /* cambia cada día (la piedra tibia) */

@@ -6525,11 +6525,12 @@ int pet_island_game(pet_t *p, int juego, int puntos, uint32_t t)
     if (puntos > 127) puntos = 127;
     sumar(p, NEED_DIVERSION, 10.0f + (float)(puntos > 12 ? 12 : puntos));
     sumar(p, NEED_ENERGIA, juego == PET_ISLA_BUCEO ? -6 : -3);
+    if (juego == PET_ISLA_ARCOIRIS) impulsar(p, EMO_CURIOSIDAD, 0.4f, CAUSA_NOVEDAD); /* (1.0.31) */
     impulsar(p, EMO_ALEGRIA, 0.45f, CAUSA_JUGAMOS);
-    if (puntos >= (juego == PET_ISLA_FARO ? 6 : 10)) impulsar(p, EMO_ORGULLO, 0.5f, CAUSA_JUGAMOS);
+    if (puntos >= (juego == PET_ISLA_FARO ? 6 : (juego == PET_ISLA_ARCOIRIS ? 20 : 10))) impulsar(p, EMO_ORGULLO, 0.5f, CAUSA_JUGAMOS);
     p->ultima_interaccion = t;
     if (!((anotado >> juego) & 1u)) { anotado |= (uint8_t)(1u << juego); anotar(p, DIA_JUEGO_ISLA, juego, puntos, t); }
-    if (puntos >= (juego == PET_ISLA_FARO ? 4 : 6)) { /* buen puntaje: una concha que le falte (el mar se la trae) */
+    if (juego != PET_ISLA_ARCOIRIS && puntos >= (juego == PET_ISLA_FARO ? 4 : 6)) { /* buen puntaje: una concha que le falte (el mar se la trae) */
         int faltan[8], nf = 0;
         for (int k = 0; k < TAM_COLECCION[COL_CONCHAS] && nf < 8; k++) if (!((p->coleccion[COL_CONCHAS] >> k) & 1u)) faltan[nf++] = k;
         if (nf && guardar_pieza(p, COL_CONCHAS, faltan[rng_next(p) % (uint32_t)nf], t, true)) return 2;
@@ -8009,6 +8010,9 @@ const char *pet_diary_text(const pet_t *p, const entrada_diario_t *e, char *buf,
         if (a == PET_ISLA_FARO) {
             if (b <= 0) snprintf(buf, (size_t)n, "Encendimos el faro de la isla, pero los barquitos se perdieron en la niebla");
             else snprintf(buf, (size_t)n, "Encendimos el faro de la isla y guiamos %d barquito%s hasta el muelle", b, b == 1 ? "" : "s");
+        } else if (a == PET_ISLA_ARCOIRIS) { /* (1.0.31) */
+            if (b <= 0) snprintf(buf, (size_t)n, "Salió un arcoíris y me deslicé por él como por un tobogán. ¡Qué rápido!");
+            else snprintf(buf, (size_t)n, "Salió un arcoíris y me deslicé por él como por un tobogán: junté %d estrellita%s", b, b == 1 ? "" : "s");
         } else {
             if (b <= 0) snprintf(buf, (size_t)n, "Buceamos con Marea, pero esta vez no encontramos nada");
             else snprintf(buf, (size_t)n, "Buceamos con Marea y encontramos %d tesorito%s del fondo del mar", b, b == 1 ? "" : "s");

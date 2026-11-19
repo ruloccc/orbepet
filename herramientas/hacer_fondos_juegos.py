@@ -8,6 +8,8 @@ para que se vean como el resto del orbe. Encima se pinta lo propio de cada juego
   16_dos_escondidas.png  el bosque tal cual (los escondites son los del dibujo: tronco, arbusto, puente, piedras...)
   17_isla_faro.png       (1.0.24) pantalla propia del faro DE NOCHE: el mismo faro de la isla en su costa con el muelle, y mar abierto
   18_isla_buceo.png      bajo el agua, dibujado suave (rayos de luz, arena, algas, corales, rocas)
+  19_arcoiris.png        (1.0.31) el tobogán del arcoíris: cielo alto, sol, mar de nubes y el arcoíris que baja desde una nube
+                         lejana hacia la pantalla (en perspectiva: angosto arriba, ancho abajo)
 
 Además escribe firmware/main/isla_mapa.inc: el mapa de agua de la isla (dónde pueden navegar los barquitos del faro).
 
@@ -35,6 +37,8 @@ MANTEL = (76, 96, 390, 392)         # memorice
 ESCONDITES = [(193, 210), (92, 236), (108, 302), (343, 262), (300, 336), (300, 186)]  # tronco, arbusto, puente, piedras, arbusto, árbol
 FARO_LAMPARA = (386, 128)           # la isla: la lámpara del faro
 MUELLE = (38, 282)                  # la punta del muelle
+ARCO_HY = 64                        # (1.0.31) el arcoíris del tobogán sale de la nube en y = ARCO_HY ...
+ARCO_HW0, ARCO_HWK = 34.0, 0.24     # ... y su medio ancho en la fila y es ARCO_HW0 + (y - ARCO_HY) * ARCO_HWK (ui_arcoiris.inc)
 
 
 def base(nombre, oscurecer=0.0, desenfoque=0.0):
@@ -439,6 +443,144 @@ def buceo():
         d.polygon([(s(fx - 6 * dd), s(fy)), (s(fx - 11 * dd), s(fy - 4)), (s(fx - 11 * dd), s(fy + 4))], fill=(30, 90, 140, 200))
     return final(im, "18_isla_buceo.png")
 
+# ------------------------------------------------------------------------------------------------------ arcoíris
+def arcoiris():
+    """(1.0.31) el tobogán del arcoíris: muy alto en el cielo. Arriba un cielo azul profundo que se aclara hacia abajo,
+    el sol con su halo, nubes grandes y esponjosas a los lados (con sombra lavanda), un mar de nubes abajo y el arcoíris
+    que nace de una nube brillante lejana y baja hasta la pantalla, con brillo en el centro de cada color."""
+    yy, xx = np.mgrid[0:G, 0:G].astype(np.float32) / K
+    t = np.clip(yy / P, 0, 1)
+    arriba, medio, abajo = np.array([54, 118, 214], np.float32), np.array([120, 190, 246], np.float32), np.array([214, 238, 255], np.float32)
+    a = np.where((t < 0.55)[..., None], arriba + (medio - arriba) * (t / 0.55)[..., None], medio + (abajo - medio) * ((t - 0.55) / 0.45)[..., None])
+    # el sol (arriba a la izquierda) con su halo y rayos muy suaves
+    sx, sy = 92.0, 70.0
+    dsol = np.sqrt((xx - sx) ** 2 + (yy - sy) ** 2)
+    halo = np.clip(1 - dsol / 170.0, 0, 1) ** 2.2
+    a += halo[..., None] * np.array([90, 70, 30], np.float32)
+    ang = np.arctan2(yy - sy, xx - sx)
+    rayos = (0.5 + 0.5 * np.cos(ang * 9)) ** 6 * np.clip(1 - dsol / 260.0, 0, 1) ** 1.5
+    a += rayos[..., None] * np.array([40, 34, 14], np.float32)
+    # un tinte cálido rosado cerca del horizonte de nubes (atardecer suave)
+    a += (np.clip(1 - np.abs(yy - 400) / 90.0, 0, 1) ** 2)[..., None] * np.array([22, 4, 10], np.float32)
+    im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).convert("RGBA")
+    d = ImageDraw.Draw(im)
+    d.ellipse([s(sx - 24), s(sy - 24), s(sx + 24), s(sy + 24)], fill=(255, 246, 206, 255))
+    d.ellipse([s(sx - 18), s(sy - 18), s(sx + 18), s(sy + 18)], fill=(255, 252, 232, 255))
+
+    def nube(capa, puntos, base_col=(255, 255, 255), sombra_col=(186, 196, 236), brillo=True):
+        """una nube esponjosa: círculos que se juntan; arriba blanca, abajo lavanda, con una sombra suave debajo"""
+        m = Image.new("L", capa.size, 0)
+        dm = ImageDraw.Draw(m)
+        y0, y1 = 1e9, -1e9
+        for (cx, cy, r) in puntos:
+            dm.ellipse([s(cx - r), s(cy - r), s(cx + r), s(cy + r)], fill=255)
+            y0, y1 = min(y0, cy - r), max(y1, cy + r)
+        m = m.filter(ImageFilter.GaussianBlur(0.8 * K))
+        # sombra lavanda debajo
+        sm = m.filter(ImageFilter.GaussianBlur(6 * K)).point(lambda v: v * 70 // 255)
+        sombra_c = Image.new("RGBA", capa.size, (110, 120, 190, 0)); sombra_c.putalpha(sm)
+        desp = Image.new("RGBA", capa.size, (0, 0, 0, 0)); desp.paste(sombra_c, (0, s(8)))
+        capa = Image.alpha_composite(capa, desp)
+        # color: degradé vertical dentro de la nube
+        tt = np.clip((yy - y0) / max(1.0, (y1 - y0)), 0, 1)[..., None]
+        col = np.array(base_col, np.float32) * (1 - tt ** 1.6) + np.array(sombra_col, np.float32) * tt ** 1.6
+        cimg = Image.fromarray(np.clip(col, 0, 255).astype(np.uint8)).convert("RGBA")
+        cimg.putalpha(m)
+        capa = Image.alpha_composite(capa, cimg)
+        if brillo:  # un borde de luz arriba de cada bola
+            b = Image.new("L", capa.size, 0)
+            db = ImageDraw.Draw(b)
+            for (cx, cy, r) in puntos:
+                db.ellipse([s(cx - r * 0.75), s(cy - r * 0.92), s(cx + r * 0.35), s(cy - r * 0.2)], fill=110)
+            b = Image.composite(b.filter(ImageFilter.GaussianBlur(2.5 * K)), Image.new("L", capa.size, 0), m)
+            w_ = Image.new("RGBA", capa.size, (255, 255, 255, 0)); w_.putalpha(b)
+            capa = Image.alpha_composite(capa, w_)
+        return capa
+
+    # nubes lejanas (chicas, pálidas) y pajaritos a lo lejos
+    lejos = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    lejos = nube(lejos, [(330, 120, 14), (346, 112, 18), (366, 118, 14), (380, 124, 10)], sombra_col=(200, 214, 244), brillo=False)
+    lejos = nube(lejos, [(176, 150, 10), (190, 144, 14), (206, 150, 10)], sombra_col=(200, 214, 244), brillo=False)
+    lejos = nube(lejos, [(60, 170, 12), (76, 164, 16), (94, 170, 12)], sombra_col=(200, 214, 244), brillo=False)
+    lejos.putalpha(lejos.getchannel("A").point(lambda v: v * 200 // 255))
+    im = Image.alpha_composite(im, lejos)
+    d = ImageDraw.Draw(im)
+    for (bx, by, bw) in ((300, 92, 7), (314, 100, 5), (150, 108, 6)):
+        d.arc([s(bx - bw), s(by - 3), s(bx), s(by + 3)], 200, 340, fill=(70, 96, 150, 220), width=s(1.2))
+        d.arc([s(bx), s(by - 3), s(bx + bw), s(by + 3)], 200, 340, fill=(70, 96, 150, 220), width=s(1.2))
+
+    # el arcoíris en perspectiva (bandas de color, brillo al centro de cada una, borde con luz)
+    C = [(240, 80, 110), (255, 138, 60), (255, 216, 74), (108, 216, 108), (69, 208, 224), (76, 136, 240), (154, 98, 224)]
+    hw = ARCO_HW0 + (yy - ARCO_HY) * ARCO_HWK
+    u = (xx - P / 2) / np.maximum(hw, 1)
+    dentro = (np.abs(u) <= 1) & (yy >= ARCO_HY - 6)
+    k = np.clip((u + 1) / 2 * 7, 0, 6.999)
+    b = k.astype(np.int32)
+    fr = k - b
+    cols = np.array(C, np.float32)
+    col = cols[b]
+    sig = cols[np.clip(b + 1, 0, 6)]
+    mezcla = np.clip((fr - 0.82) / 0.18, 0, 1)[..., None]
+    col = col * (1 - mezcla) + sig * mezcla
+    col = col + (np.clip(1 - np.abs(fr - 0.45) / 0.45, 0, 1) ** 2)[..., None] * 38  # brillo al centro de cada banda
+    col = col + (np.clip(1 - np.abs(u) / 0.25, 0, 1) ** 2)[..., None] * 18            # y una luz por el medio del tobogán
+    al = np.clip(1 - (np.abs(u) - 0.96) / 0.04, 0, 1) * np.clip((yy - (ARCO_HY - 6)) / 40.0, 0, 1)
+    arco = np.zeros((G, G, 4), np.float32)
+    arco[..., :3] = np.clip(col, 0, 255)
+    arco[..., 3] = np.where(dentro, al * 255, 0)
+    arco_im = Image.fromarray(arco.astype(np.uint8), "RGBA")
+    # resplandor alrededor
+    glow = Image.fromarray((np.where(np.abs(u) <= 1.12, 1, 0) * (yy >= ARCO_HY) * 160).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(9 * K))
+    gl = Image.new("RGBA", im.size, (255, 250, 240, 0)); gl.putalpha(glow)
+    im = Image.alpha_composite(im, gl)
+    im = Image.alpha_composite(im, arco_im)
+    # rayas de luz finas a lo largo de las bandas (el brillo del tobogán) y destellos
+    luz = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    dl = ImageDraw.Draw(luz)
+    for uu in (-0.62, -0.05, 0.48):
+        pts = [(s(P / 2 + uu * (ARCO_HW0 + (y - ARCO_HY) * ARCO_HWK)), s(y)) for y in range(ARCO_HY + 20, P + 1, 6)]
+        dl.line(pts, fill=(255, 255, 255, 70), width=s(2))
+    rs = np.random.RandomState(31)
+    for _ in range(26):
+        y = rs.uniform(ARCO_HY + 30, P - 10)
+        uu = rs.uniform(-0.9, 0.9)
+        x = P / 2 + uu * (ARCO_HW0 + (y - ARCO_HY) * ARCO_HWK)
+        r = rs.uniform(1.0, 2.2) * (0.6 + y / P)
+        dl.line([(s(x - r * 2), s(y)), (s(x + r * 2), s(y))], fill=(255, 255, 255, 235), width=s(1.1))
+        dl.line([(s(x), s(y - r * 2)), (s(x), s(y + r * 2))], fill=(255, 255, 255, 235), width=s(1.1))
+        dl.ellipse([s(x - r * 0.6), s(y - r * 0.6), s(x + r * 0.6), s(y + r * 0.6)], fill=(255, 255, 255, 255))
+    im = Image.alpha_composite(im, luz)
+    # la nube brillante de donde nace (arriba, tapa la punta)
+    nace = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    nace = nube(nace, [(200, 66, 16), (218, 56, 22), (240, 52, 24), (262, 58, 20), (280, 66, 14), (232, 70, 18)], sombra_col=(236, 222, 250))
+    im = Image.alpha_composite(im, nace)
+    # nubes grandes a los lados (el tobogán pasa entre ellas)
+    lados = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    lados = nube(lados, [(8, 236, 40), (52, 220, 34), (86, 238, 28), (40, 262, 32), (108, 254, 18)])
+    lados = nube(lados, [(460, 200, 40), (414, 190, 32), (386, 210, 24), (440, 230, 34), (366, 222, 14)])
+    lados = nube(lados, [(20, 330, 30), (60, 318, 26), (92, 334, 22), (50, 348, 26)])
+    lados = nube(lados, [(450, 318, 36), (408, 332, 26), (376, 344, 20), (430, 350, 28)])
+    im = Image.alpha_composite(im, lados)
+    # el mar de nubes abajo (el tobogán se pierde hacia abajo entre ellas, a los lados)
+    mar = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    mar = nube(mar, [(10, 440, 46), (64, 424, 38), (110, 446, 34), (150, 470, 30)], sombra_col=(206, 196, 238))
+    mar = nube(mar, [(456, 436, 48), (404, 424, 38), (360, 448, 32), (318, 472, 28)], sombra_col=(206, 196, 238))
+    im = Image.alpha_composite(im, mar)
+    # chispitas sueltas en el cielo
+    d = ImageDraw.Draw(im)
+    for _ in range(18):
+        x, y = rs.uniform(20, P - 20), rs.uniform(20, 300)
+        if abs(x - P / 2) < ARCO_HW0 + (y - ARCO_HY) * ARCO_HWK + 20:
+            continue
+        r = rs.uniform(1.2, 2.4)
+        d.line([(s(x - r * 2), s(y)), (s(x + r * 2), s(y))], fill=(255, 255, 255, 170), width=s(0.8))
+        d.line([(s(x), s(y - r * 2)), (s(x), s(y + r * 2))], fill=(255, 255, 255, 170), width=s(0.8))
+    return final(im, "19_arcoiris.png")
+
 
 if __name__ == "__main__":
-    pingpong(); cuerda(); memorice(); escondidas(); faro(); buceo()
+    import sys
+    if len(sys.argv) > 1:  # (1.0.31) uno solo: python herramientas/hacer_fondos_juegos.py arcoiris
+        globals()[sys.argv[1]]()
+    else:
+        pingpong(); cuerda(); memorice(); escondidas(); faro(); buceo(); arcoiris()

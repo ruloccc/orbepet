@@ -1,4 +1,17 @@
-# PARTE — estado del trabajo (19-nov-2026, 17:45)
+# PARTE — estado del trabajo (19-nov-2026, 18:40)
+
+> **1.0.31 «EL TOBOGAN DEL ARCOIRIS» (19-nov 18:40).** (a) El usuario aclaró el buceo: se abre con la piedra izquierda Y
+> con el agua de encima hasta la orilla (isla_toque: elipse de la piedra (45,170) 40×21 + agua y 84..160 con x < orilla,
+> tabla ORILLA medida en la pantalla de la isla). (b) Juego nuevo ZJ_ARCOIRIS = 12 (ui_arcoiris.inc, prefijo zr_, en el
+> marco zd: zd_es llega hasta 12; portada/fondo/empezar/animar/terminar con sus casos). Perspectiva: medio ancho
+> ZR_HW0 + (y − ZR_HY)·ZR_HWK (34, 64, 0,24; igual que ARCO_* en hacer_fondos_juegos.py), ella en y 378, cosas en
+> s_zj_o[2..13], rayitas 14..21, barrita 24..26, corazones 30..32. Se abre con arco_toque() en fondo_cb (radio 216-308
+> alrededor de (CX,360), y<330, solo con el arcoíris visible) y con Jugar (botón 12; con 8 botones van 4 + 4). Fondo
+> pj6.bin (19_arcoiris.png; `python herramientas/hacer_fondos_juegos.py arcoiris` y `hacer_fondos_dos.py`), PANT_MAX 23.
+> Motor: PET_ISLA_ARCOIRIS = 2 en pet_island_game (diversión, curiosidad; sin concha) y texto del diario. Pruebas:
+> sim_zd_abrir(6), sim_zr(q), pruebas/arcoiris.js nueva; isla.js prueba 7 puntos de la entrada al buceo. Todo verde
+> (test_core 1227, paneles 18, regresión regrabada solo por «version», soak 180 días).
+
 
 > **1.0.30 «POCHI SORPRESA» (19-nov 17:45).** (a) Rayas oscuras con lluvia junto a los botones (foto del usuario):
 > posible causa en `ui_inv_fusionar` (1.0.22): LVGL manda un INVALIDATE_AREA de prueba (get_max_row) con
@@ -15,8 +28,8 @@
 > Pruebas: ui_demo_pochi 120+tipo, 125 tira la tapita; sim_po_estado(); pruebas/pochi_visitas.js nueva; isla.js con
 > buceo_instrucciones/buceo_deslizar y toque lejos de la piedra. Todo verde (test_core 1224, paneles 18, regresión
 > regrabada: cambian version y mas-ajustes por el número, redibujo, franjas 1260/0, dos/isla/olor, soak 180 días).
-> **Propuesta para otra versión (el usuario la planteó, no hecha):** juego del arcoíris: cuando hay arcoíris, ella se
-> desliza por él esquivando cosas (nubes, pájaros) y juntando estrellitas; se abre tocando el arcoíris.
+> (El juego del arcoíris que se proponía aquí se hizo en la 1.0.31.) OJO: el punto (c) de arriba quedó mal entendido:
+> el usuario quería la piedra Y el agua de encima; se corrigió en la 1.0.31.
 
 
 > **1.0.29 «BATERIA QUE DURA» (19-nov 13:45).** Informe #5 de orbepet-informes (1.0.27, mandado desde el orbe): batería
@@ -75,7 +88,7 @@ Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
 Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
-sin publicar): **1.0.30** («POCHI SORPRESA»), que trae de la 1.0.27 a la 1.0.29. Partida **versión 42** (no cambia desde el 104).
+sin publicar): **1.0.31** («EL TOBOGAN DEL ARCOIRIS»), que trae de la 1.0.27 a la 1.0.30. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
@@ -628,7 +641,7 @@ curl -sL -o bin.tgz  https://github.com/WebAssembly/binaryen/releases/download/v
 ```
 Pruebas:
 ```
-cd build && cmake .. && make test_core && ./test_core          -> 1224/1224 comprobaciones OK
+cd build && cmake .. && make test_core && ./test_core          -> 1227/1227 comprobaciones OK
 export WASI_SDK=/home/claude/sdk/wasi-sdk-25.0-x86_64-linux LVGL_DIR=/home/claude/lvgl BINARYEN=/home/claude/sdk/binaryen-version_123
 sh sim/web/build.sh
 node sim/web/pruebas/paneles.js          -> 18 problemas (la base de siempre)
@@ -638,6 +651,7 @@ node sim/web/pruebas/fondos_franjas.js   -> 1260 casos, 0 distintos
 node sim/web/pruebas/inicio.js | libro.js | libro_flujo.js | final.js
 node sim/web/pruebas/dos.js | isla.js | olor.js   -> juegos de a dos / de la isla / el olor: todo bien
 node sim/web/pruebas/pochi_visitas.js            -> visitas de Pochi: todo bien (los 5 tipos de visita)
+node sim/web/pruebas/arcoiris.js                 -> tobogán del arcoíris: todo bien
 node sim/web/pruebas/redibujo.js [semilla]        -> redibujo: todo bien (juntar áreas no deja restos)
 gcc -fsyntax-only -std=gnu17 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-sign-compare \
   -DLV_CONF_INCLUDE_SIMPLE -Isim/preview -I/home/claude/lvgl -Icore -Ifirmware/main firmware/main/ui.c
@@ -667,6 +681,6 @@ En la placa: `herramientas/prueba_total.py` (fase 29c fondos por franjas; 29d lo
 - Placa y pruebas: `firmware/main/main.c`, `herramientas/prueba_total.py`, `herramientas/mascota_gui.py`
 - Simulador: `sim/web/web_main.c`, `sim/web/plantilla.html`, `sim/web/pruebas/*.js`
 - Actualizar por Wi-Fi e informes: `firmware/main/ota.c`, `ota.h`, `version.h`, `.github/workflows/firmware.yml`
-- Juegos de a dos y de la isla: `firmware/main/ui_dos.inc`, `ui_isla.inc`, `isla_mapa.inc` (generado),
-  `herramientas/hacer_fondos_juegos.py` → `hacer_fondos_dos.py` (→ `firmware/recursos/pj*.bin`, `fondos_dos_sim.inc`)
+- Juegos de a dos y de la isla: `firmware/main/ui_dos.inc`, `ui_isla.inc`, `ui_arcoiris.inc` (1.0.31), `isla_mapa.inc` (generado),
+  `herramientas/hacer_fondos_juegos.py` → `hacer_fondos_dos.py` (→ `firmware/recursos/pj0..pj6.bin`, `fondos_dos_sim.inc`)
 - Documentación: `README.md` (una sección por firmware) y `claude/pendientes-v89.md`

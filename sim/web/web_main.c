@@ -1076,6 +1076,7 @@ EXPORT(sim_ano_nuevo) void sim_ano_nuevo(void) /* el 31 de diciembre, un minuto 
 void ui_demo_dragon_ausente(int v);
 EXPORT(sim_dragon_absent) void sim_dragon_absent(int v) { ui_demo_dragon_ausente(v); }
 EXPORT(sim_pochi) void sim_pochi(int f) { ui_demo_pochi(f); }
+EXPORT(sim_zr) int sim_zr(int q) { extern int ui_test_zr(int); return ui_test_zr(q); }
 EXPORT(sim_po_estado) int sim_po_estado(void) { extern int ui_test_po_estado(void); return ui_test_po_estado(); }
 /* (v39) las novedades: para probarlas rápido */
 void ui_demo_zona(int z); void ui_demo_zona_juego(int jg); int ui_zona(void); void ui_demo_ceremonia(int cual, int pag);

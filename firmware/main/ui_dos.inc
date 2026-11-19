@@ -18,7 +18,7 @@ static uint32_t s_zd_key[2];             /* (para no redibujarlas en cada cuadro
 static uint32_t s_zd_puesta[2];          /* y cuál está puesta en su imagen */
 static uint32_t s_zd_fin_t;              /* cuándo termina la animación del final de una partida (0: no) */
 static int s_zd_res = -1;                /* 0 perdió ella, 1 empate, 2 ganó */
-static bool zd_es(int jg) { return jg >= ZJ_PING && jg <= ZJ_BUCEO; } /* (1.0.18: también los de la isla, que usan este marco) */
+static bool zd_es(int jg) { return jg >= ZJ_PING && jg <= ZJ_ARCOIRIS; } /* (1.0.31: y el arcoíris) */ /* (1.0.18: también los de la isla, que usan este marco) */
 static bool zi_es(int jg) { return jg == ZJ_FARO || jg == ZJ_BUCEO; } /* (1.0.18) los de la isla (ui_isla.inc) */
 static int zd_n(void) { return s_zj_jg - ZJ_PING; } /* 0..3 = PET_DOS_* */
 
@@ -109,7 +109,7 @@ static void zd_poner(int quien, int k, int escala, bool espejo, float x, float y
 /* ---------- el marcador: carita de ella, "3 - 2", carita de la visita ---------- */
 static void zd_marcador(void)
 {
-    if (!s_zj_hud || s_zj_fase != 1 || s_zj_jg == ZJ_CUERDA || zi_es(s_zj_jg)) return; /* (en la cuerda, el marcador es la cinta) */
+    if (!s_zj_hud || s_zj_fase != 1 || s_zj_jg == ZJ_CUERDA || zi_es(s_zj_jg) || s_zj_jg == ZJ_ARCOIRIS) return; /* (en la cuerda, el marcador es la cinta) */
     const int clave = s_zj_pts * 100 + s_zd_b;
     if (clave == s_zd_vis) return;
     s_zd_vis = clave;
@@ -646,11 +646,13 @@ static void ze_animar(float dt)
 }
 
 #include "ui_isla.inc" /* (1.0.18) los juegos de la isla: el faro y el buceo */
+#include "ui_arcoiris.inc" /* (1.0.31) el tobogán del arcoíris */
 
 /* ---------- el final ---------- */
 static void zd_terminar(void)
 {
     if (zi_es(s_zj_jg)) { zi_terminar(); return; }
+    if (s_zj_jg == ZJ_ARCOIRIS) { zr_terminar(); return; }
     if (s_zj_fase != 3) return;
     s_zj_fase = 2;
     s_zj_gano = true;
@@ -723,6 +725,7 @@ static const char *zd_nombre(int jg)
 static void zd_portada(void)
 {
     if (zi_es(s_zj_jg)) { zi_portada(); return; }
+    if (s_zj_jg == ZJ_ARCOIRIS) { zr_portada(); return; }
     zj_titulo(zd_nombre(s_zj_jg));
     lv_obj_t *c = caja(s_zj);
     lv_obj_set_size(c, 320, 250);
@@ -776,6 +779,7 @@ static void zd_fondo(void)
         o = caja(s_zj); lv_obj_set_size(o, 340, 300); lv_obj_set_pos(o, 76, 86); lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(o, lv_color_hex(0x2E4A2A), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
         break;
+    case ZJ_ARCOIRIS: zr_fondo_simple(); break;
     case ZJ_BUCEO:
         lv_obj_set_style_bg_color(s_zj, lv_color_hex(0x1E6AA0), 0);
         o = caja(s_zj); lv_obj_set_size(o, W, 100); lv_obj_set_pos(o, 0, 376); lv_obj_set_style_bg_color(o, lv_color_hex(0xD8C08A), 0); lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
@@ -791,6 +795,7 @@ static void zd_empezar(void)
     case ZJ_CUERDA: zc_empezar(); break;
     case ZJ_MEMO: zm_empezar(); break;
     case ZJ_ESCONDE: ze_empezar(); break;
+    case ZJ_ARCOIRIS: zr_empezar(); break;
     default: if (zi_es(s_zj_jg)) zi_empezar(); break;
     }
 }
@@ -815,6 +820,7 @@ static void zd_animar(float dt)
     case ZJ_CUERDA: zc_animar(dt); break;
     case ZJ_MEMO: zm_animar(dt); break;
     case ZJ_ESCONDE: ze_animar(dt); break;
+    case ZJ_ARCOIRIS: zr_animar(dt); break;
     default: if (zi_es(s_zj_jg)) zi_animar(dt); break;
     }
     if (s_zj_fase == 1) zd_marcador();

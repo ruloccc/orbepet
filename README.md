@@ -807,6 +807,18 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.31 — el tobogán del arcoíris
+
+- **Juego nuevo: EL TOBOGÁN DEL ARCOÍRIS.** Solo existe mientras hay un arcoíris en el cielo: se abre tocando el
+  arcoíris o con el botón ARCOÍRIS que aparece en Jugar. Ella se desliza por el arcoíris, que baja desde una nube lejana
+  hacia la pantalla. Se desliza el dedo a los lados en cualquier parte y ella se mueve igual. Hay que juntar estrellitas
+  (el prisma vale 3) y esquivar las nubes de tormenta y los pájaros: hay 3 corazones, y un corazón que baja devuelve
+  uno. Va cada vez más rápido y dura un minuto, hasta la punta del arcoíris. En modo infante no hay peligros. Queda en
+  el diario. El fondo es una ilustración nueva (cielo alto, sol, nubes esponjosas y el arcoíris en perspectiva) que va
+  en la memoria de recursos como pj6.bin (el probador la manda por cable igual que los otros fondos).
+- **Entrar al buceo en la isla:** ahora se abre tocando la piedra de la izquierda **o cualquier parte del agua que está
+  encima de ella**, hasta la orilla de la arena (en la 1.0.30 había quedado solo la piedra, por un malentendido).
+
 ## Versión 1.0.30 — Pochi sorpresa
 
 - **Pochi ya no viene siempre a lo mismo.** Cada visita trae algo distinto (y nunca dos iguales seguidas): la de

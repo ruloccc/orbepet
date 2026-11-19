@@ -81,8 +81,14 @@ const DIR = process.argv[2] || '/tmp/isla';
   s.tap(392, 130); s.frames(20);
   if (x.sim_zd_estado() !== 0) mal('tocar el faro no abrió su juego (' + x.sim_zd_estado() + ')'); else console.log('tocar el faro: abre el juego');
   s.tap(233, 417); s.frames(30); calma();
-  s.tap(60, 110); s.frames(20); if (x.sim_zd_estado() !== -1) { mal('tocar el agua lejos de la piedra abrió el buceo'); s.tap(233, 417); s.frames(30); }
-  s.tap(39, 165); s.frames(20);
+  // (1.0.31) el buceo se abre con la piedra y con el agua de encima de ella (hasta la orilla); no con la arena ni más abajo
+  for (const [tx, ty, debe] of [[39, 170], [60, 110, 1], [30, 140, 1], [85, 120, 1], [70, 95, 1], [130, 130, 0], [170, 200, 0]].map(([a, b, c]) => [a, b, c === undefined ? 1 : c])) {
+    calma(); s.tap(tx, ty); s.frames(20);
+    const abrio = x.sim_zd_estado() !== -1;
+    if (abrio !== !!debe) mal(`tocar (${tx},${ty}) ${debe ? 'no abrió' : 'abrió'} el buceo`);
+    if (abrio) { s.tap(233, 417); s.frames(30); }
+  }
+  s.tap(39, 170); s.frames(20);
   if (x.sim_zd_estado() !== 0) mal('tocar la piedra no abrió el buceo (' + x.sim_zd_estado() + ')'); else console.log('tocar la piedra: abre el buceo');
   s.png(`${DIR}/buceo_por_piedra.png`);
   s.tap(233, 417); s.frames(30);

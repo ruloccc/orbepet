@@ -13,7 +13,7 @@
  *  - Los juegos (ui_zjuegos.inc) se abren en su propia pantalla desde la casita o desde el mirador.
  * ==================================================================== */
 enum { ZO_NADA = 0, ZO_CLARO, ZO_CASITA, ZO_MIRADOR };
-enum { ZJ_NADA = 0, ZJ_HORNO, ZJ_CAMITA, ZJ_NUBE, ZJ_CORONA, ZJ_PIEDRA, ZJ_PING, ZJ_CUERDA, ZJ_MEMO, ZJ_ESCONDE, ZJ_FARO, ZJ_BUCEO }; /* (1.0.17: los de a dos, ui_dos.inc; 1.0.18: los de la isla, ui_isla.inc) */
+enum { ZJ_NADA = 0, ZJ_HORNO, ZJ_CAMITA, ZJ_NUBE, ZJ_CORONA, ZJ_PIEDRA, ZJ_PING, ZJ_CUERDA, ZJ_MEMO, ZJ_ESCONDE, ZJ_FARO, ZJ_BUCEO, ZJ_ARCOIRIS }; /* (1.0.31) el tobogán del arcoíris: ui_arcoiris.inc */ /* (1.0.17: los de a dos, ui_dos.inc; 1.0.18: los de la isla, ui_isla.inc) */
 static int s_zo, s_zo_pend = -1, s_zo_cosa = -1, s_zo_pose = -1;
 static uint32_t s_zo_t0, s_zo_txt_hasta, s_zo_quieta;
 static float s_zo_x, s_zo_y, s_zo_tx, s_zo_ty;
