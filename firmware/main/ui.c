@@ -117,6 +117,9 @@ void __wrap_lv_obj_move_to_index(lv_obj_t *obj, int32_t index)
 static void ocultar(lv_obj_t *o, bool si)
 {
     if (!o) return; /* (1.0.16) un objeto que todavía no se crea: antes era un pánico (po_fuera al crear una mascota nueva sin que Pochi hubiera venido) */
+    /* (1.0.24) si ya está como se pide, no se toca: mostrar algo que ya se ve hacía que LVGL lo redibujara entero,
+     * y ocultar() se llama en cada cuadro en muchas partes (la despedida, Pochi, los globos...) */
+    if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN) == si) return;
     if (si) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
 }
