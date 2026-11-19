@@ -11,6 +11,13 @@
 > Motor: PET_ISLA_ARCOIRIS = 2 en pet_island_game (diversión, curiosidad; sin concha) y texto del diario. Pruebas:
 > sim_zd_abrir(6), sim_zr(q), pruebas/arcoiris.js nueva; isla.js prueba 7 puntos de la entrada al buceo. Todo verde
 > (test_core 1227, paneles 18, regresión regrabada solo por «version», soak 180 días).
+> (c) Fotos 19-nov 21:26: DOS canastas en el picnic = art_pantalla_clima(3) no cupo → art_pantalla(2) (tapete con la
+> canasta PINTADA) + el ícono del botón. Ahora con la 2 se oculta s_pic_canasta_ico y el botón va a (50,270) sobre la
+> pintada. Pesca celeste = art_cruce_fondo no cupo (428 + 212 KB). Nuevo hacer_lugar(para, kb) en ui.c (caché, íconos,
+> pantallas_soltar, art_fondos_soltar_otros; evento «memoria: se hizo lugar para …») antes del picnic y de la pesca, y
+> un 2.º intento si falla. Esto tapa el síntoma: la PSRAM que se pierde con las horas sigue pendiente. (d) La Bolsa: en
+> obj_panel_cb «volver» sin venir de Tesoros llamaba panel_bolsa(); ahora panel_cofre con la categoría del objeto
+> (OCAT → cofre_sub {0,1,3,2,4}); el botón 30 «ABRIR LA BOLSA» va a la cuadrícula de Tesoros.
 
 
 > **1.0.30 «POCHI SORPRESA» (19-nov 17:45).** (a) Rayas oscuras con lluvia junto a los botones (foto del usuario):

@@ -297,7 +297,9 @@ static void pez_empezar(const pet_t *m)
 #endif
     s_pez_hielo = lago_congelado(m);
     art_cruce_estacion(s_pez_hielo ? 3 : (int)pet_season(m, s_ultimo_t)); /* (3: el lago helado) */
+    hacer_lugar("la pesca", 700u); /* (1.0.31) el lago pide ~428 KB + 212 KB seguidos: sin ellos quedaba todo celeste (foto del 19-nov) */
     art_cruce_fondo(&s_pez_fondo_art, (int)periodo_de(m, s_ultimo_t));
+    if (!s_pez_fondo_art.px && hacer_lugar("la pesca (2.º intento)", 0u)) art_cruce_fondo(&s_pez_fondo_art, (int)periodo_de(m, s_ultimo_t));
     ocultar(s_pez_bote, s_pez_hielo); ocultar(s_pez_hoyo, !s_pez_hielo); ocultar(s_pez_banco, !s_pez_hielo);
     for (int i = 0; i < 6; i++) ocultar(s_pez_copo[i], !s_pez_hielo);
     if (s_pez_fondo_art.px) { poner_src(s_pez_fondo, &s_pez_fondo_art.dsc); lv_obj_set_pos(s_pez_fondo, -1, -1); }

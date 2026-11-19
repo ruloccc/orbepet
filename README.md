@@ -818,6 +818,13 @@ En el orbe:
   en la memoria de recursos como pj6.bin (el probador la manda por cable igual que los otros fondos).
 - **Entrar al buceo en la isla:** ahora se abre tocando la piedra de la izquierda **o cualquier parte del agua que está
   encima de ella**, hasta la orilla de la arena (en la 1.0.30 había quedado solo la piedra, por un malentendido).
+- **Dos canastas en el picnic:** cuando el fondo completo del picnic no cabía en la memoria, se usaba el mantel solo, que
+  ya trae una canasta pintada, y encima se ponía la otra. Ahora con el mantel solo queda solo la pintada (y se toca ahí).
+- **El picnic y la pesca sin fondo (todo celeste):** los dos fondos piden un pedazo grande de memoria seguida. Ahora,
+  antes de armarlos, si no hay lugar se sueltan las imágenes guardadas que no se están viendo (como ya hacían la
+  despedida y el final) y se prueba otra vez. En el registro queda «memoria: se hizo lugar para …».
+- **La Bolsa ya no aparece:** al volver desde un objeto que no se abrió desde Tesoros (por ejemplo, desde el mundo),
+  «volver» llevaba a la Bolsa vieja. Ahora lleva a la lista de Tesoros de la categoría de ese objeto.
 
 ## Versión 1.0.30 — Pochi sorpresa
 

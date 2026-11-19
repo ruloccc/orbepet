@@ -2971,6 +2971,26 @@ static void panel_modo_inicio(void);
 static void viaje_empezar(const pet_t *m);
 static uint32_t iconos_soltar(void); /* (más abajo) */
 static uint32_t pantallas_soltar(void); /* (más abajo) */
+/* (1.0.31) antes de armar un fondo grande (el picnic, la pesca): si la PSRAM no tiene un bloque seguido de «kb» KB, se
+ * sueltan la caché de imágenes, los íconos guardados, las fotos de pantalla que no se ven y los fondos de otras horas
+ * (como hacen la despedida y el final). kb = 0: soltar igual (segundo intento). Devuelve true si soltó algo. */
+static bool hacer_lugar(const char *para, uint32_t kb)
+{
+#ifdef ESP_PLATFORM
+    if (kb && heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) >= (size_t)kb * 1024u) return false;
+    const size_t antes = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+    lv_image_cache_drop(NULL);
+    const uint32_t b = iconos_soltar() + pantallas_soltar();
+    art_fondos_soltar_otros();
+    extern void hal_evento(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+    hal_evento("memoria: se hizo lugar para %s (soltados %u KB; bloque mayor %u -> %u KB)", para, (unsigned)(b / 1024), (unsigned)(antes / 1024),
+               (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
+    return true;
+#else
+    (void)para; (void)kb;
+    return false;
+#endif
+}
 static int elegir_vehiculo(void); /* el viaje sale en este vehículo (se lo cuenta al motor: desde ahí te escribe) */
 static const pet_device_t *s_disp_aj;  /* volumen, brillo y cuándo se apaga (de main) */
 static pet_device_t s_disp_vista;
@@ -5607,7 +5627,12 @@ static void obj_panel_cb(lv_event_t *e)
         break;
     }
     case 3: accion(UI_ACCION_OBJETO, 3 << 8); cerrar_panel(); break;      /* sacárselo de la cabeza */
-    default: if (s_obj_cofre_sub >= -1 && s_obj_cofre) { s_obj_cofre = false; s_cofre_vista = 1; s_cofre_sub = s_obj_cofre_sub; panel_cofre(); } else panel_bolsa(); break; /* volver */
+    default: /* volver: a la lista de Tesoros de donde vino o, si no vino de ahí, a la de su categoría (1.0.31: la Bolsa ya no
+              * se usa; antes «volver» llevaba a ella cuando el objeto se abría desde el mundo o un aviso) */
+        if (s_obj_cofre_sub >= -1 && s_obj_cofre) { s_obj_cofre = false; s_cofre_vista = 1; s_cofre_sub = s_obj_cofre_sub; panel_cofre(); }
+        else { static const int8_t SUB[OCAT_COUNT] = {0, 1, 3, 2, 4}; /* OCAT_TIERRA, FLORA, ESPIRITUS, ANTIGUO, ARTEFACTO → cofre_sub */
+               const int c = objeto_info(id)->cat; s_obj_cofre = false; s_cofre_vista = 1; s_cofre_sub = (unsigned)c < OCAT_COUNT ? SUB[c] : -1; panel_cofre(); }
+        break;
     }
 }
 
@@ -8460,7 +8485,7 @@ static float s_cx_, s_cy_;
 static uint32_t s_comida_desde;
 static bool s_comida_agarrada;
 /* el picnic: al dar de comer aparece una pantalla propia con tapete y cesta; la comida sale de la cesta */
-static lv_obj_t *s_picnic, *s_pic_ficha[6], *s_pic_x;
+static lv_obj_t *s_picnic, *s_pic_ficha[6], *s_pic_x, *s_pic_canasta_ico;
 static uint32_t s_picnic_fin;
 static void picnic_cerrar(void);
 static void picnic_x_cb(lv_event_t *e) { (void)e; picnic_cerrar(); }
@@ -8516,6 +8541,7 @@ static void picnic_crear(void)
         lv_obj_set_style_bg_opa(cb, LV_OPA_TRANSP, 0); lv_obj_set_style_bg_opa(cb, LV_OPA_TRANSP, LV_STATE_PRESSED); lv_obj_set_style_border_width(cb, 0, 0);
         lv_obj_t *ci = icono(cb, ICO_CANASTA, 5);
         lv_obj_align(ci, LV_ALIGN_BOTTOM_MID, 0, 0);
+        s_pic_canasta_ico = ci;
         lv_obj_t *hi = icono(cb, ICO_HOJA, 2); /* la hojita: "de temporada" */
         lv_obj_align(hi, LV_ALIGN_TOP_RIGHT, -4, 0);
         s_pic_ficha[5] = cb;
@@ -8533,9 +8559,16 @@ static void picnic_foto_poner(void)
     int fx = 0, fy = 0;
     const int cli = (int)pet_weather(s_pet);
     const int gris = cli == CLIMA_FRIO ? 2 : (cli == CLIMA_NUBLADO || cli == CLIMA_LLUVIA || cli == CLIMA_NIEVE || cli == CLIMA_TORMENTA);
+    hacer_lugar("picnic", 520u); /* (1.0.31) el fondo completo pide un bloque de ~434 KB: sin él salía el tapete solo (foto del 19-nov) */
     const lv_image_dsc_t *f = art_pantalla_clima(3, s_fondo_periodo < 0 ? 0 : s_fondo_periodo, s_fondo_estacion < 0 ? 1 : s_fondo_estacion, gris, &fx, &fy); /* con la hora, la estación y el clima de ahora */
+    if (!f && hacer_lugar("picnic (2.º intento)", 0u)) f = art_pantalla_clima(3, s_fondo_periodo < 0 ? 0 : s_fondo_periodo, s_fondo_estacion < 0 ? 1 : s_fondo_estacion, gris, &fx, &fy);
     s_picnic_tapa = f != NULL;
     if (!f) f = art_pantalla(2, &fx, &fy);
+    /* (1.0.31) el tapete solo (2) ya trae la canasta pintada: entonces no se pone la otra encima (salían DOS canastas); el
+     * botón queda invisible justo sobre la pintada. Con el fondo completo (3) o sin foto, la canasta es el ícono. */
+    { const bool pintada = f && !s_picnic_tapa;
+      if (s_pic_canasta_ico) ocultar(s_pic_canasta_ico, pintada);
+      if (s_pic_ficha[5]) lv_obj_set_pos(s_pic_ficha[5], pintada ? 50 : 62, pintada ? 270 : 232); }
     if (f) {
         lv_image_set_src(s_picnic_foto, f);
         lv_obj_set_pos(s_picnic_foto, fx, fy);
@@ -10524,7 +10557,7 @@ static void cofre_hub_cb(lv_event_t *e)
     }
     else if (q == 23) s_cofre_sub = -1; /* de una lista, a la cuadrícula de tesoros */
     else if (q >= 60 && q < 65) { s_cofre_vista = 1; s_cofre_sub = q - 60; } /* una categoría: su lista */
-    else if (q == 30) { s_bolsa_desde_cofre = false; s_bolsa_pag = 0; s_bolsa_libro = 0; panel_bolsa(); return; }
+    else if (q == 30) { s_cofre_vista = 1; s_cofre_sub = -1; } /* (1.0.31: la Bolsa ya no se abre: a la cuadrícula de Tesoros) */
     else if (q == 31) return; /* (el libro mágico se quitó por ahora) */
     else if (q == 32) { s_diario_tab = 0; s_diario_pag = 0; panel_diario(); return; }
     else if (q >= 10 && q < 20) s_cofre_sub = q - 10;
