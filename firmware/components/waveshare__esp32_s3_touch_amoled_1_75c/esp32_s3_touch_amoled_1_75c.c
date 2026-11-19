@@ -347,7 +347,6 @@ static esp_err_t panel_cmd(uint8_t cmd)
     uint32_t lcd_cmd = ((uint32_t)cmd << 8) | (0x02u << 24);
     return esp_lcd_panel_io_tx_param(io_handle, lcd_cmd, NULL, 0);
 }
-static bool s_tp_sin_reposo; /* (1.0.24) */
 esp_err_t bsp_display_sleep(bool dormir)
 {
     if (panel_handle == NULL || io_handle == NULL) return ESP_ERR_INVALID_STATE;
@@ -357,11 +356,9 @@ esp_err_t bsp_display_sleep(bool dormir)
         e = panel_cmd(0x28);
         if (e == ESP_OK) { vTaskDelay(pdMS_TO_TICKS(20)); e = panel_cmd(0x10); }
         if (e == ESP_OK) vTaskDelay(pdMS_TO_TICKS(5));
-        /* (1.0.24) el táctil de esta placa no tiene modo reposo: antes se pedía igual en cada apagado y dejaba
-         * «TP: Sleep mode not supported!» en el registro (más de 100 veces por prueba, cada una escrita en la flash) */
-        if (tp && !s_tp_sin_reposo && esp_lcd_touch_enter_sleep(tp) != ESP_OK) s_tp_sin_reposo = true; /* (la biblioteca devuelve ESP_FAIL) */
+        if (tp) esp_lcd_touch_enter_sleep(tp);
     } else {
-        if (tp && !s_tp_sin_reposo) esp_lcd_touch_exit_sleep(tp);
+        if (tp) esp_lcd_touch_exit_sleep(tp);
         e = panel_cmd(0x11);
         vTaskDelay(pdMS_TO_TICKS(120)); /* el panel necesita 120 ms después de salir del reposo */
         if (e == ESP_OK) e = panel_cmd(0x29);
