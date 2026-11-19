@@ -815,6 +815,9 @@ En el orbe:
   pesca, el picnic, los juegos) encuentran lugar. Solo lo hace en calma: nunca con un menú, un juego, la pesca o el
   picnic abiertos. Los fondos de las zonas no se tocan. Lo que se vuelva a necesitar se arma de nuevo (esa vez, un
   poquito más lento). En el registro: «memoria: limpieza de rutina … PSRAM antes -> después».
+- **La nube de lo que piensa ahora es una nube de verdad:** con bolitas arriba y abajo, como algodón, y las dos
+  burbujitas que salen de su cabeza (antes era casi el mismo globo de hablar). En el modo adulto ya no lleva la carita:
+  solo las palabras. En el modo infante y en los sueños siguen los dibujitos.
 
 ## Versión 1.0.32 — la colección de peces
 

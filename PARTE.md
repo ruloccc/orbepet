@@ -7,6 +7,9 @@
 > rutina (…): soltados X KB; PSRAM a -> b KB, bloque mayor c -> d KB» solo si soltó > 128 KB o una vez por hora (la
 > flash es lenta). Revisado con -DESP_PLATFORM y cabeceras de mentira (/tmp/espstub). Si con esto la PSRAM igual baja
 > con las horas, lo que se pierde NO son dibujos guardados: buscar en otro lado (los eventos dirán cuánto suelta).
+> Además (pedido 20:06 y 20:24): la NUBE de pensar() es un dibujo (nube_pintar/nube_dist en ui.c: caja con puntas
+> redondas + bolitas arriba/abajo + una a cada lado, borde suave, se repinta al tamaño del contenido) en s_pens_fondo
+> (hijo FLOATING en (-pad,-pad); s_pens transparente con pad NUBE_M+2). En adulto, sin la carita (s_pens_emo oculto).
 
 
 > **1.0.32 «LA COLECCION DE PECES» (19-nov 19:40).** Pedido 18:45: colección de ~30 animales al pescar. core/peces.inc

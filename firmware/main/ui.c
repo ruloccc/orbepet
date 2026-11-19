@@ -871,6 +871,84 @@ static uint32_t s_pens_hasta;
  * con dos burbujitas que salen de su cabeza. No espera turno (si no hay lugar, no sale) y nunca tapa al globo. */
 static lv_obj_t *s_pens_txt;
 static art_img_t s_pens_txt_art;
+/* (1.0.33) la nube de verdad: el fondo es un dibujo con forma de nube (bordes de bolitas, como algodón) que se pinta del
+ * tamaño de lo que va adentro. Antes era una caja redondeada y se veía casi igual que el globo de hablar. */
+#define NUBE_M 22 /* cuánto sobresalen las bolitas alrededor del contenido */
+static lv_obj_t *s_pens_fondo;
+static uint32_t *s_nube_px;
+static size_t s_nube_cap;
+static lv_image_dsc_t s_nube_dsc;
+static int s_nube_w = -1, s_nube_h = -1, s_nube_sueno = -1;
+static bool s_pens_sueno;
+static float nube_dist(float x, float y, int w, int h) /* distancia con signo al borde de la nube (negativa adentro) */
+{
+    const float m = (float)NUBE_M, iw = (float)w - 2 * m, ih = (float)h - 2 * m;
+    /* el cuerpo: una caja con las puntas redondas, del tamaño del contenido */
+    const float rr = ih * 0.5f;
+    const float qx = fabsf(x - (float)w / 2) - (iw / 2 - rr), qy = fabsf(y - (float)h / 2) - (ih / 2 - rr);
+    float d = (qx > 0 || qy > 0 ? sqrtf((qx > 0 ? qx * qx : 0) + (qy > 0 ? qy * qy : 0)) : (qx > qy ? qx : qy)) - rr + 2.0f;
+    /* las bolitas de arriba y de abajo (de distintos tamaños): eso la hace nube */
+    const int nb = (int)(iw / 30.0f) + 2;
+    for (int i = 0; i < nb; i++) {
+        const float t = (float)i / (float)(nb - 1);
+        const float bx = m + 12 + t * (iw - 24);
+        const float ra = 15.0f + 5.0f * (float)((i * 7) % 3), rb = 12.0f + 4.0f * (float)((i * 5 + 1) % 3);
+        const float ya = m + ra * 0.35f, yb = (float)h - m - rb * 0.45f;
+        const float da = sqrtf((x - bx) * (x - bx) + (y - ya) * (y - ya)) - ra;
+        const float db = sqrtf((x - bx) * (x - bx) + (y - yb) * (y - yb)) - rb;
+        if (da < d) d = da;
+        if (db < d) d = db;
+    }
+    /* y una más grande a cada lado (sin salirse del dibujo) */
+    const float rl = ih * 0.5f + 6.0f;
+    float cl = m + rl * 0.45f;
+    if (cl < rl + 2.0f) cl = rl + 2.0f;
+    const float dl = sqrtf((x - cl) * (x - cl) + (y - (float)h / 2) * (y - (float)h / 2)) - rl;
+    const float dr = sqrtf((x - ((float)w - cl)) * (x - ((float)w - cl)) + (y - (float)h / 2) * (y - (float)h / 2)) - rl;
+    if (dl < d) d = dl;
+    if (dr < d) d = dr;
+    return d;
+}
+static void nube_pintar(int w, int h, bool sueno)
+{
+    if (w == s_nube_w && h == s_nube_h && (int)sueno == s_nube_sueno && s_nube_px) return;
+    const size_t n = (size_t)w * (size_t)h;
+    if (n > s_nube_cap) {
+        if (s_nube_px) { lv_image_cache_drop(&s_nube_dsc); free(s_nube_px); }
+        s_nube_px = (uint32_t *)malloc(n * 4);
+        s_nube_cap = s_nube_px ? n : 0;
+        if (!s_nube_px) { s_nube_w = -1; return; }
+    }
+    const uint32_t relleno = sueno ? 0x2E2A5Au : 0xF8F6FFu, borde = sueno ? 0xB48CFFu : 0x8C84B0u, sombra = sueno ? 0x3A3470u : 0xE2DEF4u;
+    const float a_rel = sueno ? 90.0f : 255.0f, a_bor = sueno ? 160.0f : 255.0f;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const float d = nube_dist((float)x + 0.5f, (float)y + 0.5f, w, h);
+            uint32_t c = 0, a = 0;
+            if (d < 0.5f) {
+                const float al = d > -0.5f ? 0.5f - d : 1.0f; /* borde suave */
+                if (d > -2.6f) { c = borde; a = (uint32_t)(a_bor * al); }
+                else {
+                    /* un poquito más oscuro abajo (la nube tiene volumen) */
+                    c = (float)y > (float)h * 0.62f && d > -9.0f ? sombra : relleno;
+                    a = (uint32_t)a_rel;
+                }
+            }
+            s_nube_px[(size_t)y * (size_t)w + (size_t)x] = (a << 24) | c;
+        }
+    memset(&s_nube_dsc, 0, sizeof s_nube_dsc);
+    s_nube_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+    s_nube_dsc.header.cf = LV_COLOR_FORMAT_ARGB8888;
+    s_nube_dsc.header.w = (uint32_t)w;
+    s_nube_dsc.header.h = (uint32_t)h;
+    s_nube_dsc.header.stride = (uint32_t)w * 4u;
+    s_nube_dsc.data_size = (uint32_t)(n * 4);
+    s_nube_dsc.data = (const uint8_t *)s_nube_px;
+    lv_image_cache_drop(&s_nube_dsc);
+    lv_image_set_src(s_pens_fondo, &s_nube_dsc);
+    lv_obj_invalidate(s_pens_fondo);
+    s_nube_w = w; s_nube_h = h; s_nube_sueno = sueno;
+}
 
 /* Los globos y las nubes siempre salen de ella: arriba, a un lado o abajo, con la colita (o las burbujitas) apuntando a ella, y nunca tapándola */
 typedef enum { BD_ARRIBA, BD_ABAJO, BD_DER, BD_IZQ } bdir_t;
@@ -984,12 +1062,17 @@ static void seguir_globos(void)
         } else {
             lv_obj_update_layout(s_pens);
             const int w = lv_obj_get_width(s_pens), h = lv_obj_get_height(s_pens);
+            if (s_pens_fondo) { /* (1.0.33) la forma de nube, del tamaño del contenido (y un poco más) */
+                nube_pintar(w, h, s_pens_sueno); /* (el contenido ya tiene NUBE_M de margen: la nube cabe adentro, sin salirse) */
+                lv_obj_set_pos(s_pens_fondo, -(NUBE_M + 2), -(NUBE_M + 2)); /* (las posiciones de los hijos cuentan desde adentro del margen) */
+            }
             /* v90: la nube de lo que piensa también se queda quieta donde apareció; solo las burbujitas la unen con ella */
             static int px0, py0, pw0, ph0; static bdir_t pd0; static uint32_t phasta;
             int ax0, ay0;
             if (phasta != s_pens_hasta || pw0 != w || ph0 != h) {
                 phasta = s_pens_hasta; pw0 = w; ph0 = h;
-                pd0 = ubicar_burbuja(c, w, h, 38, &px0, &py0, &ax0, &ay0);
+                pd0 = ubicar_burbuja(c, w - 2 * 8, h - 2 * 8, 30, &px0, &py0, &ax0, &ay0); /* (el borde de la imagen es casi transparente) */
+                px0 -= 8; py0 -= 8;
                 lv_obj_set_pos(s_pens, px0, py0);
             }
             const int x = px0, y = py0, ax = (int)c->x, ay = cabeza_y(c);
@@ -998,14 +1081,14 @@ static void seguir_globos(void)
             /* las burbujitas van de ella a la nube, en línea */
             int tx, ty;
             switch (d) {
-            case BD_ARRIBA: tx = clampi(ax, x + 16, x + w - 16); ty = y + h; break;
-            case BD_ABAJO: tx = clampi(ax, x + 16, x + w - 16); ty = y; break;
-            case BD_DER: tx = x; ty = clampi(ay, y + 16, y + h - 16); break;
-            default: tx = x + w; ty = clampi(ay, y + 16, y + h - 16); break;
+            case BD_ARRIBA: tx = clampi(ax, x + 40, x + w - 40); ty = y + h - 6; break;
+            case BD_ABAJO: tx = clampi(ax, x + 40, x + w - 40); ty = y + 6; break;
+            case BD_DER: tx = x + 6; ty = clampi(ay, y + 30, y + h - 30); break;
+            default: tx = x + w - 6; ty = clampi(ay, y + 30, y + h - 30); break;
             }
             const int w1 = lv_obj_get_width(s_pens_b1), w2 = lv_obj_get_width(s_pens_b2);
-            lv_obj_set_pos(s_pens_b1, ax + (tx - ax) * 22 / 100 - w1 / 2, ay + (ty - ay) * 22 / 100 - w1 / 2);
-            lv_obj_set_pos(s_pens_b2, ax + (tx - ax) * 62 / 100 - w2 / 2, ay + (ty - ay) * 62 / 100 - w2 / 2);
+            lv_obj_set_pos(s_pens_b1, ax + (tx - ax) * 25 / 100 - w1 / 2, ay + (ty - ay) * 25 / 100 - w1 / 2);
+            lv_obj_set_pos(s_pens_b2, ax + (tx - ax) * 60 / 100 - w2 / 2, ay + (ty - ay) * 60 / 100 - w2 / 2);
         }
     }
 }
@@ -1070,8 +1153,9 @@ static int icono_causa(causa_t c)
 
 static void estilo_nube(bool sueno)
 {
-    lv_obj_t *o[3] = {s_pens, s_pens_b1, s_pens_b2};
-    for (int i = 0; i < 3; i++) {
+    s_pens_sueno = sueno; /* (1.0.33) la nube grande es un dibujo (nube_pintar); aquí solo las dos bolitas */
+    lv_obj_t *o[2] = {s_pens_b1, s_pens_b2};
+    for (int i = 0; i < 2; i++) {
         lv_obj_set_style_bg_color(o[i], lv_color_hex(sueno ? 0x2E2A5A : 0xF4F1FF), 0);
         lv_obj_set_style_border_color(o[i], lv_color_hex(sueno ? 0xB48CFF : 0x8C84B0), 0);
         /* la nube de un sueño es translúcida: se ve el mundo detrás */
@@ -1108,7 +1192,7 @@ static void pensar(emo_t e, causa_t c)
         char t[120];
         texto_pensado(e, c, t, sizeof t);
         estilo_nube(false);
-        poner_src(s_pens_emo, art_icono(icono_emocion(e), 3));
+        ocultar(s_pens_emo, true); /* (1.0.33, pedido del usuario) con palabras, sin la carita: solo el texto en la nube */
         ocultar(s_pens_causa, true);
         if (s_pens_txt) {
             art_texto(&s_pens_txt_art, gtxt(t), 0x3A3460, 2, 220);
@@ -1125,6 +1209,7 @@ static void pensar(emo_t e, causa_t c)
     art_icono_t ie = icono_emocion(e);
     int ic = icono_causa(c);
     poner_src(s_pens_emo, art_icono(ie, 4));
+    ocultar(s_pens_emo, false); /* (modo infante: los dibujitos son lo que piensa) */
     ocultar(s_pens_causa, ic < 0 || ic == (int)ie);
     if (ic >= 0) poner_src(s_pens_causa, art_icono((art_icono_t)ic, 4));
     ocultar(s_pens, false); ocultar(s_pens_b1, false); ocultar(s_pens_b2, false);
@@ -13938,12 +14023,13 @@ void ui_init(lv_display_t *disp, ui_action_cb_t on_action)
     /* pensamiento: nube redonda con dos burbujitas */
     s_pens = caja(scr);
     lv_obj_set_size(s_pens, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(s_pens, lv_color_hex(0xF4F1FF), 0);
-    lv_obj_set_style_bg_opa(s_pens, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(s_pens, 3, 0);
-    lv_obj_set_style_border_color(s_pens, lv_color_hex(0x8C84B0), 0);
-    lv_obj_set_style_radius(s_pens, 24, 0);
-    lv_obj_set_style_pad_all(s_pens, 8, 0);
+    lv_obj_set_style_bg_opa(s_pens, LV_OPA_TRANSP, 0); /* (1.0.33) sin caja: el fondo es el dibujo de la nube */
+    lv_obj_set_style_border_width(s_pens, 0, 0);
+    lv_obj_set_style_pad_all(s_pens, NUBE_M + 2, 0); /* (el contenido, adentro de la nube con sus bolitas) */
+    lv_obj_set_style_pad_ver(s_pens, NUBE_M + 2, 0);
+    s_pens_fondo = lv_image_create(s_pens);
+    lv_obj_add_flag(s_pens_fondo, LV_OBJ_FLAG_FLOATING); /* (no cuenta para el tamaño: si contara, la nube crecería sola) */
+    lv_obj_remove_flag(s_pens_fondo, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_pad_column(s_pens, 6, 0);
     lv_obj_set_flex_flow(s_pens, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(s_pens, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -13954,7 +14040,7 @@ void ui_init(lv_display_t *disp, ui_action_cb_t on_action)
     lv_obj_t **bur[2] = {&s_pens_b1, &s_pens_b2};
     for (int i = 0; i < 2; i++) {
         *bur[i] = caja(scr);
-        lv_obj_set_size(*bur[i], 10 + i * 4, 10 + i * 4);
+        lv_obj_set_size(*bur[i], 10 + i * 6, 10 + i * 6);
         lv_obj_set_style_bg_color(*bur[i], lv_color_hex(0xF4F1FF), 0);
         lv_obj_set_style_bg_opa(*bur[i], LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(*bur[i], 2, 0);
@@ -15969,6 +16055,7 @@ static void sonar_algo(const pet_t *p)
     estilo_nube(true);
     if (s_pens_txt) ocultar(s_pens_txt, true); /* (1.0.28) los sueños siguen siendo solo dibujos */
     poner_src(s_pens_emo, art_icono(a, 4));
+    ocultar(s_pens_emo, false); /* (los sueños no tienen palabras: siguen con sus dibujos) */
     poner_src(s_pens_causa, art_icono(b, 4));
     ocultar(s_pens_causa, false);
     ocultar(s_pens, false); ocultar(s_pens_b1, false); ocultar(s_pens_b2, false);
