@@ -828,6 +828,12 @@ void ui_demo_bateria(int pct, int modo);
 EXPORT(sim_bateria_aviso) void sim_bateria_aviso(int pct, int modo) { ui_demo_bateria(pct, modo); }
 EXPORT(sim_rapido) void sim_rapido(void) { ui_demo_rapido(); }
 EXPORT(sim_cofre) void sim_cofre(int v, int s) { ui_demo_cofre(v, s); }
+EXPORT(sim_pensar) void sim_pensar(int e, int c) { ui_demo_pensar(e, c); } /* (1.0.28) */
+EXPORT(sim_llenar) void sim_llenar(void) /* (1.0.28, pruebas) algo en la Bolsa y en las colecciones, para ver las cuadrículas */
+{
+    for (int i = 0; i < PET_OBJETOS; i += 2) s_pet.bolsa[i] = (uint8_t)(1 + i % 3);
+    for (int c = 0; c < COL_COUNT; c++) s_pet.coleccion[c] = 0x15;
+}
 EXPORT(sim_picnic) void sim_picnic(void) { ui_demo_picnic(); }
 EXPORT(sim_botella) void sim_botella(int f) { ui_demo_botella(f); }
 EXPORT(sim_juego) void sim_juego(int j) { ui_demo_juego(j); }

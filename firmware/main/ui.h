@@ -50,6 +50,7 @@ void ui_ask_restore(const pet_t *nueva);
 void ui_set_battery(int porcentaje, bool cargando);
 bool ui_battery_aviso_activo(void);
 void ui_demo_cofre(int v, int s);
+void ui_demo_pensar(int e, int c); /* (1.0.28, pruebas) la nube de lo que piensa: emo_t y causa_t */
 void ui_demo_rapido(void);
 void ui_battery_aviso(int porcentaje, int modo, uint32_t ms); /* modo 0: conectaron el cargador; 1: carga completa */
 

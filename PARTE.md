@@ -1,4 +1,11 @@
-# PARTE — estado del trabajo (19-nov-2026, 11:30)
+# PARTE — estado del trabajo (19-nov-2026, 13:30)
+
+> **1.0.28 «LO QUE PIENSA» (19-nov ~13:30): hechos 0000 (nube de pensamiento con texto) y 0001 (cuadrícula en Tesoros,
+> Bolsa y Más).** pensar() en ui.c: texto en s_pens_txt dentro de la nube, sin cola; enc_rejilla() convierte una
+> area_texto en cuadrícula; cofre_objetos y la Bolsa usan enc_celda. Pruebas: ui.c -fsyntax-only sin avisos,
+> test_core 1224/1224, paneles 18, regresión (cambian mas-recuerdos, mas-ajustes, version) regrabada, dos/isla/olor/
+> redibujo bien. Nuevo en el simulador: sim_pensar(e, c) y sim_llenar(). Publicación: igual que la 1.0.27 (falta acceso
+> a orbepet-firmware o el secreto); se entregó zip para el cable.
 
 > **1.0.27 «TODO EN SU LUGAR» (19-nov ~11:30): hecho TODO lo de la lista 000–000h** (ver README 1.0.27). Esta sesión SÍ
 > tuvo GitHub (add_repo ruloccc/orbepet después de que el usuario pidió subir) y se bajaron LVGL, wasi-sdk y binaryen:
@@ -39,8 +46,8 @@
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4, ESP-IDF 5.5). **Responder siempre en
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
-Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. Nueva: **1.0.27**
-(«TODO EN SU LUGAR»), subida a GitHub para publicar por Wi-Fi. Partida **versión 42** (no cambia desde el 104).
+Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
+sin publicar): **1.0.28** («LO QUE PIENSA»), que trae la 1.0.27. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.

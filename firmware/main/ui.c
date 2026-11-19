@@ -521,6 +521,11 @@ static void panel_libro_hist(void); /* ui_magia.inc */
 static void libro_historias_abrir(void); /* (1.0.27) ui_magia.inc: el índice de historias */
 static void libro_desliza_cb(lv_event_t *e); /* (1.0.27) ui_magia.inc: las dos hojas del Libro */
 static void panel_libro_hoja(void);           /* (1.0.27) ui_magia.inc */
+/* (1.0.28) las casillas de cuadrícula de los menús (definidas junto al cofre) */
+static lv_obj_t *enc_celda(lv_obj_t *ar, lv_event_cb_t cb, int dato, const char *nombre, bool gris);
+static void enc_icono(lv_obj_t *b, lv_obj_t *ic);
+static void enc_rejilla(lv_obj_t *ar);
+static bool s_enc_cuadro;
 static int hist_total(void);
 static void tesoros_magia(lv_obj_t *ar);
 /* Tesoros: se cuentan todas las filas, pero solo se crean las de la página (con todo encontrado, la lista entera se comía la RAM interna) */
@@ -862,6 +867,10 @@ static bool globo_cerrar(void)
 /* pensamiento: nube con la emoción y su causa, sin palabras */
 static lv_obj_t *s_pens, *s_pens_emo, *s_pens_causa, *s_pens_b1, *s_pens_b2;
 static uint32_t s_pens_hasta;
+/* (1.0.28) LA NUBE DE LO QUE PIENSA, también con palabras: lo que DICE va en el globo de siempre; lo que PIENSA, en la nube
+ * con dos burbujitas que salen de su cabeza. No espera turno (si no hay lugar, no sale) y nunca tapa al globo. */
+static lv_obj_t *s_pens_txt;
+static art_img_t s_pens_txt_art;
 
 /* Los globos y las nubes siempre salen de ella: arriba, a un lado o abajo, con la colita (o las burbujitas) apuntando a ella, y nunca tapándola */
 typedef enum { BD_ARRIBA, BD_ABAJO, BD_DER, BD_IZQ } bdir_t;
@@ -969,7 +978,8 @@ static void seguir_globos(void)
     }
 
     if (!lv_obj_has_flag(s_pens, LV_OBJ_FLAG_HIDDEN)) {
-        if ((int32_t)(s_ms - s_pens_hasta) > 0 || !lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) || po_globo_visible()) {
+        if ((int32_t)(s_ms - s_pens_hasta) > 0 || !lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) || po_globo_visible() ||
+            s_panel != PANEL_NINGUNO || mundo_en_pausa()) { /* (1.0.28) tampoco sobre un menú o un juego */
             ocultar(s_pens, true); ocultar(s_pens_b1, true); ocultar(s_pens_b2, true);
         } else {
             lv_obj_update_layout(s_pens);
@@ -1092,12 +1102,25 @@ static const char *texto_pensado(emo_t e, causa_t c, char *buf, int n)
 
 static void pensar(emo_t e, causa_t c)
 {
-    if (!s_nino) { /* adulto: con palabras */
+    /* (1.0.28) si está hablando (ella o Pochi), hay un menú o un juego, el pensamiento no espera: no sale */
+    if (s_panel != PANEL_NINGUNO || mundo_en_pausa() || po_activo() || po_globo_visible() || (s_globo && !lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN))) return;
+    if (!s_nino) { /* adulto: con palabras, dentro de la nube (antes iba en el globo de hablar y no se distinguía) */
         char t[120];
         texto_pensado(e, c, t, sizeof t);
-        globo(icono_emocion(e), t, 4500);
+        estilo_nube(false);
+        poner_src(s_pens_emo, art_icono(icono_emocion(e), 3));
+        ocultar(s_pens_causa, true);
+        if (s_pens_txt) {
+            art_texto(&s_pens_txt_art, gtxt(t), 0x3A3460, 2, 220);
+            poner_src(s_pens_txt, &s_pens_txt_art.dsc);
+            ocultar(s_pens_txt, false);
+        }
+        ocultar(s_pens, false); ocultar(s_pens_b1, false); ocultar(s_pens_b2, false);
+        lv_obj_move_foreground(s_pens_b1); lv_obj_move_foreground(s_pens_b2); lv_obj_move_foreground(s_pens);
+        s_pens_hasta = s_ms + 4500;
         return;
     }
+    if (s_pens_txt) ocultar(s_pens_txt, true);
     estilo_nube(false);
     art_icono_t ie = icono_emocion(e);
     int ic = icono_causa(c);
@@ -4753,7 +4776,7 @@ static void panel_mas(void)
         static const art_icono_t BI[6] = {ICO_LIBRO, ICO_FOTO, ICO_CAMARA, ICO_COFRE, ICO_PERCHA, ICO_CARTA};
         static const char *const BT[6] = {"DIARIO", "FOTOS", "CÁMARA", "TESOROS", "RINCÓN", "CARTAS"};
         static const char *const BD[6] = {"SU DÍA A DÍA", "MOMENTOS GUARDADOS", "SÁCALE UNA FOTO",
-                                          "LO QUE COLECCIONA", "ROPA Y JUGUETES", "LO QUE LE ESCRIBIERON"};
+                                          "LO QUE COLECCIONA", "ROPA Y JUGUETES", "LO QUE LE ESCRIBIERON"}; (void)BD; /* (1.0.28) en la cuadrícula va solo el nombre */
         static const int BQ[6] = {6, 11, 12, 13, 3, 14};
         /* cada cosa aparece cuando hay algo que guardar en ella */
         bool hay_tes = false, hay_rincon = false, conoce_obj = false;
@@ -4774,17 +4797,11 @@ static void panel_mas(void)
         } else {
             lv_obj_t *ar = area_texto(s_tarjeta, 50, y0 - 6, 320, 366 - y0);
             lv_obj_set_style_pad_row(ar, 6, 0);
+            enc_rejilla(ar); /* (1.0.28) en cuadrícula: el dibujo y el nombre */
             for (int k = 0; k < nr; k++) {
                 int i = idx[k];
-                lv_obj_t *b = boton(ar, 300, 64, mas_cb, BQ[i]);
-                lv_obj_set_style_radius(b, 18, 0);
-                lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
-                lv_obj_t *ic = icono(b, BI[i], 3);
-                lv_obj_align(ic, LV_ALIGN_LEFT_MID, 10, 0);
-                lv_obj_t *t = texto(b, BT[i], 0xFFE27A, 2, 220);
-                lv_obj_align(t, LV_ALIGN_TOP_LEFT, 56, 12);
-                lv_obj_t *d = texto(b, BD[i], C_BLANCO, 2, 236);
-                lv_obj_align(d, LV_ALIGN_TOP_LEFT, 56, 34);
+                lv_obj_t *b = enc_celda(ar, mas_cb, BQ[i], BT[i], false);
+                enc_icono(b, icono(b, BI[i], 3));
             }
             area_lista(ar);
         }
@@ -5304,9 +5321,10 @@ static void panel_bolsa(void)
         }
         return;
     }
-    /* la lista se desliza con el dedo: sin páginas. Lo último que trajo va primero */
+    /* la lista se desliza con el dedo: sin páginas. Lo último que trajo va primero (1.0.28: los objetos, en cuadrícula) */
     lv_obj_t *ar = area_texto(s_tarjeta, 50, s_nino ? 136 : 152, 320, s_nino ? 234 : 218);
     lv_obj_set_style_pad_row(ar, 6, 0);
+    if (!s_nino && filtro - 1 != HIST_FAM) enc_rejilla(ar);
     if (s_nino) { lv_obj_set_flex_flow(ar, LV_FLEX_FLOW_ROW_WRAP); lv_obj_set_style_pad_column(ar, 8, 0); lv_obj_set_flex_align(ar, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START); }
     if (filtro - 1 == HIST_FAM) { /* las historias que le han contado: tocar una la vuelve a abrir */
         for (int c = 0; c < CRI_COUNT; c++) for (int k = 0; k < 5; k++) {
@@ -5352,19 +5370,15 @@ static void panel_bolsa(void)
             lv_obj_t *ic = icono_obj(b, id, 4);
             lv_obj_center(ic);
             if (!listo || !tiene) lv_obj_set_style_opa(ic, LV_OPA_50, 0);
-        } else { /* los grandes: el dibujo y el nombre, uno por fila */
-            b = boton(ar, 300, 48, bolsa_cb, id);
-            lv_obj_set_style_radius(b, 18, 0);
+        } else { /* (1.0.28) los grandes: en cuadrícula, el dibujo arriba y el nombre abajo */
+            b = enc_celda(ar, bolsa_cb, id, o->nombre, !tiene);
             lv_obj_t *ic = icono_obj(b, id, 3);
-            lv_obj_align(ic, LV_ALIGN_LEFT_MID, 8, 0);
+            enc_icono(b, ic);
             if (!listo || !tiene) lv_obj_set_style_opa(ic, LV_OPA_50, 0);
-            lv_obj_t *t = texto(b, o->nombre, tiene ? C_BLANCO : C_GRIS_CLARO, 2, 214);
-            lv_obj_align(t, LV_ALIGN_LEFT_MID, 54, 0);
-            const lv_image_dsc_t *td = lv_image_get_src(t); /* un nombre largo usa dos líneas: la fila crece */
-            if (td && (int)td->header.h + 18 > 48) lv_obj_set_height(b, (int)td->header.h + 18);
+            lv_obj_move_to_index(ic, 0); /* el dibujo primero (el dorado lo busca ahí) */
         }
         if (id == nuevo) { lv_obj_t *st = icono(b, ICO_ESTRELLA, 2); lv_obj_align(st, LV_ALIGN_TOP_RIGHT, -6, 4); }
-        if (id == pet_guarded_object(s_pet)) { lv_obj_t *cd = icono(b, ICO_CANDADO, 2); lv_obj_align(cd, LV_ALIGN_BOTTOM_RIGHT, -4, -2); } /* lo cuida el candado rúnico */
+        if (id == pet_guarded_object(s_pet)) { lv_obj_t *cd = icono(b, ICO_CANDADO, 2); lv_obj_align(cd, s_nino ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_TOP_RIGHT, -4, s_nino ? -2 : 30); } /* lo cuida el candado rúnico */
         if (pet_gold_has(s_pet, id)) { /* juego+: ya tiene la versión dorada */
             lv_obj_t *ic0 = lv_obj_get_child(b, 0);
             if (ic0) { lv_obj_set_style_image_recolor(ic0, lv_color_hex(0xFFC83C), 0); lv_obj_set_style_image_recolor_opa(ic0, LV_OPA_40, 0); }
@@ -5379,10 +5393,10 @@ static void panel_bolsa(void)
                 lv_obj_set_style_bg_color(pt, lv_color_hex(0xFFE27A), 0);
                 lv_obj_set_style_bg_opa(pt, LV_OPA_COVER, 0);
                 if (s_nino) lv_obj_align(pt, LV_ALIGN_BOTTOM_MID, (int)((d - (cuantos < 5 ? cuantos : 5) / 2.0f + 0.5f) * 8), -3);
-                else lv_obj_align(pt, LV_ALIGN_RIGHT_MID, -12 - d * 8, 8);
+                else lv_obj_align(pt, LV_ALIGN_TOP_LEFT, 10 + d * 8, 10); /* (1.0.28) en la casilla: arriba a la izquierda */
             }
-            if (puesto || s_pet->obj_cabeza == id + 1) { lv_obj_t *m = icono(b, puesto ? ICO_CASITA : ICO_GORRO, 2); lv_obj_align(m, s_nino ? LV_ALIGN_TOP_LEFT : LV_ALIGN_RIGHT_MID, s_nino ? 4 : -12, s_nino ? 4 : -8); }
-            if (tiene && !listo) { lv_obj_t *m = icono(b, ICO_LUNA, 2); lv_obj_align(m, s_nino ? LV_ALIGN_TOP_LEFT : LV_ALIGN_RIGHT_MID, s_nino ? 4 : -30, s_nino ? 4 : -8); }
+            if (puesto || s_pet->obj_cabeza == id + 1) { lv_obj_t *m = icono(b, puesto ? ICO_CASITA : ICO_GORRO, 2); lv_obj_align(m, LV_ALIGN_TOP_LEFT, 4, s_nino ? 4 : 22); }
+            if (tiene && !listo) { lv_obj_t *m = icono(b, ICO_LUNA, 2); lv_obj_align(m, LV_ALIGN_TOP_LEFT, s_nino ? 4 : 30, s_nino ? 4 : 22); }
         }
     }
     area_lista(ar);
@@ -10523,6 +10537,14 @@ static void cofre_objetos(lv_obj_t *ar, int cat)
         for (int q = 0; q < PET_OBJ_PUESTOS; q++) puesto |= s_pet->obj_puesto[q] == id + 1;
         if (o->cat != cat || !(pet_object_known(s_pet, id) || s_pet->bolsa[id] || puesto)) continue; /* solo los que ya descubrió */
         const bool tiene = s_pet->bolsa[id] > 0, listo = pet_object_ready(s_pet, id, s_ultimo_t);
+        if (s_enc_cuadro) { /* (1.0.28) en cuadrícula */
+            lv_obj_t *b = enc_celda(ar, cofre_obj_cb, id, o->nombre, !tiene);
+            lv_obj_t *ic = icono_obj(b, id, 3);
+            enc_icono(b, ic);
+            if (!listo || !tiene) lv_obj_set_style_opa(ic, LV_OPA_50, 0);
+            if (id == nuevo) { vio_nuevo = true; lv_obj_t *st = icono(b, ICO_ESTRELLA, 2); lv_obj_align(st, LV_ALIGN_TOP_RIGHT, -6, 4); }
+            continue;
+        }
         lv_obj_t *b = boton(ar, 300, 48, cofre_obj_cb, id);
         lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
         lv_obj_set_style_radius(b, 18, 0);
@@ -10573,6 +10595,13 @@ static void enc_cabecera(lv_obj_t *ar, const char *nombre) /* una fila entera co
     lv_obj_set_size(cab, 316, 26);
     lv_obj_t *t = texto(cab, nombre, 0xFFE9A8, 2, 300);
     lv_obj_align(t, LV_ALIGN_LEFT_MID, 6, 2);
+}
+static void enc_rejilla(lv_obj_t *ar) /* (1.0.28) una lista que se desliza pasa a cuadrícula de dos por fila */
+{
+    lv_obj_set_flex_flow(ar, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(ar, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_column(ar, 8, 0);
+    lv_obj_set_style_pad_row(ar, 8, 0);
 }
 static void cofre_pieza(lv_obj_t *ar, int c, bool solo_tengo)
 {
@@ -10689,6 +10718,10 @@ static void panel_cofre(void)
         (void)IC;
         ocultar(ti, true);
         { lv_obj_t *nm = texto(s_tarjeta, NM[s_cofre_sub], 0xFFE9A8, 3, 330); lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 40); }
+        lv_obj_set_pos(ar, 45, 86); /* (1.0.28) en cuadrícula, como la enciclopedia */
+        lv_obj_set_size(ar, 330, 254);
+        enc_rejilla(ar);
+        s_enc_cuadro = true;
         switch (s_cofre_sub) {
         case 0: cofre_pieza(ar, COL_PIEDRAS, true); cofre_pieza(ar, COL_CONCHAS, true); cofre_pieza(ar, COL_CRISTALES, true); cofre_objetos(ar, OCAT_TIERRA); break;
         case 1: cofre_pieza(ar, COL_HOJAS, true); cofre_objetos(ar, OCAT_FLORA); break;
@@ -10703,6 +10736,7 @@ static void panel_cofre(void)
             lv_obj_align(tx, LV_ALIGN_LEFT_MID, 56, 0);
         }
         }
+        s_enc_cuadro = false;
     } else {
         /* (1.0.27) arriba solo el nombre de la categoría (sin «ENCICLOPEDIA» ni la fila de las otras) y el contenido en
          * cuadrícula, con todo el alto que queda; para ir a otra categoría se vuelve al menú */
@@ -10711,10 +10745,7 @@ static void panel_cofre(void)
         if (!s_nino) { lv_obj_t *nm = texto(s_tarjeta, NM[s_cofre_sub], 0xFFE9A8, strlen(NM[s_cofre_sub]) > 13 ? 2 : 3, 330); lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 44); }
         lv_obj_set_pos(ar, 45, 78);
         lv_obj_set_size(ar, 330, 262);
-        lv_obj_set_flex_flow(ar, LV_FLEX_FLOW_ROW_WRAP);
-        lv_obj_set_flex_align(ar, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-        lv_obj_set_style_pad_column(ar, 8, 0);
-        lv_obj_set_style_pad_row(ar, 8, 0);
+        enc_rejilla(ar);
         s_enc_cuadro = true;
         switch (s_cofre_sub) {
         case 1: cofre_pieza(ar, COL_PIEDRAS, false); cofre_pieza(ar, COL_CRISTALES, false); break;
@@ -13813,6 +13844,8 @@ void ui_init(lv_display_t *disp, ui_action_cb_t on_action)
     lv_obj_set_flex_align(s_pens, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     s_pens_emo = lv_image_create(s_pens);
     s_pens_causa = lv_image_create(s_pens);
+    s_pens_txt = lv_image_create(s_pens); /* (1.0.28) */
+    ocultar(s_pens_txt, true);
     lv_obj_t **bur[2] = {&s_pens_b1, &s_pens_b2};
     for (int i = 0; i < 2; i++) {
         *bur[i] = caja(scr);
@@ -15793,6 +15826,7 @@ static void sonar_algo(const pet_t *p)
     bool pesadilla = p->necesidad[NEED_SEGURIDAD] < 40 && azar() % 3 == 0;
     if (pesadilla) { a = p->clima == CLIMA_TORMENTA ? ICO_RAYO : ICO_ALERTA; b = ICO_CARA_MIEDO; }
     estilo_nube(true);
+    if (s_pens_txt) ocultar(s_pens_txt, true); /* (1.0.28) los sueños siguen siendo solo dibujos */
     poner_src(s_pens_emo, art_icono(a, 4));
     poner_src(s_pens_causa, art_icono(b, 4));
     ocultar(s_pens_causa, false);
@@ -17565,6 +17599,7 @@ void ui_cine(int n) { s_cine_pend = n + 1; s_cine_listo = 0; }
 void ui_demo_rito_historia(void) { cerrar_panel(); ui_demo_ceremonia(1, 2); } /* (el simulador: la historia con que termina el rito) */
 void ui_demo_historia(int c, int k) { panel_historia(c, k); } /* (el simulador: ver una hoja de historia) */
 void ui_demo_cofre(int v, int s) { s_cofre_vista = v; s_cofre_sub = s; panel_cofre(); }
+void ui_demo_pensar(int e, int c) { pensar((emo_t)e, (causa_t)c); } /* (1.0.28, pruebas) la nube de lo que piensa */
 void ui_demo_rapido(void) { panel_rapido(); }
 
 /* (v99, batería) nada que leer ni jugar en pantalla: ni panel, ni juego, ni globo, ni Pochi, ni escena especial.

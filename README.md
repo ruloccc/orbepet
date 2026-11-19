@@ -807,6 +807,16 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.28 — lo que piensa
+
+- **La nube de pensamiento:** lo que ella DICE va en el globo de siempre; lo que PIENSA («ESTOY FELIZ PORQUE JUGAMOS»),
+  en una nube clarita con dos burbujitas que salen de su cabeza, con el texto adentro (en modo infante, solo dibujos;
+  los sueños siguen siendo dibujos). La nube no espera turno: si ella o Pochi están hablando, o hay un menú o un juego,
+  ese pensamiento no sale. Y se esconde si aparece el globo.
+- **Cuadrícula en los menús:** Tesoros por dentro, la Bolsa y «Lo que han vivido juntos» (Más) ahora van en casillas
+  de dos por fila con el dibujo y el nombre (como la enciclopedia); si hay más, se desliza. El diario, las cartas, los
+  títulos de las historias y las canciones siguen como lista.
+
 ## Versión 1.0.27 — todo en su lugar
 
 - **Crear una mascota nueva ya no vuelve al comienzo.** Al poner tu fecha de nacimiento, la interfaz alcanzaba a ver
