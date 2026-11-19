@@ -613,6 +613,26 @@ static void final_revisar(void)
     const int f = pet_final_pending(s_pet);
     if (!f || s_interior || s_cie_activo || s_via_activo || s_cru_activo || s_escena < 0 || s_juego != JG_NADA || s_bienv_activa) return;
     s_fin_repetida = false;
+#ifdef ESP_PLATFORM
+    /* (1.0.24) el final (el Libro grande que flota y se agranda, aros, luciérnagas, fondo con degradé) pide memoria y
+     * dibujo. En las pruebas del 18-nov, con la PSRAM en ~300 KB, el orbe dejaba de contestar apenas empezaba (íconos
+     * soltándose y rehaciéndose sin parar). Antes de abrirlo se hace lugar, como en la despedida. */
+    {
+        extern void hal_evento(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+        const size_t ps0 = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+        uint32_t b = 0;
+        if (ps0 < 1200u * 1024u || heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < 600u * 1024u) {
+            lv_image_cache_drop(NULL);
+            b = iconos_soltar();
+            art_fondos_soltar_otros();
+        }
+        hal_evento("final: empieza (%s); PSRAM %u KB -> %u KB (bloque mayor %u KB; íconos soltados %u KB), RAM interna %u B",
+                   f == PET_FINAL_SECRETO ? "secreto" : "regular", (unsigned)(ps0 / 1024),
+                   (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
+                   (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024), (unsigned)(b / 1024),
+                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    }
+#endif
     if (f == PET_FINAL_SECRETO) { cer_empezar(2 /* CER_VERSO */, false); return; } /* (v39) el último verso, en su pantalla */
     panel_final(f, 0);
 }
