@@ -3,7 +3,7 @@
  * Ella se desliza por el arcoíris, que baja desde una nube lejana hacia la pantalla (en perspectiva). Deslizas el dedo a
  * los lados en cualquier parte y ella se mueve igual (no va debajo del dedo). Junta estrellitas (y a veces un prisma, que
  * vale 3); esquiva las nubes de tormenta y los pájaros (3 corazones; un corazón que baja te devuelve uno). Mientras más
- * avanza, más rápido. Dura un minuto: al final llega a la punta del arcoíris. En modo infante no hay peligros.
+ * avanza, más rápido. Dura un minuto: al final llega al final del arcoíris. En modo infante no hay peligros.
  * Fondo: pj6 (herramientas/hacer_fondos_juegos.py arcoiris → hacer_fondos_dos.py). Si falta, un cielo pintado sencillo.
  * Usa el marco de ui_zjuegos.inc y las piezas de ui_dos.inc (zd_poner, zd_criatura, zd_mano). Incluido desde ui_dos.inc.
  * Al terminar: accion(UI_ACCION_JUEGO_ISLA, PET_ISLA_ARCOIRIS | puntos << 4) (pet_island_game: diversión y el diario).
@@ -97,7 +97,7 @@ static void zr_empezar(void)
         lv_obj_t *o = zj_caja(14 + k, 3, 12, 0xFFFFFF, 2);
         lv_obj_set_style_bg_opa(o, 150, 0);
     }
-    /* la barrita del camino (cuánto falta para la punta del arcoíris) */
+    /* la barrita del camino (cuánto falta para el final del arcoíris) */
     lv_obj_t *b = zj_caja(24, 120, 12, 0x1A1430, 6); lv_obj_set_style_bg_opa(b, LV_OPA_60, 0);
     lv_obj_set_style_border_width(b, 2, 0); lv_obj_set_style_border_color(b, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_pos(b, CX - 30, 70);
@@ -115,7 +115,7 @@ static void zr_fin(bool cayo)
     s_zr_cayo = cayo;
     s_zd_fin_t = s_zj_t + 900u; s_zj_fase = 3;
     zd_mano_fuera();
-    if (!cayo) { zj_texto("¡LLEGÓ A LA PUNTA DEL ARCOÍRIS!", 1400); for (int k = 0; k < 3; k++) zj_chispas(zr_x(s_zr_u, ZR_PY) - 30.0f + 30.0f * (float)k, ZR_PY - 50.0f, 8, 0, 200.0f, 200.0f); }
+    if (!cayo) { zj_texto("¡LLEGÓ AL FINAL DEL ARCOÍRIS!", 1400); for (int k = 0; k < 3; k++) zj_chispas(zr_x(s_zr_u, ZR_PY) - 30.0f + 30.0f * (float)k, ZR_PY - 50.0f, 8, 0, 200.0f, 200.0f); }
     else zj_texto("¡UY! SE RESBALÓ DEL ARCOÍRIS", 1400);
 }
 static void zr_animar(float dt)
@@ -289,7 +289,7 @@ static void zr_terminar(void)
         else snprintf(b, sizeof b, "¡%d ESTRELLITAS!", pts);
         art_texto(&s_zj_fin_art[0], b, bien ? 0xFFE27A : 0xCFE8FF, 3, 290);
         lv_obj_t *t = lv_image_create(s_zj_fin); poner_src(t, &s_zj_fin_art[0].dsc); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 16);
-        art_texto(&s_zj_fin_art[1], s_zr_cayo ? "SE RESBALÓ ANTES DE LA PUNTA" : "¡LLEGÓ A LA PUNTA DEL ARCOÍRIS!", 0xFFF3C8, 2, 280);
+        art_texto(&s_zj_fin_art[1], s_zr_cayo ? "SE RESBALÓ ANTES DEL FINAL" : "¡LLEGÓ AL FINAL DEL ARCOÍRIS!", 0xFFF3C8, 2, 280);
         lv_obj_t *r = lv_image_create(s_zj_fin); poner_src(r, &s_zj_fin_art[1].dsc); lv_obj_align(r, LV_ALIGN_BOTTOM_MID, 0, -16);
     }
     ocultar(s_zj_hud, true);
