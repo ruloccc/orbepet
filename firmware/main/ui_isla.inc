@@ -233,6 +233,11 @@ static int8_t s_zb_cq[ZB_COSAS];             /* -1 nada, 0 perla, 1 concha, 2 ca
 static float s_zb_jx[ZB_MEDUSAS], s_zb_jy[ZB_MEDUSAS], s_zb_jv[ZB_MEDUSAS], s_zb_jf[ZB_MEDUSAS];
 static uint32_t s_zb_pica, s_zb_otra, s_zb_burbuja;
 static bool s_zb_marea, s_zb_sube;
+/* (1.0.30) más cómodo: (1) se maneja deslizando el dedo EN CUALQUIER PARTE y ella se mueve igual que el dedo (no va
+ * debajo del dedo, que la tapaba); (2) el juego empieza recién cuando se cierran las instrucciones (o al primer toque). */
+static uint32_t s_zb_empieza;
+static bool s_zb_tenia, s_zb_solto;
+static float s_zb_dx0, s_zb_dy0, s_zb_px0, s_zb_py0;
 static bool zb_dentro(float x, float y) { const float dx = x - CX, dy = y - CX; return dx * dx + dy * dy < 196.0f * 196.0f; }
 static void zb_poner_cosa(int i, int q)
 {
@@ -286,12 +291,24 @@ static void zb_empezar(void)
     lv_obj_t *ic = zj_img(26, art_icono(ICO_BURBUJA, 2)); lv_obj_set_pos(ic, CX - 88, 52);
     if (s_zb_marea) zj_img(27, art_icono_espejo(ICO_MAREA, 3));
     s_zb_otra = s_zj_t + 2500u; s_zb_burbuja = s_zj_t + 9000u;
-    zj_texto(s_zb_marea ? "ARRASTRA EL DEDO PARA LLEVARLA. JUNTA PERLAS Y CONCHAS. ¡OJO CON LAS MEDUSAS! MAREA TE AYUDA" : "ARRASTRA EL DEDO PARA LLEVARLA. JUNTA PERLAS Y CONCHAS. ¡OJO CON LAS MEDUSAS!", 4200);
+    zj_texto(s_zb_marea ? "DESLIZA EL DEDO EN CUALQUIER PARTE Y ELLA NADA HACIA DONDE LO MUEVAS. JUNTA PERLAS Y CONCHAS. ¡OJO CON LAS MEDUSAS! MAREA TE AYUDA"
+                        : "DESLIZA EL DEDO EN CUALQUIER PARTE Y ELLA NADA HACIA DONDE LO MUEVAS. JUNTA PERLAS Y CONCHAS. ¡OJO CON LAS MEDUSAS!", 5200);
+    s_zb_empieza = s_zj_trampa ? 0 : (s_zj_txt_hasta | 1u); /* (1.0.30) hasta entonces, todo quieto */
+    s_zb_tenia = false; s_zb_solto = false;
     zd_mano(ICO_MANO_DESLIZA, CX, 200.0f, 5000u);
 }
 static void zb_animar(float dt)
 {
     if (s_zj_fase != 1) return;
+    if (s_zb_empieza) { /* (1.0.30) las instrucciones: todo quieto hasta que se cierran o tocas la pantalla */
+        if (!s_zj_dedo) s_zb_solto = true; /* el toque que cerró la portada no cuenta: hay que soltar y volver a tocar */
+        if ((int32_t)(s_zj_t - s_zb_empieza) < 0 && !(s_zj_dedo && s_zb_solto)) dt = 0;
+        else {
+            if ((int32_t)(s_zj_t - s_zb_empieza) < 0) zj_texto(NULL, 0); /* tocaste: se cierran y empieza */
+            s_zb_empieza = 0;
+            s_zb_otra = s_zj_t + 2500u; s_zb_burbuja = s_zj_t + 9000u;
+        }
+    }
     /* el aire se va acabando */
     if (!s_zb_sube) {
         s_zb_aire -= dt / (s_nino ? 70.0f : 50.0f) * (s_zj_trampa ? 3.0f : 1.0f); /* (en las pruebas se acaba antes) */
@@ -304,7 +321,17 @@ static void zb_animar(float dt)
     else if (s_zj_trampa) {
         float best = 1e9f;
         for (int i = 0; i < ZB_COSAS; i++) if (s_zb_cq[i] >= 0) { const float dx = s_zb_cx[i] - s_zb_x, dy = s_zb_cy[i] - s_zb_y, d = dx * dx + dy * dy; if (d < best) { best = d; tx = s_zb_cx[i]; ty = s_zb_cy[i]; } }
-    } else if (s_zj_dedo) { tx = s_zj_dedo_x; ty = s_zj_dedo_y; zd_mano_fuera(); }
+    } else if (s_zj_dedo && !s_zb_empieza) { /* (1.0.30) se mueve como el dedo, desde donde está ella (no va debajo del dedo) */
+        if (!s_zb_tenia) { s_zb_tenia = true; s_zb_dx0 = s_zj_dedo_x; s_zb_dy0 = s_zj_dedo_y; s_zb_px0 = s_zb_x; s_zb_py0 = s_zb_y; }
+        tx = s_zb_px0 + (s_zj_dedo_x - s_zb_dx0) * 1.4f;
+        ty = s_zb_py0 + (s_zj_dedo_y - s_zb_dy0) * 1.4f;
+        zd_mano_fuera();
+    }
+    if (!s_zj_dedo) s_zb_tenia = false;
+    else if (s_zb_tenia && (fabsf(tx - s_zb_x) > 60.0f || fabsf(ty - s_zb_y) > 60.0f)) { /* si se quedó atrás (un borde), el dedo vuelve a tomarla desde donde está */
+        const float ox = tx - s_zb_x, oy = ty - s_zb_y, od = sqrtf(ox * ox + oy * oy);
+        if (od > 60.0f) { s_zb_px0 = s_zb_x + ox / od * 60.0f - (s_zj_dedo_x - s_zb_dx0) * 1.4f; s_zb_py0 = s_zb_y + oy / od * 60.0f - (s_zj_dedo_y - s_zb_dy0) * 1.4f; }
+    }
     {
         const float dx = tx - s_zb_x, dy = ty - s_zb_y, d = sqrtf(dx * dx + dy * dy), v = (s_zb_sube ? 120.0f : 150.0f) * dt;
         if (d > v) { s_zb_x += dx / d * v; s_zb_y += dy / d * v; s_zb_vx = dx; } else if (!s_zb_sube) { s_zb_x = tx; s_zb_y = ty; }

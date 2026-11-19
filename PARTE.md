@@ -1,4 +1,23 @@
-# PARTE — estado del trabajo (19-nov-2026, 13:45)
+# PARTE — estado del trabajo (19-nov-2026, 17:45)
+
+> **1.0.30 «POCHI SORPRESA» (19-nov 17:45).** (a) Rayas oscuras con lluvia junto a los botones (foto del usuario):
+> posible causa en `ui_inv_fusionar` (1.0.22): LVGL manda un INVALIDATE_AREA de prueba (get_max_row) con
+> `rendering_in_progress`; la fusión lo juntaba con áreas pendientes. Ahora `if (d->rendering_in_progress) return;`.
+> NO reproducido en el simulador (web_main.c ahora tiene modo franjas: sim_perfil copia las franjas a s_fb y
+> sim_franjas_impares cuenta franjas mal alineadas o de más de 466×20; dio 0 con y sin el arreglo). Si siguen: pedir
+> foto/informe. (b) Buceo (ui_isla.inc): control relativo (s_zb_tenia/dx0/px0: ella se mueve como el dedo ×1,4 desde
+> donde está), espera s_zb_empieza hasta que vence el texto o un toque NUEVO (s_zb_solto: el toque de la portada no
+> cuenta); al empezar reinicia s_zb_otra/s_zb_burbuja. (c) isla_toque: buceo solo en la piedra, círculo r26 en (39,165).
+> (d) Pochi (ui_pochi.inc): s_po_tipo PT_COMPLETA/PAPAS/PASEO/TAPITA/SALUDA, elegido en po_empezar (28/20/18/18/16 %,
+> no repite; primera visita o sentida → completa; saluda sin cachorros → pc_solo_uno). po_tras_llegar() reemplaza
+> «po_saludo(); po_hambre();». Visitas sin paseo: PO_INVITA no invita, se queda 14 s y PO_DESPIDE. Fase nueva PO_TAPITA
+> (po_tapita_paso, toque por fondo_cb → po_tapita_toque). Memoria al irse: ULT_COMIO solo si venía a pasear.
+> Pruebas: ui_demo_pochi 120+tipo, 125 tira la tapita; sim_po_estado(); pruebas/pochi_visitas.js nueva; isla.js con
+> buceo_instrucciones/buceo_deslizar y toque lejos de la piedra. Todo verde (test_core 1224, paneles 18, regresión
+> regrabada: cambian version y mas-ajustes por el número, redibujo, franjas 1260/0, dos/isla/olor, soak 180 días).
+> **Propuesta para otra versión (el usuario la planteó, no hecha):** juego del arcoíris: cuando hay arcoíris, ella se
+> desliza por él esquivando cosas (nubes, pájaros) y juntando estrellitas; se abre tocando el arcoíris.
+
 
 > **1.0.29 «BATERIA QUE DURA» (19-nov 13:45).** Informe #5 de orbepet-informes (1.0.27, mandado desde el orbe): batería
 > 58 % → 14 % en 75 min = 35 %/h, con la pantalla encendida todo el rato a brillo 100, 15 cuadros/s, CPU 240 MHz, sin
@@ -56,7 +75,7 @@ Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
 Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
-sin publicar): **1.0.29** («BATERIA QUE DURA»), que trae la 1.0.27 y la 1.0.28. Partida **versión 42** (no cambia desde el 104).
+sin publicar): **1.0.30** («POCHI SORPRESA»), que trae de la 1.0.27 a la 1.0.29. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
@@ -609,7 +628,7 @@ curl -sL -o bin.tgz  https://github.com/WebAssembly/binaryen/releases/download/v
 ```
 Pruebas:
 ```
-cd build && cmake .. && make test_core && ./test_core          -> 1216/1216 comprobaciones OK
+cd build && cmake .. && make test_core && ./test_core          -> 1224/1224 comprobaciones OK
 export WASI_SDK=/home/claude/sdk/wasi-sdk-25.0-x86_64-linux LVGL_DIR=/home/claude/lvgl BINARYEN=/home/claude/sdk/binaryen-version_123
 sh sim/web/build.sh
 node sim/web/pruebas/paneles.js          -> 18 problemas (la base de siempre)
@@ -618,6 +637,7 @@ node sim/web/pruebas/soak.js             -> soak: 180 días sin caerse   (~10 mi
 node sim/web/pruebas/fondos_franjas.js   -> 1260 casos, 0 distintos
 node sim/web/pruebas/inicio.js | libro.js | libro_flujo.js | final.js
 node sim/web/pruebas/dos.js | isla.js | olor.js   -> juegos de a dos / de la isla / el olor: todo bien
+node sim/web/pruebas/pochi_visitas.js            -> visitas de Pochi: todo bien (los 5 tipos de visita)
 node sim/web/pruebas/redibujo.js [semilla]        -> redibujo: todo bien (juntar áreas no deja restos)
 gcc -fsyntax-only -std=gnu17 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-sign-compare \
   -DLV_CONF_INCLUDE_SIMPLE -Isim/preview -I/home/claude/lvgl -Icore -Ifirmware/main firmware/main/ui.c

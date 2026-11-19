@@ -62,6 +62,12 @@ const DIR = process.argv[2] || '/tmp/isla';
     else console.log(`${nom} sin tocar: terminó en ${(t * 33 / 1000).toFixed(0)} s con ${Math.floor((x.sim_zd_estado() % 1000) / 10)} puntos`);
     s.tap(233 + 29, 417); s.frames(30);
   }
+  // (1.0.30) buceo: quieto mientras se leen las instrucciones; luego se maneja deslizando en cualquier parte
+  x.sim_zd_abrir(5); s.frames(20); s.tap(233, 233); s.frames(45); s.png(`${DIR}/buceo_instrucciones.png`);
+  x.sim_touch(330, 380, 1); s.frames(5, 33);
+  for (let k = 0; k <= 30; k++) { x.sim_touch(330 - k * 3, 380 - k * 3, 1); s.frames(1, 33); }
+  s.frames(20, 33); s.png(`${DIR}/buceo_deslizar.png`); x.sim_touch(240, 290, 0);
+  s.tap(233, 417); s.frames(30); s.tap(233, 417); s.frames(30);
   // con el dedo: arrastrar la luz hacia el muelle
   x.sim_zd_abrir(4); s.frames(20); s.tap(233, 233); s.frames(30);
   x.sim_touch(300, 300, 1); for (let k = 0; k < 400; k++) { x.sim_touch(300, 300, 1); s.frames(1, 33); } x.sim_touch(300, 300, 0);
@@ -75,7 +81,8 @@ const DIR = process.argv[2] || '/tmp/isla';
   s.tap(392, 130); s.frames(20);
   if (x.sim_zd_estado() !== 0) mal('tocar el faro no abrió su juego (' + x.sim_zd_estado() + ')'); else console.log('tocar el faro: abre el juego');
   s.tap(233, 417); s.frames(30); calma();
-  s.tap(44, 140); s.frames(20);
+  s.tap(60, 110); s.frames(20); if (x.sim_zd_estado() !== -1) { mal('tocar el agua lejos de la piedra abrió el buceo'); s.tap(233, 417); s.frames(30); }
+  s.tap(39, 165); s.frames(20);
   if (x.sim_zd_estado() !== 0) mal('tocar la piedra no abrió el buceo (' + x.sim_zd_estado() + ')'); else console.log('tocar la piedra: abre el buceo');
   s.png(`${DIR}/buceo_por_piedra.png`);
   s.tap(233, 417); s.frames(30);

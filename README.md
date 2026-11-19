@@ -807,6 +807,25 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.30 — Pochi sorpresa
+
+- **Pochi ya no viene siempre a lo mismo.** Cada visita trae algo distinto (y nunca dos iguales seguidas): la de
+  siempre (papas y paseo), solo por papas, solo a invitarte a pasear, a jugar con una **tapita** que tú le tiras, o
+  solo a saludar y presentarte a alguno de sus hijos. La primera vez, y si la otra vez quedó sentida, viene a la de
+  siempre. Solo queda sentida por no acompañarla si esa vez venía a pasear.
+- **La tapita:** Pochi la deja a tus pies; tocas donde quieras que caiga (al estanque no: cae en la orilla), sale
+  volando, Pochi corre, la trae en la boca y pide otra. Tres veces y se cansa. Si no la tiras, te la pide dos veces y
+  al final la tira ella.
+- **Buceo más cómodo:** ya no hay que poner el dedo encima de ella (la tapaba). Se desliza el dedo en cualquier parte
+  de la pantalla y ella nada hacia donde lo mueves, desde donde está. Y el juego empieza recién cuando se cierran las
+  instrucciones (o al tocar la pantalla): antes las medusas ya andaban mientras leías.
+- **Entrar al buceo desde la isla:** ahora solo tocando la piedra de la izquierda (antes servía casi toda el agua de ese
+  lado y se abría sin querer).
+- **Rayas oscuras con lluvia (posible arreglo):** al juntar las zonas que se redibujan, se juntaba también una consulta
+  interna que LVGL hace mientras dibuja; eso puede hacer que dibuje más filas de las que caben y deje rayas. Ya no se
+  juntan mientras dibuja. En el simulador no se pudieron reproducir las rayas, así que no está confirmado: si vuelven a
+  salir, mandar foto o informe.
+
 ## Versión 1.0.29 — la batería vuelve a durar
 
 - **La pantalla ya no se queda encendida sola.** Cada aviso del juego (te pide algo, llega una visita, el zorro, un

@@ -71,11 +71,31 @@ static uint8_t s_baliza_out[PET_BALIZA_BYTES], s_baliza_in[PET_BALIZA_BYTES];
 static uint32_t tick_cb(void) { return s_ms; }
 
 static uint64_t s_flush_px;
+static bool s_perfil_on;
+static uint32_t s_franjas_impares; /* (1.0.30) franjas enviadas que no empiezan en par o no terminan en impar */ /* (1.0.30) «como la placa»: franjas RGB565 + redondeo a pares; lo enviado se copia al búfer entero */
 static void flush_cb(lv_display_t *d, const lv_area_t *a, uint8_t *px)
 {
-    (void)px;
     s_flush_px += (uint64_t)(a->x2 - a->x1 + 1) * (uint64_t)(a->y2 - a->y1 + 1);
+    if (s_perfil_on && ((a->x1 | a->y1) & 1 || !((a->x2 & a->y2) & 1))) s_franjas_impares++; /* la pantalla de la placa no las acepta */
+    if (s_perfil_on && (uint32_t)(a->x2 - a->x1 + 1) * (uint32_t)(a->y2 - a->y1 + 1) > 466u * 20u) s_franjas_impares += 1000; /* más grande que el búfer: se salió */
+    if (s_perfil_on && px) { /* la franja que la placa mandaría por el SPI: se copia para poder compararla con un redibujo entero */
+        const uint16_t *q = (const uint16_t *)px;
+        const int w = a->x2 - a->x1 + 1;
+        for (int y = a->y1; y <= a->y2; y++)
+            for (int x = a->x1; x <= a->x2; x++) {
+                const uint16_t c = q[(y - a->y1) * w + (x - a->x1)];
+                const uint32_t r = (c >> 11) & 31, g = (c >> 5) & 63, b = c & 31;
+                if (x >= 0 && x < 466 && y >= 0 && y < 466) s_fb[y * 466 + x] = 0xFF000000u | (r << 19 | (r >> 2) << 16) | (g << 10 | (g >> 4) << 8) | (b << 3 | b >> 2);
+            }
+    }
     lv_display_flush_ready(d);
+}
+static void redondeo_placa(lv_event_t *e) /* (1.0.30) el mismo redondeo del BSP de la placa (x1, y1 pares; x2, y2 impares) */
+{
+    if (!s_perfil_on) return;
+    lv_area_t *a = (lv_area_t *)lv_event_get_param(e);
+    a->x1 = (a->x1 >> 1) << 1; a->y1 = (a->y1 >> 1) << 1;
+    a->x2 = ((a->x2 >> 1) << 1) + 1; a->y2 = ((a->y2 >> 1) << 1) + 1;
 }
 
 static void touch_cb(lv_indev_t *i, lv_indev_data_t *d)
@@ -397,6 +417,7 @@ EXPORT(sim_init) int sim_init(uint32_t ahora, uint32_t seed, int cargada)
     lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_XRGB8888);
     lv_display_set_buffers(s_disp, s_fb, NULL, sizeof s_fb, LV_DISPLAY_RENDER_MODE_DIRECT);
     lv_display_set_flush_cb(s_disp, flush_cb);
+    lv_display_add_event_cb(s_disp, redondeo_placa, LV_EVENT_INVALIDATE_AREA, NULL); /* (1.0.30) antes de juntar, como en la placa */
     lv_display_add_event_cb(s_disp, ui_inv_fusionar, LV_EVENT_INVALIDATE_AREA, NULL); /* (1.0.22) igual que en la placa */
     lv_indev_t *in = lv_indev_create();
     lv_indev_set_type(in, LV_INDEV_TYPE_POINTER);
@@ -714,11 +735,13 @@ EXPORT(sim_frame) int sim_frame(uint32_t dt_ms)
 }
 
 EXPORT(sim_fb) uint32_t *sim_fb(void) { return s_fb; }
+EXPORT(sim_franjas_impares) int sim_franjas_impares(void) { int n = (int)s_franjas_impares; s_franjas_impares = 0; return n; }
 /* (v89) modo "como la placa" para medir: RGB565 en franjas de 20 líneas (como el BSP), en vez del búfer entero de 32 bits.
  * Sirve para comparar cuánto cuesta dibujar cada pantalla (las franjas multiplican lo que cuesta preparar sombras, giros y escalas). */
 static uint16_t s_tira[466 * 20];
 EXPORT(sim_perfil) void sim_perfil(int on)
 {
+    s_perfil_on = on != 0;
     if (on) { lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_RGB565); lv_display_set_buffers(s_disp, s_tira, NULL, sizeof s_tira, LV_DISPLAY_RENDER_MODE_PARTIAL); }
     else { lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_XRGB8888); lv_display_set_buffers(s_disp, s_fb, NULL, sizeof s_fb, LV_DISPLAY_RENDER_MODE_DIRECT); }
     lv_obj_invalidate(lv_screen_active());
@@ -1053,6 +1076,7 @@ EXPORT(sim_ano_nuevo) void sim_ano_nuevo(void) /* el 31 de diciembre, un minuto 
 void ui_demo_dragon_ausente(int v);
 EXPORT(sim_dragon_absent) void sim_dragon_absent(int v) { ui_demo_dragon_ausente(v); }
 EXPORT(sim_pochi) void sim_pochi(int f) { ui_demo_pochi(f); }
+EXPORT(sim_po_estado) int sim_po_estado(void) { extern int ui_test_po_estado(void); return ui_test_po_estado(); }
 /* (v39) las novedades: para probarlas rápido */
 void ui_demo_zona(int z); void ui_demo_zona_juego(int jg); int ui_zona(void); void ui_demo_ceremonia(int cual, int pag);
 static void v39_jugando(void) { s_pet.dormida = 0; if (s_pet.etapa == STAGE_HUEVO) s_pet.etapa = STAGE_CRIA; s_pet.ultima_interaccion = (uint32_t)s_reloj; }

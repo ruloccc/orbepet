@@ -10,7 +10,14 @@
  * A veces viene con uno de sus cachorros, que hace lo suyo. (Vive solo en la pantalla: la mascota recibe alegría y cariño.)
  * ==================================================================== */
 typedef enum { PO_NADA = 0, PO_LLEGA, PO_HAMBRE, PO_COME, PO_INVITA, PO_PASEO, PO_DESPIDE, PO_SE_VA, PO_CORRE, PO_BARRO, PO_CHARLA,
-               PO_ACURRUCA, PO_CONSUELA, PO_MOJADA, PO_OFENDIDA, PO_MANIA, PO_ANIMAL } po_fase_t;
+               PO_ACURRUCA, PO_CONSUELA, PO_MOJADA, PO_OFENDIDA, PO_MANIA, PO_ANIMAL, PO_TAPITA } po_fase_t;
+/* (1.0.30) no todas las visitas son iguales: a veces viene por papas y a pasear (la de siempre), a veces solo por papas,
+ * a veces solo a invitarte a pasear, a veces a jugar con una tapita que tú le tiras, y a veces solo a saludar y
+ * presentarte a sus cachorros. Usa lo que ya había; solo cambia qué partes trae cada visita. */
+enum { PT_COMPLETA = 0, PT_PAPAS, PT_PASEO, PT_TAPITA, PT_SALUDA, PT_N };
+static int s_po_tipo, s_po_tipo_ant = -1, s_po_tipo_forzar = -1;
+static int s_pc_n; /* (más abajo: cuántos cachorros vinieron) */
+static bool po_tipo_pasea(void) { return s_po_tipo == PT_COMPLETA || s_po_tipo == PT_PASEO; }
 /* (fw 102) trucos que se ponen encima de cualquier fase (el tiempo de la fase espera): panza arriba, mareada, rascarse el poto */
 enum { TR_NADA = 0, TR_PANZA, TR_MAREO, TR_RASCA, TR_LAME }; /* (TR_LAME: le lame la cabeza a un cachorro) */
 enum { MAN_RAMITA = 0, MAN_LUZ, MAN_CONDOR, MAN_AGUA };
@@ -24,6 +31,7 @@ static int s_po_mania_try = -1;
 static bool s_pa_on, s_pa_hecha; /* el encuentro con un animal del lugar (más abajo) */
 static void po_cosa(int ico, int esc, float x, float y);
 static void pc_empezar(void);
+static void pc_solo_uno(int k);
 static void pc_esconder(void);
 static void po_toque(void);
 static int s_po_charla_k = -1; /* (v39) la charla de esta visita */
@@ -253,6 +261,21 @@ static void po_empezar(void)
     s_pa_on = false; s_pa_hecha = false;
     po_cosa(-1, 0, 0, 0);
     pc_empezar();
+    { /* (1.0.30) qué trae esta visita (la primera vez y si quedó sentida, la de siempre; nunca dos iguales seguidas) */
+        int tp = PT_COMPLETA;
+        const bool primera = s_pet && pet_pochi_visits(s_pet) == 0;
+        const bool sentida = s_po_ult == PET_POCHI_ULT_COMIO || s_po_ult == PET_POCHI_ULT_HOYNO;
+        if (s_po_tipo_forzar >= 0) tp = s_po_tipo_forzar;
+        else if (!primera && !sentida && !s_po_dormida_visita)
+            for (int intento = 0; intento < 3; intento++) {
+                const uint32_t r = azar() % 100u;
+                tp = r < 28 ? PT_COMPLETA : r < 48 ? PT_PAPAS : r < 66 ? PT_PASEO : r < 84 ? PT_TAPITA : PT_SALUDA;
+                if (tp != s_po_tipo_ant) break;
+            }
+        if (tp == PT_SALUDA && s_pc_n == 0) pc_solo_uno((int)(azar() % PET_POCHI_CACHORROS)); /* a saludar viene con uno de sus hijos, por lo menos */
+        s_po_tipo = tp; s_po_tipo_forzar = -1;
+        if (!s_po_dormida_visita) s_po_tipo_ant = tp;
+    }
     ocultar(s_po_img, false); ocultar(s_po_plato, true);
     if (!s_po_dormida_visita) accion(UI_ACCION_POCHI, 0); /* (durmiendo no cuenta: se acurruca y nada más) */
 }
@@ -535,6 +558,31 @@ static void po_saludo(void)
     po_saludo_cachorro();
 }
 static void po_hambre(void) { s_po_fase = PO_HAMBRE; s_po_t0 = s_ms; s_po_pregunta = 0; s_po_espejo = s_po_x > s_mascota.x; }
+static void po_tapita_empezar(void);
+/* (1.0.30) ya llegó (y saludó, consoló o se sacudió): lo que trae esta visita */
+static void po_tras_llegar(void)
+{
+    if (s_po_tipo == PT_COMPLETA || s_po_tipo == PT_PAPAS) { po_saludo(); po_hambre(); return; }
+    s_po_comio = true; /* (sin papas: igual sus cachorros tienen su momento) */
+    s_po_espejo = s_po_x > s_mascota.x; s_po_t0 = s_ms; s_po_pregunta = 0;
+    accion(UI_ACCION_SONAR, SND_POCHI_LADRA);
+    if (s_po_tipo == PT_PASEO) {
+        po_di("¡HOLA! ¡HOY NO VENGO POR PAPAS: VENGO A INVITARTE A PASEAR!", ICO_PATITA, 3800);
+        po_responde("¡HOLA, POCHI! ¡QUÉ ENTRETENIDO!", "¡HOLA, POCHI!", 4000);
+        po_saludo_cachorro();
+        s_po_fase = PO_INVITA; s_po_t0 = s_ms + 2500u; /* (un poco más de tiempo antes de preguntar) */
+    } else if (s_po_tipo == PT_TAPITA) {
+        po_di("¡HOLA! ¡MIRA LO QUE ENCONTRÉ: UNA TAPITA! ¿ME LA TIRAS?", ICO_CHAPITA, 3600);
+        po_responde("¡HOLA, POCHI! ¡SÍ, JUGUEMOS!", "¡HOLA, POCHI!", 3800);
+        po_saludo_cachorro();
+        po_tapita_empezar();
+    } else { /* PT_SALUDA: viene, saluda y te presenta a sus cachorros */
+        po_di("¡HOLA! ¡SOLO PASABA A SALUDARTE!", ICO_CORAZON, 3000);
+        po_responde("¡HOLA, POCHI! ¡QUÉ LINDA SORPRESA!", "¡HOLA, POCHI!", 3200);
+        po_saludo_cachorro();
+        s_po_fase = PO_INVITA;
+    }
+}
 /* al llegar junto a ella: ¿qué le pasa? (triste o enferma: consuela; lluvia: llega mojada; la otra vez no la acompañaste: ofendida) */
 static void po_llega_fin(void)
 {
@@ -543,7 +591,7 @@ static void po_llega_fin(void)
     if (s_pet && (m == MOOD_TRISTE || m == MOOD_ENFERMA || s_pet->enferma)) { s_po_fase = PO_CONSUELA; return; }
     if (s_pet && pet_weather(s_pet) == CLIMA_LLUVIA && po_hay_pasto()) { s_po_fase = PO_MOJADA; return; }
     if (s_po_ult == PET_POCHI_ULT_COMIO || s_po_ult == PET_POCHI_ULT_HOYNO) { s_po_fase = PO_OFENDIDA; return; }
-    po_saludo(); po_hambre();
+    po_tras_llegar();
 }
 
 /* ---- los cachorros de esta visita (uno, dos o los cuatro): siguen a su mamá, cada uno tiene su momento, juegan entre ellos ----
@@ -648,6 +696,23 @@ static void pc_empezar(void)
         c->modo = PC_SIGUE; c->hecho = false; c->chequeo = s_ms + (uint32_t)i * 300u; c->paso = 0;
         c->lengua_hasta = 0; c->lengua_prox = s_ms + 4000u + azar() % 12000u;
     }
+}
+static void pc_solo_uno(int k) /* (1.0.30) viene con este cachorro (para la visita de saludo, si no venía ninguno) */
+{
+    s_pc_n = 1;
+    cach_t *c = &s_pc[0];
+    c->k = k;
+    if (!c->img) {
+        c->img = lv_image_create(s_mundo);
+        lv_obj_add_flag(c->img, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_ext_click_area(c->img, 10);
+        lv_obj_add_event_cb(c->img, pc_toque_cb, LV_EVENT_CLICKED, (void *)(intptr_t)0);
+        lv_image_set_pivot(c->img, 6 * PC_ESC, 6 * PC_ESC);
+    }
+    c->ult_ico = -1; c->ult_rot = 0; lv_image_set_rotation(c->img, 0);
+    pc_puesto(0, &c->x, &c->y);
+    c->modo = PC_SIGUE; c->hecho = false; c->chequeo = s_ms; c->paso = 0;
+    c->lengua_hasta = 0; c->lengua_prox = s_ms + 4000u + azar() % 12000u;
 }
 static void pc_reubicar(void) /* (cambió la zona sin ellos: aparecen junto a su mamá) */
 {
@@ -1336,6 +1401,106 @@ static void po_saludo_cachorro(void)
         po_di(t, ICO_CORAZON, 3200);
     } else for (int i = 0; i < s_pc_n; i++) po_di(pet_pochi_pup_met(s_pet, s_pc[i].k) ? HOY[s_pc[i].k] : PRES[s_pc[i].k], ICO_CORAZON, 3600);
 }
+/* ---- (1.0.30) la tapita: Pochi la deja a sus pies; tocas donde quieras que caiga, sale volando, ella corre, la trae
+ * en la boca y te la devuelve. Tres veces. Si no la tiras, te la vuelve a pedir y al final la tira ella. ---- */
+static int s_po_tp, s_po_tp_n, s_po_tp_aviso;
+static uint32_t s_po_tp_t0;
+static float s_po_tp_ax, s_po_tp_ay, s_po_tp_bx, s_po_tp_by;
+static void po_tapita_empezar(void)
+{
+    s_po_fase = PO_TAPITA; s_po_t0 = s_ms; s_po_tp = 0; s_po_tp_n = 0; s_po_tp_aviso = 0; s_po_tp_t0 = s_ms;
+}
+static void po_tapita_tirar(float x, float y)
+{
+    limitar(&x, &y);
+    if (hypotf(x - s_po_cosa_x, y - s_po_cosa_y) < 50.0f) x += x < CX ? 70.0f : -70.0f; /* que vuele un poquito al menos */
+    limitar(&x, &y);
+    if (!s_interior && s_escena == ESC_PRADO) { /* al estanque no: cae en la orilla (Pochi no se mete al agua) */
+        const float ex = (x - 106.0f) / 72.0f, ey = (y - 300.0f) / 42.0f, d = sqrtf(ex * ex + ey * ey);
+        if (d < 1.25f) { x = 106.0f + 72.0f * 1.4f; limitar(&x, &y); } /* (a la derecha del estanque: hacia abajo no se puede caminar) */
+    }
+    if (!s_interior && s_escena == ESC_LAGO && y < (float)terreno_ymin(x) + 6.0f) y = (float)terreno_ymin(x) + 10.0f;
+    s_po_tp_ax = s_po_cosa_x; s_po_tp_ay = s_po_cosa_y; s_po_tp_bx = x; s_po_tp_by = y;
+    s_po_tp = 2; s_po_tp_t0 = s_ms;
+    accion(UI_ACCION_SONAR, SND_POCHI_FELIZ);
+}
+static bool po_tapita_toque(int x, int y) /* (fondo_cb) */
+{
+    if (s_po_fase != PO_TAPITA || s_po_tp != 1 || s_po_truco || po_en_transito()) return false;
+    po_tapita_tirar((float)x, (float)y + 10.0f);
+    return true;
+}
+static void po_tapita_paso(float tx, float ty, art_icono_t *ico, float *oy)
+{
+    const uint32_t t = s_ms - s_po_tp_t0;
+    const float suelo_x = (s_po_x + s_mascota.x) * 0.5f, suelo_y = s_mascota.y + 16.0f;
+    switch (s_po_tp) {
+    case 0: /* se acerca y la deja en el suelo, entre las dos */
+        po_mover(tx, ty, 3.0f);
+        *ico = s_po_corre ? ((s_ms / 300) % 2 ? ICO_POCHI : ICO_POCHI_B) : ICO_POCHI_SENT;
+        if (!s_po_corre) po_cosa(ICO_CHAPITA, 2, s_po_x + (s_po_espejo ? -20.0f : 20.0f), s_po_y - 20.0f);
+        if (!s_po_corre && t > 2600) {
+            po_cosa(ICO_CHAPITA, 2, suelo_x, suelo_y);
+            po_di(s_nino ? "¡TÍRAMELA!" : "¡TÍRAMELA! TOCA DONDE QUIERAS QUE CAIGA", ICO_CHAPITA, 3200);
+            s_po_tp = 1; s_po_tp_t0 = s_ms;
+        }
+        break;
+    case 1: /* esperando, moviendo la cola, mirando la tapita */
+        po_cosa(ICO_CHAPITA, 2, s_po_cosa_x, s_po_cosa_y);
+        s_po_espejo = s_po_cosa_x < s_po_x;
+        *ico = (s_ms / 200) % 2 ? ICO_POCHI : ICO_POCHI_B;
+        *oy = -fabsf(sinf((float)s_ms / 160.0f)) * 3;
+        if (t > 12000) {
+            s_po_tp_t0 = s_ms;
+            if (++s_po_tp_aviso < 3) { po_di(s_po_tp_aviso == 1 ? "¡TÍRALA, TÍRALA! ¡TOCA EN CUALQUIER PARTE!" : "¿NO ME LA TIRAS? ¡GUAU!", ICO_CHAPITA, 2800); accion(UI_ACCION_SONAR, SND_POCHI_PIDE); }
+            else { /* la tira ella */
+                s_po_tp_aviso = 0;
+                po_responde("¡AHÍ VA, POCHI!", "¡AHÍ VA!", 200);
+                po_tapita_tirar(s_mascota.x + (s_mascota.x < CX ? 150.0f : -150.0f), s_mascota.y + (float)((int)(azar() % 80) - 40));
+            }
+        }
+        break;
+    case 2: { /* vuela en arco; ella ya sale corriendo */
+        float f = (float)t / 650.0f;
+        if (f > 1.0f) f = 1.0f;
+        const float x = s_po_tp_ax + (s_po_tp_bx - s_po_tp_ax) * f, y = s_po_tp_ay + (s_po_tp_by - s_po_tp_ay) * f - sinf(f * 3.14159f) * 90.0f;
+        po_cosa(ICO_CHAPITA, 2, x, y);
+        if (t > 250) po_mover(s_po_tp_bx, s_po_tp_by, 4.6f);
+        *ico = s_po_corre ? ((s_ms / 110) % 2 ? ICO_POCHI_C : ICO_POCHI_D) : ICO_POCHI;
+        if (f >= 1.0f) { s_po_tp = 3; s_po_tp_t0 = s_ms; for (int k = 0; k < 3; k++) chispa((int)s_po_tp_bx - 10 + k * 10, (int)s_po_tp_by - 4, 0xFFF3C8, (float)(k - 1) * 0.6f, -0.8f); }
+        break;
+    }
+    case 3: /* corre a buscarla */
+        po_mover(s_po_tp_bx + (s_po_x < s_po_tp_bx ? -16.0f : 16.0f), s_po_tp_by, 4.6f);
+        *ico = s_po_corre ? ((s_ms / 110) % 2 ? ICO_POCHI_C : ICO_POCHI_D) : ICO_POCHI_COME;
+        if (!s_po_corre) { s_po_tp = 4; s_po_tp_t0 = s_ms; accion(UI_ACCION_SONAR, SND_POCHI_LADRA); }
+        break;
+    case 4: /* la toma con la boca y te la trae */
+        if (t > 350) po_mover(tx, ty, 3.6f);
+        po_cosa(ICO_CHAPITA, 2, s_po_x + (s_po_espejo ? -22.0f : 22.0f), s_po_y - 22.0f);
+        *ico = s_po_corre ? ((s_ms / 130) % 2 ? ICO_POCHI_C : ICO_POCHI_D) : ICO_POCHI_SENT;
+        if (t > 350 && !s_po_corre) {
+            s_po_tp_n++;
+            flotar(ICO_CORAZON, NULL, 0, (int)s_po_x, (int)s_po_y - 70, 0);
+            if (s_po_tp_n >= 3) {
+                po_cosa(-1, 0, 0, 0);
+                po_di("¡QUÉ RICO JUGAR CONTIGO! ¡ME CANSÉ!", ICO_CORAZON, 3200);
+                po_responde("¡ERES MUY RÁPIDA, POCHI!", "¡QUÉ ENTRETENIDO, POCHI!", 3400);
+                accion(UI_ACCION_POCHI, PET_POCHI_F_MANIA); /* (jugaron: diversión y alegría) */
+                accion(UI_ACCION_SONAR, SND_POCHI_FELIZ);
+                s_po_fase = PO_INVITA; s_po_t0 = s_ms; s_po_pregunta = 0; /* (se queda un ratito y se despide) */
+            } else {
+                static const char *const OTRA[2] = {"¡OTRA, OTRA!", "¡UNA MÁS! ¡MÁS LEJOS!"};
+                po_cosa(ICO_CHAPITA, 2, suelo_x, suelo_y);
+                po_di(OTRA[s_po_tp_n - 1], ICO_CHAPITA, 2400);
+                accion(UI_ACCION_SONAR, SND_POCHI_FELIZ);
+                s_po_tp = 1; s_po_tp_t0 = s_ms; s_po_tp_aviso = 0;
+            }
+        }
+        break;
+    }
+}
+int ui_test_po_estado(void) { return s_po_fase * 1000 + s_po_tipo * 100 + s_po_tp * 10 + s_po_tp_n; } /* (1.0.30, pruebas) */
 static void po_acurruca_empezar(void)
 {
     s_po_dormida_visita = true;
@@ -1719,6 +1884,12 @@ static void animar_pochi(void)
             if (ck >= 0) { s_po_charla_k = ck; s_po_fase = PO_CHARLA; s_po_t0 = s_ms; s_po_hablo = 0; s_po_espejo = s_po_x > s_mascota.x; break; }
             s_po_charla_k = 99; /* (no hay charla: no se vuelve a preguntar) */
         }
+        if (!po_tipo_pasea()) { /* (1.0.30) esta vez no viene a pasear: se queda un ratito con ella (y sus cachorros juegan) y se despide */
+            po_mover(tx + (float)(int)(sinf((float)s_ms / 700.0f) * 10), ty, 1.6f);
+            ico = s_po_corre ? ((s_ms / 300) % 2 ? ICO_POCHI : ICO_POCHI_B) : ((s_ms / 900) % 3 ? ICO_POCHI_SENT : ICO_POCHI);
+            if (t > 14000) { s_po_fase = PO_DESPIDE; s_po_t0 = s_ms; s_po_hablo = 0; }
+            break;
+        }
         if (!s_po_tilo_ladro && s_pet && pet_pochi_knows_name(s_pet) && s_po_charla_k != PET_POCHI_NOMBRE && s_po_charla_k != -1 && (s_escena == ESC_PRADO || s_escena == ESC_LAGO) && t > 1500) {
             s_po_tilo_ladro = true; /* (v39) desde que sabe el nombre: lo ladra mirando hacia la isla */
             s_po_espejo = false;
@@ -1814,7 +1985,8 @@ static void animar_pochi(void)
                 po_di(po_buf("¡%s, A CASA! ...¿NO QUIERES IRTE? ¡TE LLEVO YO, PUES!", PC_NOMBRE[k]), ICO_CORAZON, 5200);
             } else po_di(s_pc_n >= 2 ? "¡VAMOS, NIÑOS! ¡A CASA, QUE SE HACE TARDE!" : (s_pc_n == 1 ? po_buf("VAMOS, %s... ¡A CASA CON TUS HERMANITOS!", PC_NOMBRE[s_pc[0].k]) : PO_DESP[s_po_desp_i]), ICO_CORAZON, 5200);
         }
-        if (t > 10200 && s_po_hablo == 2) { s_po_hablo = 3; po_di("¡GRACIAS POR PASEAR CONMIGO!", ICO_POCHI, 3600); po_responde("¡ADIÓS, POCHI! ¡VUELVE PRONTO!", "¡QUÉ LINDO PASEO! ¡HASTA LUEGO, POCHI!", 3800); for (int k = 0; k < 3; k++) flotar(ICO_CORAZON, NULL, 0, (int)s_po_x - 20 + k * 20, (int)s_po_y - 70 - k * 6, (uint32_t)k * 250); accion(UI_ACCION_POCHI, 3); }
+        if (t > 10200 && s_po_hablo == 2) { s_po_hablo = 3; po_di(s_po_paseo_ok ? "¡GRACIAS POR PASEAR CONMIGO!" : (s_po_tipo == PT_TAPITA ? "¡GRACIAS POR JUGAR CONMIGO!" : "¡GRACIAS POR ESTE RATITO!"), ICO_POCHI, 3600);
+            po_responde("¡ADIÓS, POCHI! ¡VUELVE PRONTO!", s_po_paseo_ok ? "¡QUÉ LINDO PASEO! ¡HASTA LUEGO, POCHI!" : "¡QUÉ LINDA VISITA! ¡HASTA LUEGO, POCHI!", 3800); for (int k = 0; k < 3; k++) flotar(ICO_CORAZON, NULL, 0, (int)s_po_x - 20 + k * 20, (int)s_po_y - 70 - k * 6, (uint32_t)k * 250); accion(UI_ACCION_POCHI, 3); }
         if (t > 14400) { s_po_fase = PO_SE_VA; s_po_t0 = s_ms; s_po_lado = s_po_x < CX ? -1 : 1; }
         break;
     case PO_SE_VA: { /* corre hacia su casa */
@@ -1823,7 +1995,8 @@ static void animar_pochi(void)
         ico = (s_ms / 110) % 2 ? ICO_POCHI_C : ICO_POCHI_D;
         if (fabsf(s_po_x - meta) < 6) {
             if (!s_po_dormida_visita) /* (fw 102) se acuerda de cómo terminó: la próxima vez saluda distinto */
-                accion(UI_ACCION_POCHI, PET_POCHI_F_FIN + (s_po_paseo_ok ? PET_POCHI_ULT_PASEO : (s_po_comio ? PET_POCHI_ULT_COMIO : (s_po_hoyno ? PET_POCHI_ULT_HOYNO : PET_POCHI_ULT_NADA))));
+                accion(UI_ACCION_POCHI, PET_POCHI_F_FIN + (s_po_paseo_ok ? PET_POCHI_ULT_PASEO : (s_po_hoyno ? PET_POCHI_ULT_HOYNO : (s_po_comio && po_tipo_pasea() ? PET_POCHI_ULT_COMIO : PET_POCHI_ULT_NADA))));
+                /* (1.0.30: solo queda sentida por no acompañarla si esta vez venía a pasear) */
             s_po_dormida_visita = false; s_po_truco = TR_NADA;
             po_cosa(-1, 0, 0, 0); if (s_po_luz) ocultar(s_po_luz, true); pc_esconder();
             s_po_fase = PO_NADA; s_po_barro_pasos = 0; ocultar(s_po_img, true); ocultar(s_po_plato, true);
@@ -1869,7 +2042,7 @@ static void animar_pochi(void)
             po_responde("GRACIAS, POCHI... YA ME SIENTO UN POQUITO MEJOR", "¡AY, POCHI! ¡QUÉ CARIÑOSA ERES!", 2400);
         }
         if (t > 2600 && t < 6000 && s_ms % 700 < TICK_MS) flotar(ICO_CORAZON, NULL, 0, (int)s_mascota.x, (int)s_mascota.y - 70, 0);
-        if (t > 8500) { po_saludo(); po_hambre(); }
+        if (t > 8500) po_tras_llegar();
         break;
     }
     case PO_MOJADA: /* (fw 102) con lluvia: llega mojada y se sacude encima */
@@ -1886,7 +2059,7 @@ static void animar_pochi(void)
                 for (int k = 0; k < 3; k++) flotar(ICO_GOTA, NULL, 0, (int)s_mascota.x - 20 + k * 20, (int)s_mascota.y - 60, (uint32_t)k * 200);
             }
         }
-        if (t > 5600) { po_saludo(); po_hambre(); }
+        if (t > 5600) po_tras_llegar();
         break;
     case PO_OFENDIDA: /* (fw 102) la otra vez no la acompañaste (o no le diste papas): le da la espalda un rato; un cariño se lo quita */
         ico = ICO_POCHI_SENT;
@@ -1908,6 +2081,7 @@ static void animar_pochi(void)
         if (t > 8800) po_hambre();
         break;
     case PO_MANIA: po_mania_paso(t, &ico, &oy); break;
+    case PO_TAPITA: po_tapita_paso(tx, ty, &ico, &oy); break;
     case PO_ANIMAL: pa_paso(t, &ico, &oy, &rot); break;
     default: break;
     }
@@ -1943,7 +2117,13 @@ void ui_demo_pochi(int f)
     /* (fw 102) 10+k: viene con el cachorro k (ya comió: le toca su momento); 20 se rasca, 21 panza arriba, 22 mareada;
      * 30+m: la manía m (0 ramita, 1 luciérnaga, 2 cóndor, 3 agua); 40 consuela, 41 mojada, 42 ofendida, 43 acurrucada (ella dormida) */
     if (f == 43) { if (s_po_fase != PO_NADA) { s_po_fase = PO_NADA; ocultar(s_po_img, true); } po_acurruca_empezar(); return; }
-    if (s_po_fase == PO_NADA) { s_po_dormida_visita = false; po_empezar(); }
+    if (f >= 120 && f < 120 + PT_N) { /* (1.0.30) 120+tipo: una visita nueva de ese tipo (0 la de siempre, 1 papas, 2 paseo, 3 tapita, 4 saluda) */
+        if (s_po_fase != PO_NADA) { s_po_fase = PO_NADA; ocultar(s_po_img, true); po_cosa(-1, 0, 0, 0); }
+        s_po_tipo_forzar = f - 120; s_po_dormida_visita = false; po_empezar(); s_po_ult = PET_POCHI_ULT_NADA;
+        return;
+    }
+    if (f == 125) { if (s_po_fase == PO_TAPITA && s_po_tp == 1) po_tapita_tirar(s_mascota.x - 140.0f, s_mascota.y); return; } /* (prueba: tirarla) */
+    if (s_po_fase == PO_NADA) { s_po_dormida_visita = false; s_po_tipo_forzar = PT_COMPLETA; po_empezar(); }
     if ((f >= 10 && f <= 17) || (f >= 50 && f <= 54)) { /* 10-13 con ese cachorro; 14 los cuatro; 15 dos; 16 dos y su escena de familia ya;
                                                           * 17 uno y la despedida («¿y ...?»); 50-54 la escena de familia 0-4 (con Morita y Chapi) */
         int ks[PC_MAX], n = 1;

@@ -6189,6 +6189,7 @@ static void caca_cb(lv_event_t *e)
 }
 
 static void zj_abrir(int jg); /* (ui_zjuegos.inc) */
+static bool po_tapita_toque(int x, int y); /* (1.0.30) ui_pochi.inc */
 static art_periodo_t periodo_de(const pet_t *p, uint32_t utc);
 /* (1.0.21) en la isla, tocar el faro abre su juego y tocar el agua sobre la piedra de la izquierda, el buceo (también están en Jugar) */
 static bool isla_toque(int x, int y)
@@ -6199,8 +6200,8 @@ static bool isla_toque(int x, int y)
         zj_abrir(10); /* ZJ_FARO */
         return true;
     }
-    const int dx = x - 44, dy = y - 140; /* la piedra de la izquierda y el agua de encima */
-    if (dx * dx + dy * dy < 46 * 46) { zj_abrir(11); return true; } /* ZJ_BUCEO */
+    const int dx = x - 39, dy = y - 165; /* (1.0.30) sólo la piedra de la izquierda (antes servía casi toda el agua de ese lado) */
+    if (dx * dx + dy * dy < 26 * 26) { zj_abrir(11); return true; } /* ZJ_BUCEO */
     return false;
 }
 
@@ -6216,6 +6217,7 @@ static void fondo_cb(lv_event_t *e)
     if (s_baile_on) { baile_toque(pt.x, pt.y); return; }
     if (colocar_toque(pt.x, pt.y)) return;                    /* pones un juguete */
     if (s_juego != JG_NADA) { esco_toque(pt.x, pt.y); return; } /* jugando no se la llama */
+    if (po_tapita_toque(pt.x, pt.y)) { s_toque1_x = -1000; return; } /* (1.0.30) le tiras la tapita a Pochi */
     if (isla_toque(pt.x, pt.y)) { s_toque1_x = -1000; return; }
     int d = decor_en(pt.x, pt.y);                            /* tres toques sobre una decoración: guardarla */
     if (d >= 0 && toques_seguidos(4000 + d) >= 3) { mostrar_quitar(QUITAR_DECOR, d, pt.x + 20, pt.y - 30); s_toque1_x = -1000; return; }
@@ -17641,6 +17643,11 @@ void ui_inv_fusionar(lv_event_t *e)
     lv_display_t *d = (lv_display_t *)lv_event_get_current_target(e);
     lv_area_t *a = (lv_area_t *)lv_event_get_param(e);
     if (!d || !a || d->inv_p < LV_INV_BUF_SIZE - 4) return;
+    /* (1.0.30) MIENTRAS DIBUJA, LVGL usa este mismo evento para preguntarle al redondeo cuántas filas caben en la franja
+     * (get_max_row en lv_refr.c, con un área de prueba que empieza en 0,0). Si aquí se juntaba esa área de prueba con una de
+     * verdad, LVGL creía que cabían muchas más filas de las 20 de la franja: dibujaba de más, se salía del búfer y en la
+     * pantalla quedaban rayas oscuras (19-nov, con lluvia: muchas áreas chicas) y además agrandaba un área de verdad. */
+    if (d->rendering_in_progress) return;
     for (uint32_t i = 0; i < d->inv_p; i++) if (lv_area_is_in(a, &d->inv_areas[i], 0)) return; /* ya está adentro de uno */
     int mejor = -1;
     int64_t crece_min = INT64_MAX;
