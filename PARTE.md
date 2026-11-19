@@ -260,6 +260,12 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
    con las escrituras a flash (3b-B1).
 2. (hecho el 18-nov) Respaldo de las pruebas en Documentos (3a) y medir despierta (3b-A).
 3. **Rendimiento** (sección 3b, rehecha con los informes del 18-nov).
+4. **Cuentapasos visible (pedido del usuario 18-nov, 22:19):** cuando sale a caminar con el orbe, tiene que poder VER
+   los pasos que caminó. Hoy el acelerómetro ya cuenta (`pasos_total`/`pasos_premio` en pet.h; el paseo de verdad en
+   main.c, «(fw 104) paseo de verdad»: ≥ 40 pasos/min, 8 min y 800 pasos = excursión juntos, EV_PASEO_JUNTOS /
+   DIA_PASEO_JUNTOS) pero no se muestra en ninguna parte. Preguntarle al usuario dónde lo quiere ver (¿al encender la
+   pantalla después de caminar, un aviso «¡CAMINAMOS 1.234 PASOS!», un panel con los de hoy y los de la semana, en el
+   diario?). Ojo con los textos en MAYÚSCULAS vía gtxt y con el modo infante (sin textos: dibujo de huellitas).
 2. **Pendiente del usuario «o la hormigas»** (sección 1): preguntarle dónde salió.
 3. **Editor de personajes** (conversación del 17-nov): el arte nuevo es de 48 px (96 los grandes) y el editor dibuja
    íconos de 24×24. Acordado: primero abrir el dibujo de fábrica en 48×48 para retocarlo (`art_icono_lado_de_bytes`),
