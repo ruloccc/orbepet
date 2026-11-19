@@ -313,6 +313,16 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
      mecanismo de hojas de los paneles (pag_ir / s_pag_n, pag_global_cb) para que se sienta igual que el resto.
      Propuesto al usuario: puntitos abajo (2 hojas) para que se note que hay otra hoja; con algo nuevo sin ver, la
      estrellita en el botón; en modo infante, solo los dos dibujos.
+0000. **1.0.28 — NUBE DE PENSAMIENTO (aprobado por el usuario 19-nov 11:43).** Hoy pensar() (ui.c ~1088) en adulto llama
+   globo() con texto_pensado(): se ve igual que cuando habla. Solo en modo infante usa la nube (s_pens, s_pens_emo,
+   s_pens_causa, burbujas s_pens_b1/b2, estilo_nube). Hacer: lo que PIENSA va en la nube (forma de nube con dos burbujitas
+   que salen de su cabeza) CON el texto adentro en adulto (en infante sigue solo con dibujos); lo que DICE sigue en el
+   globo de siempre. Decidir qué cosas son pensamiento: pensar() (emoción + causa), los «sueños» dormida (sonar_algo), y
+   quizás lo que opina de los animales cuando no se lo dicen a nadie. Reglas: la nube no espera en la cola de globos
+   (si no hay lugar, no sale), se oculta en paneles/juegos (mundo_en_pausa) y no tapa el globo si los dos coinciden.
+   Probar en el simulador (foto del prado con un pensamiento y con un globo a la vez) y en paneles/regresión.
+   PUBLICAR: la 1.0.27 está compilada (rama «compilados», 3de5994) pero NO publicada: falta acceso a
+   ruloccc/orbepet-firmware desde la sesión o el secreto ORBEPET_FIRMWARE_TOKEN en el repo de código.
 00. **1.0.26: compilar en GitHub y revisar** (main.c, services.c, ui.c, ui_isla.inc no se pudieron compilar aquí).
    En el orbe probar: Perfiles → traer a otra y volver; «DE VIAJE» y después «¿QUIERES QUE VUELVA?»; el faro (alumbrar un
    barquito y traer la luz de vuelta: tiene que seguirla); tocar el huevo nuevo. En el registro buscar «perfiles:»,
