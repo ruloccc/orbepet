@@ -429,6 +429,12 @@ class App(tk.Tk):
                             r = p.cmd("BATERIA", 0.1)
                             if r and "BATERIA OK" in r:
                                 d = probar.parsear(r)
+                                if not getattr(self, "_llave_vista", False):  # (1.0.24) una vez por conexión
+                                    self._llave_vista = True
+                                    if self.asegurar_llave(p):
+                                        self.cola.put(lambda: self.escribir(time.strftime("[%H:%M:%S]") + " El orbe no tenía la llave de informes: se la puse de nuevo (la guardada en este PC).\n"))
+                            else:
+                                self._llave_vista = False  # desconectado o reiniciando: al volver se revisa otra vez
                         finally:
                             p.s.close()
                     except Exception:
@@ -1334,6 +1340,70 @@ class App(tk.Tk):
             print(r.stdout or r.stderr)
         self.tarea(f)
 
+    # ---------- (1.0.24) la llave de informes queda guardada en ESTE computador, cifrada con tu cuenta de Windows (DPAPI):
+    # si el orbe la pierde (Empezar de cero, o al devolver un respaldo hecho antes de cargarla), el programa se la vuelve
+    # a poner solo apenas el orbe está conectado. Nunca se muestra ni va al registro.
+    @staticmethod
+    def _ruta_llave():
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, "OrbePet", "llave_informes.bin")
+
+    @staticmethod
+    def _dpapi(datos, cifrar):
+        if os.name != "nt":
+            return None
+        import ctypes
+        from ctypes import wintypes
+        class BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+        buf = ctypes.create_string_buffer(datos, len(datos))
+        ent, sal = BLOB(len(datos), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), BLOB()
+        f = ctypes.windll.crypt32.CryptProtectData if cifrar else ctypes.windll.crypt32.CryptUnprotectData
+        if not f(ctypes.byref(ent), None, None, None, None, 0x1, ctypes.byref(sal)):  # 0x1 = sin ventanas
+            return None
+        try:
+            return ctypes.string_at(sal.pbData, sal.cbData)
+        finally:
+            ctypes.windll.kernel32.LocalFree(sal.pbData)
+
+    def guardar_llave_pc(self, k):
+        try:
+            c = self._dpapi(k.encode("utf-8"), True)
+            if not c:
+                return False
+            os.makedirs(os.path.dirname(self._ruta_llave()), exist_ok=True)
+            open(self._ruta_llave(), "wb").write(c)
+            return True
+        except Exception:
+            return False
+
+    def leer_llave_pc(self):
+        try:
+            d = self._dpapi(open(self._ruta_llave(), "rb").read(), False)
+            k = d.decode("utf-8") if d else ""
+            return k if len(k) >= 20 else None
+        except Exception:
+            return None
+
+    def asegurar_llave(self, p):
+        """Con el puerto ya abierto (p = probar.Placa): si el orbe no tiene la llave y este PC la tiene guardada, se la pone.
+        Devuelve True si la puso."""
+        k = self.leer_llave_pc()
+        if not k:
+            return False
+        try:
+            p.s.reset_input_buffer()
+            p.s.write(b"MASCOTA LLAVE ?\n")
+            r = [l for l in p.leer(2) if l.startswith("MASCOTA LLAVE")]
+            if not r or r[0] != "MASCOTA LLAVE NO":
+                return False
+            p.s.reset_input_buffer()
+            p.s.write(("MASCOTA LLAVE " + k + "\n").encode())
+            ok = any(l.startswith("MASCOTA OK") for l in p.leer(3))
+            return ok
+        finally:
+            k = None
+
     def cargar_llave(self):
         from tkinter import simpledialog
         k = simpledialog.askstring("Llave de informes", "Pega la llave (empieza con github_pat_):", show="*", parent=self)
@@ -1343,6 +1413,8 @@ class App(tk.Tk):
         if len(k) < 20 or any(c.isspace() for c in k):
             messagebox.showerror("Llave de informes", "Eso no parece una llave de GitHub.")
             return
+        if self.guardar_llave_pc(k):
+            self.escribir("La llave quedó guardada también en este computador (cifrada): si el orbe la pierde, se la vuelvo a poner sola.\n")
         self.orden_llave(k, secreta=True)
 
     def orden_llave(self, arg, secreta=False):
@@ -1529,6 +1601,7 @@ class App(tk.Tk):
             except Exception:
                 pass
             linea = f"RESPALDO: tus mascotas quedaron como antes de la prueba (desde {carpeta})"
+            self._llave_vista = False  # (1.0.24) el respaldo pudo ser de antes de cargar la llave: se revisa al reconectar
         else:
             linea = ("RESPALDO: NO pude devolver tus mascotas todavía. El respaldo está a salvo en " + carpeta +
                      "; se devuelve solo la próxima vez que abras este programa, o con «Restaurar el último respaldo de prueba».")
