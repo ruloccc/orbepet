@@ -1,4 +1,4 @@
-# PARTE — estado del trabajo (18-nov-2026, 20:45)
+# PARTE — estado del trabajo (18-nov-2026, 22:10)
 
 > **Sesión del 18-nov 19:10-19:45:** se revisaron los informes (prueba total 17:10, rendimiento 18:39 y 19:06,
 > registro 18:30) y se arregló el probador (solo herramientas, sin firmware nuevo): **3a hecho** (respaldo en
@@ -9,7 +9,7 @@
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4, ESP-IDF 5.5). **Responder siempre en
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
-Versión publicada: **1.0.24** («DESPEDIDA Y SONIDOS SIN TIRONES»). Partida **versión 42** (no cambia desde el 104).
+Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.24 → 1.0.25 («EL FINAL SIN PEGARSE»), aún NO publicada. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
@@ -212,7 +212,27 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
    Revisar: la línea «RESPALDO: tus mascotas quedaron como antes…» al final del informe; si los 6 juegos, la niebla
    y el bote siguen fallando con la pantalla encendida (si siguen, ahí sí es el firmware); y la tabla de velocidad
    con kpx de verdad (FUSION 0/1).
-0b. **1.0.24 publicada (18-nov noche)** — lo que hay que mirar en el próximo informe de RENDIMIENTO + registro:
+0a. **18-nov noche, lo que se supo:**
+   - La 1.0.24 bajada por Wi-Fi volvió sola a la 1.0.23 sin dejar ni una línea de registro (el arranque siguiente fue
+     «encendido»: el usuario lo apagó). Instalada POR CABLE la misma 1.0.24 arrancó y corrió la prueba de RENDIMIENTO
+     completa (informe 21:22): o sea el código arranca. La causa del fallo por Wi-Fi sigue sin saberse (¿el usuario lo
+     apagó durante el primer arranque? el orbe dijo «error» en el modo Wi-Fi). Antes de publicar otra por Wi-Fi, mirar
+     ota.c/E_BAJAR. OJO: el orbe no salta una versión que ya falló (ota.c no mira «fwmala»).
+   - Con la 1.0.24 los sonidos quedaron bien: ambiente 5 1018 → 24 ms por cuadro; ningún sonido sobre 165 ms.
+   - **«final regular» SIN RESPUESTA NO es la despedida (viaje_empezar)**: MASCOTA PROBAR FINAL REGULAR solo pone
+     final_pend y la pantalla abre `panel_final(f, 0)` (ui_final.inc, final_revisar). El registro: «FINAL OK» y después
+     nada (ni flush): no fue pánico, se quedó sin contestar y el probador la reinició (watchdog_reset). En las dos
+     pruebas que se pegó la PSRAM estaba en ~300 KB y los eventos muestran «se soltaron 67 KB de íconos» cada 10 s
+     (se rehacen y se vuelven a soltar). En la prueba total de las 17:10 (PSRAM ~1,3 MB) el final regular sí corrió
+     (164 ms/cuadro). La 1.0.25 hace lugar antes de abrir el final (final_revisar) y anota «final: empieza…».
+     Si sigue pesado: el Libro de escala 10 con fin_pop (transformación de imagen cada cuadro) y el fondo de 466×466
+     con LV_RADIUS_CIRCLE + degradé (máscara redonda) son lo caro; se podría armar el fondo una vez como imagen.
+   - **Problema general de memoria:** en RENDIMIENTO la PSRAM baja de ~1,8 MB a ~0,3 MB al recorrer los paneles
+     (desde «panel 29 aspecto») y no vuelve. Algo retiene ~1,5 MB (¿pantallas art_pantalla_* guardadas? ¿caché?). Es
+     lo próximo a investigar: con poca PSRAM todo se pone lento (íconos que se sueltan y rehacen).
+   - Efecto lateral del respaldo en Documentos: devolver la partición nvs también devuelve los contadores guardados
+     ahí («arranques», número de evento): tras una prueba los eventos pueden repetir número. No afecta al juego.
+0b. **1.0.24 (por Wi-Fi falló; por cable bien) (18-nov noche)** — lo que hay que mirar en el próximo informe de RENDIMIENTO + registro:
    «final regular» ya no SIN RESPUESTA y el evento «despedida: empieza (viaje N), paisaje listo/NO CUPO; PSRAM …»;
    «sonido ambiente 5/6/7» y «sonido 68» sin picos de segundos. Los informes del PC se guardan con fecha y hora en
    `Documentos\MascotaPruebas\informe_AAAA-MM-DD_HH-MM-SS.txt` (y el último como `informe.txt`): pedir esos.
