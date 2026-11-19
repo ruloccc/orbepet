@@ -14343,6 +14343,35 @@ void ui_update(const pet_t *p, uint32_t utc)
                 static uint32_t ult_aviso; /* al resumen de eventos raros, a lo más uno por minuto */
                 if (!ult_aviso || ahora - ult_aviso > (s_pantalla_visible ? 60000u : 1800000u)) { ult_aviso = ahora | 1u; hal_evento("memoria baja: PSRAM %u KB, RAM interna %u B; se soltó la caché de imágenes (panel %d)", (unsigned)(ps / 1024), (unsigned)ri, (int)s_panel); }
             }
+            /* (1.0.33, idea del usuario) LIMPIEZA DE RUTINA: cada 10 min, y 30 s después de que se apaga la pantalla, se
+             * sueltan los dibujos guardados que no se están viendo (íconos, fotos de pantalla, peces, la caché de LVGL),
+             * aunque la memoria no esté baja: así no se van acumulando con las horas y los fondos grandes encuentran un
+             * bloque seguido. Solo en calma (sin menú, juego, pesca ni picnic). Lo que se vuelva a necesitar se rehace
+             * (un poquito más lento esa vez). Los fondos de las zonas NO se tocan (alguno puede estar en pantalla). */
+            static uint32_t t_rutina, t_apagada;
+            static bool vista_antes = true;
+            if (s_pantalla_visible) t_apagada = 0; else if (vista_antes) t_apagada = ahora | 1u;
+            vista_antes = s_pantalla_visible;
+            const bool calma = s_panel == PANEL_NINGUNO && !zj_activo() && !s_pez_on && !s_picnic_on && s_juego == JG_NADA;
+            const bool toca = !t_rutina ? ahora > 600000u : ahora - t_rutina > 600000u;
+            const bool recien_apagada = t_apagada && ahora - t_apagada > 30000u;
+            if (calma && (toca || recien_apagada)) {
+                if (recien_apagada) t_apagada = 0;
+                t_rutina = ahora | 1u;
+                const size_t bl0 = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+                lv_image_cache_drop(NULL);
+                const uint32_t b = iconos_soltar() + pantallas_soltar();
+                art_peces_soltar();
+                static uint32_t t_log; /* al registro: solo si soltó harto, o una vez por hora (escribir en la flash es lento) */
+                if (b > 128u * 1024u || !t_log || ahora - t_log > 3600000u) {
+                    t_log = ahora | 1u;
+                    extern void hal_evento(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+                    hal_evento("memoria: limpieza de rutina (%s): soltados %u KB; PSRAM %u -> %u KB, bloque mayor %u -> %u KB",
+                               recien_apagada ? "pantalla apagada" : "cada 10 min", (unsigned)(b / 1024), (unsigned)(ps / 1024),
+                               (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024), (unsigned)(bl0 / 1024),
+                               (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
+                }
+            }
         }
     }
 #endif

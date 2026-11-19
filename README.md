@@ -807,6 +807,15 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.33 — memoria limpia
+
+- **Limpieza de rutina de la memoria (idea tuya).** Cada 10 minutos, y 30 segundos después de que se apaga la
+  pantalla, el orbe suelta los dibujos guardados que no se están viendo (íconos, fotos de pantalla, los peces y la caché
+  de imágenes), aunque la memoria todavía no esté baja. Así no se van juntando con las horas y los fondos grandes (la
+  pesca, el picnic, los juegos) encuentran lugar. Solo lo hace en calma: nunca con un menú, un juego, la pesca o el
+  picnic abiertos. Los fondos de las zonas no se tocan. Lo que se vuelva a necesitar se arma de nuevo (esa vez, un
+  poquito más lento). En el registro: «memoria: limpieza de rutina … PSRAM antes -> después».
+
 ## Versión 1.0.32 — la colección de peces
 
 - **Colección de la pesca: 30 animales del agua.** Cuando sale un pez, un cangrejo o uno raro al pescar, ahora sale

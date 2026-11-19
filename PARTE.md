@@ -1,4 +1,13 @@
-# PARTE — estado del trabajo (19-nov-2026, 19:40)
+# PARTE — estado del trabajo (19-nov-2026, 20:10)
+
+> **1.0.33 «MEMORIA LIMPIA» (19-nov 20:10).** Idea del usuario: liberar cada cierto tiempo. En ui.c, en la vigilancia de
+> memoria (cada 1,5 s, solo ESP_PLATFORM): cada 10 min y 30 s después de apagarse la pantalla, si está en calma (sin
+> panel, zj, pesca, picnic ni juego), lv_image_cache_drop + iconos_soltar + pantallas_soltar + art_peces_soltar. NO
+> art_fondos_soltar_otros (v88: un fondo en pantalla quedaba apuntando a memoria liberada). Evento «memoria: limpieza de
+> rutina (…): soltados X KB; PSRAM a -> b KB, bloque mayor c -> d KB» solo si soltó > 128 KB o una vez por hora (la
+> flash es lenta). Revisado con -DESP_PLATFORM y cabeceras de mentira (/tmp/espstub). Si con esto la PSRAM igual baja
+> con las horas, lo que se pierde NO son dibujos guardados: buscar en otro lado (los eventos dirán cuánto suelta).
+
 
 > **1.0.32 «LA COLECCION DE PECES» (19-nov 19:40).** Pedido 18:45: colección de ~30 animales al pescar. core/peces.inc
 > (incluido en pet.c): tabla PECES[30] (nombre, con artículo, descripción, tipo PZT_PEZ/CANG/RARO, estaciones, horas
@@ -113,7 +122,7 @@ Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
 Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
-sin publicar): **1.0.32** («LA COLECCION DE PECES»), que trae de la 1.0.27 a la 1.0.31. Partida **versión 42** (no cambia desde el 104).
+sin publicar): **1.0.33** («MEMORIA LIMPIA»), que trae de la 1.0.27 a la 1.0.32. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
