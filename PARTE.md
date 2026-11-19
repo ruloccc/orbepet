@@ -327,8 +327,8 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
    enc_celda / enc_icono / enc_cabecera y s_enc_cuadro en ui.c, dos por fila 156×104, scroll vertical) se usa en todas
    las listas de cosas: Tesoros por dentro (panel_cofre vista 1, cofre_pieza(…, true) y cofre_objetos), la Bolsa
    (panel_bolsa), los tesoros/colecciones de Más (panel_mas) y donde haya filas de objetos. Las que son LISTAS DE TEXTO
-   (cartas, títulos de historias de un narrador en panel_libro_indice, canciones del cuaderno): PREGUNTADO al usuario si
-   también (ver respuesta). El diario queda como lista. Las pantallas de LEER (carta abierta, historia, nota, resumen,
+   (cartas, títulos de historias de un narrador en panel_libro_indice, canciones del cuaderno): DECIDIDO 11:49, se quedan
+   como LISTA. El diario también queda como lista. Las pantallas de LEER (carta abierta, historia, nota, resumen,
    ficha de un objeto) no son menús: no cambian. Ojo modo infante (ya usa cuadritos de 56×52 sin texto en tesoros_magia).
 00. **1.0.26: compilar en GitHub y revisar** (main.c, services.c, ui.c, ui_isla.inc no se pudieron compilar aquí).
    En el orbe probar: Perfiles → traer a otra y volver; «DE VIAJE» y después «¿QUIERES QUE VUELVA?»; el faro (alumbrar un
