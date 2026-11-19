@@ -11,8 +11,8 @@
  */
 #pragma once
 
-#define FW_VERSION "1.0.28"
-#define FW_NOMBRE "LO QUE PIENSA"
+#define FW_VERSION "1.0.29"
+#define FW_NOMBRE "BATERIA QUE DURA"
 
 /* «1.0.09» → 10009, para comparar cuál es más nueva (−1 si el texto no es una versión) */
 static inline int fw_codigo(const char *v)

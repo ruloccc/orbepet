@@ -807,6 +807,15 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.29 — la batería vuelve a durar
+
+- **La pantalla ya no se queda encendida sola.** Cada aviso del juego (te pide algo, llega una visita, el zorro, un
+  trueno…) reiniciaba la cuenta para apagarse. Con ella pidiendo algo seguido, la pantalla estuvo 80 min encendida a
+  brillo 100 sin que nadie la tocara y la batería bajó 35 % por hora (informe del 19-nov desde el orbe, 1.0.27). Ahora un
+  aviso solo ENCIENDE la pantalla si estaba apagada, como mucho una vez cada 5 min, y después se apaga a su tiempo de
+  siempre. La alarma sí la mantiene encendida mientras suena. En el registro: «energia: un aviso encendió la pantalla».
+- Trae todo lo de la 1.0.28 (la nube de pensamiento y la cuadrícula en los menús) y la 1.0.27.
+
 ## Versión 1.0.28 — lo que piensa
 
 - **La nube de pensamiento:** lo que ella DICE va en el globo de siempre; lo que PIENSA («ESTOY FELIZ PORQUE JUGAMOS»),

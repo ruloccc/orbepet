@@ -2736,7 +2736,17 @@ void app_main(void)
                 s_quiere_mic = s_pantalla_on && ui_wants_mic(); /* (v101) para el paso 5c, sin pedir otra vez el candado */
                 /* (v101) en la pecera los avisos ya se ven (la pantalla está encendida): no reinician su tiempo; antes cada frase o pedido
                  * de ella volvía a contar los 30 min desde cero y la pecera no se apagaba nunca */
-                if ((avisar && !(ui_aquarium() && s_pantalla_on)) || ui_alarm_ringing()) lv_display_trigger_activity(s_disp); /* la alarma mantiene la pantalla encendida */
+                { /* (1.0.29) un aviso (te pide algo, llegó una visita, el zorro...) ENCIENDE la pantalla si estaba apagada, como
+                   * mucho una vez cada 5 min; ya no la mantiene encendida. Antes cada aviso reiniciaba la cuenta para apagarse y,
+                   * con ella pidiendo algo seguido, la pantalla pasó 80 min encendida a brillo 100 sin que nadie la tocara: la
+                   * batería bajó 35 %/hora (informe del 19-nov, 1.0.27). La alarma sí la mantiene encendida mientras suena. */
+                    static uint32_t aviso_ms;
+                    const uint32_t ms_a = (uint32_t)(esp_timer_get_time() / 1000);
+                    bool despertar = false;
+                    if (avisar && !s_pantalla_on && !s_apagada_boton && (!aviso_ms || ms_a - aviso_ms > 5u * 60000u)) { despertar = true; aviso_ms = ms_a | 1u; }
+                    if (despertar) hal_log("energia: un aviso encendió la pantalla");
+                    if (despertar || ui_alarm_ringing()) lv_display_trigger_activity(s_disp); /* la alarma mantiene la pantalla encendida */
+                }
                 uint32_t inactivo = lv_display_get_inactive_time(s_disp);
                 bool pecera = ui_aquarium() && !ui_alarm_ringing();
                 if (pecera && inactivo >= pet_device_aquarium_ms(&s_dispo)) { /* (v101) pasó el tiempo elegido (también con el cargador): sale de la pecera y se apaga */

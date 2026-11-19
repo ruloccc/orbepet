@@ -1,4 +1,13 @@
-# PARTE — estado del trabajo (19-nov-2026, 13:30)
+# PARTE — estado del trabajo (19-nov-2026, 13:45)
+
+> **1.0.29 «BATERIA QUE DURA» (19-nov 13:45).** Informe #5 de orbepet-informes (1.0.27, mandado desde el orbe): batería
+> 58 % → 14 % en 75 min = 35 %/h, con la pantalla encendida todo el rato a brillo 100, 15 cuadros/s, CPU 240 MHz, sin
+> toques en el registro. Causa: main.c, después de los eventos, `if (avisar …) lv_display_trigger_activity()` reiniciaba
+> la inactividad con cada EV_PIDE/EV_FRASE/… : con ella pidiendo seguido (energía 20) la pantalla nunca se apagaba.
+> Arreglo: el aviso solo despierta la pantalla APAGADA, a lo más cada 5 min (evento «energia: un aviso encendió la
+> pantalla»). Otros datos del informe: «escritura lenta a flash: el registro tardó ~1,6-1,9 s» cada 5 min (punto B1 de
+> 3b, sigue pendiente), un «memoria baja» a PSRAM 888 KB. Se puede leer los informes con
+> `gh api repos/ruloccc/orbepet-informes/issues/N -q .body` (add_repo orbepet-informes funcionó en esta sesión).
 
 > **1.0.28 «LO QUE PIENSA» (19-nov ~13:30): hechos 0000 (nube de pensamiento con texto) y 0001 (cuadrícula en Tesoros,
 > Bolsa y Más).** pensar() en ui.c: texto en s_pens_txt dentro de la nube, sin cola; enc_rejilla() convierte una
@@ -47,7 +56,7 @@ Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
 Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
-sin publicar): **1.0.28** («LO QUE PIENSA»), que trae la 1.0.27. Partida **versión 42** (no cambia desde el 104).
+sin publicar): **1.0.29** («BATERIA QUE DURA»), que trae la 1.0.27 y la 1.0.28. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
