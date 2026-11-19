@@ -807,6 +807,16 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.25 — el final del juego ya no deja pegado al orbe
+
+- **El final (el Libro que brilla, la última página, la carta) dejaba al orbe sin contestar** cuando había poca memoria
+  (en las pruebas del 18-nov, con la PSRAM en ~300 KB): el Libro grande que flota y se agranda, los aros y las
+  luciérnagas sobre el fondo con degradé pedían más de lo que había y los íconos se soltaban y se rehacían sin parar.
+  Ahora, antes de abrirlo, suelta la caché de imágenes, los íconos guardados y los fondos de otras horas. El registro
+  anota «final: empieza…» con la memoria antes y después.
+- Trae todo lo de la 1.0.24 (los sonidos ya no congelan la pantalla: el ambiente 5 bajó de 1018 ms por cuadro a 24 ms).
+  La 1.0.24 por Wi-Fi volvió sola a la 1.0.23, pero instalada por cable funcionó bien.
+
 ## Versión 1.0.24 — la despedida ya no se queda pegada y los sonidos no congelan la pantalla
 
 - **La despedida (el viaje del final) ya no se queda pegada:** su paisaje se armaba como una imagen de pantalla completa
