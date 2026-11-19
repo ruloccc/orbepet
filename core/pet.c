@@ -1343,6 +1343,28 @@ void pet_add_traveller(pet_t *p, const pet_t *v, int vehiculo, uint32_t t)
     if (!p->carta_dia) programar_carta(p, t);
 }
 int pet_travellers(const pet_t *p) { return p->viajeros_n; }
+/* (1.0.26) volvió del viaje (la trajiste de vuelta desde Perfiles): se borra de las viajeras si es la última que salió,
+ * con sus cartas (las de las demás viajeras se corren un lugar, al revés que en pet_add_traveller) */
+bool pet_traveller_back(pet_t *p, const pet_t *v)
+{
+    if (!p || !v || !p->viajeros_n || p->viajeros[0].especie != v->especie || strncmp(p->viajeros[0].nombre, v->nombre, PET_NAME_LEN)) return false;
+    memmove(&p->viajeros[0], &p->viajeros[1], sizeof p->viajeros[0] * (PET_VIAJEROS - 1));
+    memset(&p->viajeros[PET_VIAJEROS - 1], 0, sizeof p->viajeros[0]);
+    p->viajeros_n--;
+    int n = 0;
+    for (int i = 0; i < PET_CARTAS && i < p->cartas_n; i++) {
+        if ((p->cartas[i][0] >> 6) == CARTA_VIAJERO) {
+            const int q = p->cartas[i][0] & 63;
+            if (q == 0) { if (i == 0) p->carta_pend = 0; continue; } /* era de ella: ya no está de viaje */
+            p->cartas[i][0] = (uint8_t)(CARTA_VIAJERO << 6 | (q - 1));
+        }
+        if (n != i) { p->cartas[n][0] = p->cartas[i][0]; p->cartas[n][1] = p->cartas[i][1]; p->cartas_var[n] = p->cartas_var[i]; }
+        n++;
+    }
+    for (int i = n; i < PET_CARTAS; i++) { p->cartas[i][0] = p->cartas[i][1] = 0; p->cartas_var[i] = 0; }
+    p->cartas_n = (uint8_t)n;
+    return true;
+}
 
 /* ======================================================================
  * Los animales del bosque (versión 22): cada uno con su manera de ser
@@ -6568,6 +6590,14 @@ int pet_walk_together(pet_t *p, uint32_t pasos, uint32_t t)
     return 1;
 }
 
+/* (1.0.25) cuentapasos: todo paseo de 300 pasos o más queda en el diario (las excursiones ya se anotan en pet_walk_together) */
+void pet_walk_diary(pet_t *p, uint32_t pasos, uint32_t ahora)
+{
+    if (p->etapa == STAGE_HUEVO || pasos < 300u || pasos > 30000u) return;
+    const uint32_t cientos = pasos / 100u;
+    anotar(p, DIA_PASEO_JUNTOS, cientos > 255u ? 255 : (int)cientos, 0, ahora);
+}
+
 void pet_steps_add(pet_t *p, uint32_t pasos, uint32_t ahora)
 {
     if (!pasos || pasos > 20000) return; /* (una lectura imposible no cuenta) */
@@ -6726,8 +6756,18 @@ static void anotar(pet_t *p, diario_t tipo, int a, int b, uint32_t t)
     e->b = (int8_t)b;
 }
 
+/* (1.0.27) el álbum guarda solo los momentos grandes (cada foto se dibuja distinta); lo demás queda en el diario */
+bool pet_photo_moment(int motivo)
+{
+    switch (motivo) {
+    case DIA_NACIO: case DIA_CRECIO: case DIA_SU_CUMPLE: case DIA_CUMPLE_DUENO: case DIA_BALLENA: case DIA_FIESTA:
+    case DIA_FINAL: case DIA_GUARDIANA: case DIA_FAMILIA: return true;
+    default: return false;
+    }
+}
 static void foto(pet_t *p, diario_t motivo, int a, uint32_t t)
 {
+    if (!pet_photo_moment(motivo)) return;
     int i = (p->album_ini + p->album_n) % PET_ALBUM;
     if (p->album_n == PET_ALBUM) { i = p->album_ini; p->album_ini = (uint8_t)((p->album_ini + 1) % PET_ALBUM); }
     else p->album_n++;

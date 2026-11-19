@@ -1188,7 +1188,9 @@ static void test_vinculo_y_diario(void)
     pet_diary_text(&p, e0, buf, sizeof buf);
     /* (v101) si el diario ya se llenó (32 páginas en estas 30 h), la primera página se pudo ir: depende del azar del clima */
     CHECK(pet_diary_count(&p) >= PET_DIARIO || (e0->tipo == DIA_NACIO && strstr(buf, "Nací")), "la primera página: %s", buf);
-    CHECK(pet_album_count(&p) >= 2, "el álbum guarda fotos de momentos especiales (%d)", pet_album_count(&p));
+    /* (1.0.27) el álbum guarda solo los momentos grandes: aquí, el nacimiento (el vínculo queda en el diario) */
+    CHECK(pet_album_count(&p) >= 1 && pet_album_get(&p, pet_album_count(&p) - 1)->motivo == DIA_NACIO, "el álbum guarda el nacimiento (%d)", pet_album_count(&p));
+    CHECK(pet_photo_moment(DIA_CUMPLE_DUENO) && pet_photo_moment(DIA_BALLENA) && !pet_photo_moment(DIA_VINCULO) && !pet_photo_moment(DIA_ROPA), "solo los momentos grandes van al álbum");
     const foto_t *f = pet_album_get(&p, 0);
     CHECK(f && f->especie == p.especie, "la foto recuerda la escena");
     /* el diario es circular: no se llena nunca */
@@ -4614,6 +4616,33 @@ static void test_fw108_mundos(void)
     CHECK((vieja.vio & 0x5) == 0x5, "lo que ya te explicaron no se repite");
 }
 
+/* (1.0.26) la que se fue de viaje desde Perfiles puede volver */
+static void test_1026_vuelve(void)
+{
+    printf("1.0.26: vuelve de su viaje\n");
+    static pet_t yo, ella, otra;
+    nueva(&yo, 21, T0);
+    nueva(&ella, 22, T0);
+    nueva(&otra, 23, T0);
+    snprintf(ella.nombre, sizeof ella.nombre, "TOVA");
+    snprintf(otra.nombre, sizeof otra.nombre, "LUMI");
+    pet_add_traveller(&yo, &otra, 1, T0);
+    pet_add_traveller(&yo, &ella, 2, T0 + 10);
+    CHECK(pet_travellers(&yo) == 2, "dos viajeras");
+    /* una carta de cada una (la más nueva primero): de Tova (0) y de Lumi (1) */
+    yo.cartas_n = 2;
+    yo.cartas[0][0] = (uint8_t)(CARTA_VIAJERO << 6 | 0); yo.cartas[0][1] = 3; yo.cartas_var[0] = 1;
+    yo.cartas[1][0] = (uint8_t)(CARTA_VIAJERO << 6 | 1); yo.cartas[1][1] = 4; yo.cartas_var[1] = 2;
+    yo.carta_pend = 1;
+    CHECK(!pet_traveller_back(&yo, &otra), "solo vuelve la última que salió");
+    CHECK(pet_traveller_back(&yo, &ella), "Tova vuelve");
+    CHECK(pet_travellers(&yo) == 1 && !strcmp(yo.viajeros[0].nombre, "LUMI"), "queda solo Lumi de viaje");
+    CHECK(yo.cartas_n == 1 && yo.cartas[0][0] == (uint8_t)(CARTA_VIAJERO << 6 | 0) && yo.cartas[0][1] == 4 && yo.cartas_var[0] == 2,
+          "la carta de Lumi sigue y apunta a Lumi");
+    CHECK(!yo.carta_pend, "la carta sin abrir era de Tova: ya no queda pendiente");
+    CHECK(!pet_traveller_back(&yo, &ella), "no vuelve dos veces");
+}
+
 /* (fw 104) papelitos, trocito de hielo, terquedad y paseos de verdad */
 static void test_fw104(void)
 {
@@ -4908,6 +4937,7 @@ int main(void)
     test_fw103_toques();
     test_fw104();
     test_fw108_mundos();
+    test_1026_vuelve();
     test_v38_objetos();
     test_actualizar_v37();
     test_completista();

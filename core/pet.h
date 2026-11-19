@@ -1516,6 +1516,8 @@ bool pet_letter_now_from(pet_t *p, carta_de_t de, uint32_t ahora);
  * de ahora. El vehículo decide por dónde anda (la pluma por la aurora, el barquito por el lago de estrellas...) */
 void pet_add_traveller(pet_t *p, const pet_t *viajera, int vehiculo, uint32_t ahora);
 int pet_travellers(const pet_t *p);
+bool pet_photo_moment(int motivo); /* (1.0.27) ¿este momento va al álbum? (solo los grandes) */
+bool pet_traveller_back(pet_t *p, const pet_t *viajera); /* (1.0.26) la que se fue volvió (Perfiles): deja de ser viajera */
 
 /* ---------- Animales que conoció contigo (versión 23) ----------
  * Una ficha por animal (los cinco de siempre y los del bosque). Solo cuenta si lo vieron juntos: la interfaz
@@ -1603,6 +1605,7 @@ bool pet_prisma_ready(const pet_t *p, uint32_t ahora);
 float pet_stubbornness(const pet_t *p);
 /* (fw 104) salieron a caminar de verdad (pasos sostenidos con la pantalla apagada): 0 no contó, 1 contó, 2 contó y trajo algo */
 int pet_walk_together(pet_t *p, uint32_t pasos, uint32_t ahora);
+void pet_walk_diary(pet_t *p, uint32_t pasos, uint32_t ahora); /* (1.0.25) anota en el diario un paseo que no contó como excursión (300 pasos o más) */
 /* (fw 104, pruebas en la placa y el simulador) */
 int pet_papelito_test(pet_t *p, int lo_trajo_ella, uint32_t ahora); /* el próximo papelito ya; -1 si están todos */
 void pet_ice_test(pet_t *p, int que, uint32_t ahora);                 /* 1 pesca el hielo, 2 se derrite */ /* (101b) tocarlo ahora le dejaría un capítulo (no cambia nada) */

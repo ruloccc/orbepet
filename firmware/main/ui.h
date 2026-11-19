@@ -65,10 +65,12 @@ void ui_set_photo_store(const ui_fotos_t *f);
 /* Mis mascotas: las que se quedan descansando en el reloj (hasta PET_GUARDADAS). */
 typedef struct {
     bool (*leer)(int i, pet_t *out); /* false si ese lugar está libre */
+    bool (*leer_adios)(pet_t *out);  /* (1.0.26) la última que se fue de viaje desde Perfiles (false: ninguna); NULL si no hay */
 } ui_mascotas_t;
 void ui_set_pet_store(const ui_mascotas_t *m);
 #define UI_ACCION_CAMBIAR 114 /* traer la mascota guardada en el lugar arg (la actual se queda descansando) */
 #define UI_ACCION_SOLTAR 115  /* dejar ir a la mascota guardada en el lugar arg */
+#define UI_ACCION_VOLVER_VIAJE 192 /* (1.0.26) la última que se fue de viaje desde Perfiles vuelve a un lugar libre */
 
 /* cierra la tarjeta abierta (para las pruebas automáticas del simulador) */
 void ui_close_panel(void);
@@ -87,6 +89,7 @@ void ui_set_style(int estilo);
 /* un globo con texto sobre ella (pruebas) */
 void ui_say(const char *texto);
 void ui_splash(const char *l1, const char *l2, bool fallo, uint32_t ms); /* pantalla de bienvenida (fallo = rojo) */
+void ui_aviso_pasos(uint32_t pasos, uint32_t minutos, uint32_t hoy, uint32_t semana); /* (1.0.25) «¡CAMINAMOS 1.234 PASOS!» al volver de caminar */
 
 /* Alarmas (ver pet_alarm_*): */
 #define UI_ACCION_ALARMA 116      /* cambiar una alarma: arg = pet_alarm_pack(...) o i | PET_ALARMA_BORRAR */

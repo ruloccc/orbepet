@@ -6754,6 +6754,19 @@ void art_pantalla_liberar(int id)
     s_pant[id].px = NULL;
 }
 
+/* (1.0.25) suelta las fotos de pantalla que no están en uso y devuelve cuántos bytes liberó. Antes solo se soltaban al
+ * cargar OTRA pantalla: con la memoria baja quedaban guardadas (hasta ~1,5 MB) y el final del juego no tenía dónde armarse. */
+uint32_t art_pantallas_soltar(bool (*en_uso)(const void *src))
+{
+    uint32_t b = 0;
+    for (int k = 0; k < PANT_MAX; k++) {
+        if (!s_pant[k].px || art_pantalla_en_uso(k) || !en_uso || en_uso(&s_pant[k].dsc)) continue; /* la que alguna imagen muestra (aunque esté oculta) no se toca */
+        b += s_pant[k].dsc.data_size;
+        art_pantalla_liberar(k);
+    }
+    return b;
+}
+
 /* ======================================================================
  * El viaje de despedida: vehículos y paisajes (diseños originales)
  * ==================================================================== */

@@ -664,7 +664,24 @@ static void lib_vuelve_cb(lv_event_t *e)
 }
 static int s_lib_narr;
 static void lib_abre_cb(lv_event_t *e) { (void)e; if (s_panel == PANEL_LIBHIST) { s_lib_narr = -1; panel_libro_indice(); } }
+static void libro_historias_abrir(void) { s_lib_narr = -1; panel_libro_indice(); } /* (1.0.27) desde el Baúl y la hoja 2 del Libro */
 static void lib_ceremonia_cb(lv_event_t *e) { const int i = (int)(intptr_t)lv_event_get_user_data(e); cer_empezar(i == 0 ? 1 : 2, true); }
+/* (1.0.27) el Libro tiene dos hojas: la portada (0) y, deslizando a la izquierda, HISTORIAS y CANCIONES (1). El índice de
+ * historias es la vista 2. Los puntitos de arriba dicen en qué hoja estás. */
+static int s_lib_vista;
+static void lib_puntos(lv_obj_t *cc, int cual)
+{
+    for (int k = 0; k < 2; k++) {
+        lv_obj_t *d = lv_obj_create(cc);
+        lv_obj_remove_style_all(d);
+        lv_obj_set_size(d, 10, 10);
+        lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(d, lv_color_hex(k == cual ? 0xFFE9A0 : 0x6A5AA8), 0);
+        lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+        lv_obj_remove_flag(d, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_align(d, LV_ALIGN_TOP_MID, k ? 10 : -10, 6);
+    }
+}
 /* 1) la portada: el libro brillando; tocarlo lo abre */
 static void panel_libro_hist(void)
 {
@@ -677,6 +694,8 @@ static void panel_libro_hist(void)
     lv_obj_remove_flag(cc, LV_OBJ_FLAG_CLICKABLE);
     if (!s_pet) return;
     s_lib_desde = false;
+    s_lib_vista = 0;
+    lib_puntos(cc, 0);
     /* el resplandor: tres discos planos y transparentes, sin sombra difuminada ni animación (la sombra de 60 px animada obligaba a repintar el libro grande en cada cuadro y el toque tardaba una eternidad) */
     lv_obj_t *glow = NULL;
     for (int i = 0; i < 3; i++) {
@@ -719,6 +738,60 @@ static void panel_libro_hist(void)
         else lv_obj_center(texto_c(b, i == 0 ? "EL RITO" : "EL ÚLTIMO VERSO", 0xFFF3C8, 2, 130));
     }
 }
+/* 1b) (1.0.27) la segunda hoja: HISTORIAS y CANCIONES (lo mismo que en el Baúl) */
+static void lib_hoja_cb(lv_event_t *e)
+{
+    const int q = (int)(intptr_t)lv_event_get_user_data(e);
+    if (s_panel != PANEL_LIBHIST) return;
+    if (q == 0) libro_historias_abrir(); else panel_canciones();
+}
+static void panel_libro_hoja(void)
+{
+    abrir_tarjeta(PANEL_LIBHIST, 466, 466);
+    hist_fondo();
+    lv_obj_t *cc = lv_obj_create(s_tarjeta);
+    lv_obj_remove_style_all(cc);
+    lv_obj_set_size(cc, 380, 380);
+    lv_obj_set_pos(cc, 43, 43);
+    lv_obj_remove_flag(cc, LV_OBJ_FLAG_CLICKABLE);
+    if (!s_pet) return;
+    s_lib_desde = false;
+    s_lib_vista = 1;
+    lib_puntos(cc, 1);
+    if (!s_nino) { lv_obj_t *t = texto_c(cc, "EL LIBRO", 0xFFE9A0, 3, 320); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 40); }
+    bool nuevo = false;
+    for (int c = 0; c < NARR_COUNT && !nuevo; c++) nuevo = pet_book_new(s_pet, c);
+    static const char *const NM[2] = {"HISTORIAS", "CANCIONES"};
+    for (int i = 0; i < 2; i++) {
+        lv_obj_t *b = boton(cc, 300, 86, lib_hoja_cb, i);
+        lv_obj_align(b, LV_ALIGN_TOP_MID, 0, 100 + i * 104);
+        ficha_magica(b, 0x7A5AD8, 0x2A1A6A, 26);
+        lv_obj_t *ic = icono(b, i ? ICO_NOTA : ICO_LIBRO_MAGICO, 4);
+        if (s_nino) lv_obj_center(ic);
+        else {
+            lv_obj_align(ic, LV_ALIGN_LEFT_MID, 22, 0);
+            lv_obj_t *tx = texto(b, NM[i], 0xFFF3C8, 3, 0);
+            lv_obj_align(tx, LV_ALIGN_LEFT_MID, 100, 0);
+        }
+        if (i == 0 && nuevo) { lv_obj_t *st = icono(b, ICO_ESTRELLA, 3); lv_obj_align(st, LV_ALIGN_TOP_RIGHT, -6, 4); } /* algo nuevo sin leer */
+    }
+}
+static void libro_hoja_async(void *u) { (void)u; if (s_panel == PANEL_LIBHIST) panel_libro_hoja(); }
+static void libro_portada_async(void *u) { (void)u; if (s_panel == PANEL_LIBHIST) panel_libro_hist(); }
+/* deslizar en el Libro: en la portada, a la izquierda pasa a la hoja 2; en la hoja 2, a la derecha vuelve (pag_global_cb) */
+static int16_t s_libd_x0, s_libd_y0;
+static void libro_desliza_cb(lv_event_t *e)
+{
+    lv_indev_t *in = lv_indev_active();
+    if (!in || s_panel != PANEL_LIBHIST) return;
+    lv_point_t p;
+    lv_indev_get_point(in, &p);
+    if (lv_event_get_code(e) == LV_EVENT_PRESSED) { s_libd_x0 = (int16_t)p.x; s_libd_y0 = (int16_t)p.y; return; }
+    const int dx = p.x - s_libd_x0, dy = p.y - s_libd_y0;
+    if (abs(dx) < 50 || abs(dx) < abs(dy) * 3 / 2) return;
+    if (s_lib_vista == 0 && dx < 0) lv_async_call(libro_hoja_async, NULL);
+    else if (s_lib_vista == 1 && dx > 0) lv_async_call(libro_portada_async, NULL);
+}
 /* 2) el índice (v39): primero los narradores que ya contaron algo (un círculo con su dibujo y su nombre); al tocar uno, sus historias.
  *    Solo aparece lo ya encontrado: nada de páginas selladas ni de cuántas faltan (no se revela que hay más historias ni más personajes). */
 static int s_lib_narr; /* -1: la cuadrícula de narradores; si no, las historias de ese narrador */
@@ -754,6 +827,7 @@ static void panel_libro_indice(void)
     lv_obj_remove_flag(cc, LV_OBJ_FLAG_CLICKABLE);
     if (!s_pet) return;
     s_lib_desde = false;
+    s_lib_vista = 2;
     if (s_lib_narr >= 0 && !pet_story_count(s_pet, s_lib_narr)) s_lib_narr = -1;
     const int c0 = s_lib_narr;
     lv_obj_t *t = texto_c(cc, c0 < 0 ? "HISTORIAS" : lib_narr_nombre(c0), 0xFFE9A0, 2, 320);
@@ -1983,6 +2057,7 @@ static void criatura_tesoro_cb(lv_event_t *e)
 }
 static void tesoros_cabecera(lv_obj_t *ar, const char *nombre)
 {
+    if (s_enc_cuadro) { if (ts_toca()) enc_cabecera(ar, nombre); return; } /* (1.0.27) fila entera sobre la cuadrícula */
     if (s_nino || !ts_toca()) return;
     lv_obj_t *cab = caja(ar);
     lv_obj_set_size(cab, 300, 26);
@@ -1999,6 +2074,12 @@ static void tesoros_magia(lv_obj_t *ar)
             if (!ts_toca()) continue;
             int f = pet_card_get(p, i);
             art_icono_t ic = f < FAUNA_COUNT ? ICO_FAUNA[f] : ICO_ANIMAL[f - FAUNA_COUNT];
+            if (s_enc_cuadro) { /* (1.0.27) la enciclopedia: en cuadrícula */
+                lv_obj_t *b = enc_celda(ar, ficha_cb, f, pet_card_name(f), false);
+                enc_icono(b, icono(b, ic, 3));
+                if (i == n - 1) { lv_obj_t *st = icono(b, ICO_ESTRELLA, 1); lv_obj_align(st, LV_ALIGN_TOP_RIGHT, -6, 4); }
+                continue;
+            }
             lv_obj_t *b = boton(ar, s_nino ? 56 : 300, s_nino ? 52 : 44, ficha_cb, f);
             lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
             lv_obj_t *im = icono(b, ic, 2);
@@ -2017,6 +2098,11 @@ static void tesoros_magia(lv_obj_t *ar)
         tesoros_cabecera(ar, "CRIATURAS MÁGICAS");
         for (int c = 0; c < CRI_COUNT; c++) {
             if (!((p->criaturas_vistas >> c) & 1u)) continue;
+            if (s_enc_cuadro && ts_toca()) { /* (1.0.27) en cuadrícula; sus historias, en el Libro */
+                lv_obj_t *b = enc_celda(ar, criatura_tesoro_cb, c * 8 + 7, pet_creature_name((magica_t)c), false);
+                enc_icono(b, icono(b, ICO_CRIATURA[c], 3));
+                continue;
+            }
             if (ts_toca()) {
                 lv_obj_t *b = boton(ar, s_nino ? 56 : 300, s_nino ? 52 : 44, criatura_tesoro_cb, c * 8 + 7);
                 lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_VER);

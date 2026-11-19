@@ -126,6 +126,7 @@ void hal_ambient_custom(ambiente_t a, bool propio);
 /* archivos del editor en la partición "recursos" (/res) */
 esp_err_t hal_res_init(void);
 bool hal_res_save(const char *nombre, const void *datos, int n);
+bool hal_res_save_seguro(const char *nombre, const void *datos, int n); /* (1.0.26) escribe «nombre~», lo comprueba y recién ahí reemplaza: el de antes nunca se pierde */
 int hal_res_size(const char *nombre);  /* -1 si no está */
 int hal_res_read(const char *nombre, void *buf, int cap);
 bool hal_res_delete(const char *nombre);

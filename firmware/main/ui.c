@@ -518,6 +518,9 @@ static void botella_nada(int f); /* ui_magia.inc */
 static void regadera_empezar(int i, int px, int py); /* ui_magia.inc */
 static void panel_historia(int c, int k);
 static void panel_libro_hist(void); /* ui_magia.inc */
+static void libro_historias_abrir(void); /* (1.0.27) ui_magia.inc: el índice de historias */
+static void libro_desliza_cb(lv_event_t *e); /* (1.0.27) ui_magia.inc: las dos hojas del Libro */
+static void panel_libro_hoja(void);           /* (1.0.27) ui_magia.inc */
 static int hist_total(void);
 static void tesoros_magia(lv_obj_t *ar);
 /* Tesoros: se cuentan todas las filas, pero solo se crean las de la página (con todo encontrado, la lista entera se comía la RAM interna) */
@@ -789,7 +792,14 @@ static art_img_t s_globo_art;
 static bool po_globo_visible(void); /* ui_pochi.inc */
 static bool po_activo(void);        /* ui_pochi.inc: Pochi está de visita */
 static bool s_po_bypass;            /* una respuesta a Pochi: esa sí se dice */
-typedef struct { int ico; char t[220]; uint32_t ms; } globo_pend_t;
+/* (1.0.27) cada frase en espera recuerda cuándo y dónde se dijo: si espera de más (GLOBO_VENCE_MS) o cambió la zona,
+ * ya no viene al caso y se descarta. Antes salían fuera de contexto (19-nov: «¿QUÉ LE DAMOS?» después de comer). */
+#define GLOBO_VENCE_MS 8000u
+typedef struct { int ico; char t[220]; uint32_t ms, desde; int8_t escena, animal; } globo_pend_t;
+/* (1.0.27) la frase es sobre un animal (ANIMAL_*; -1 ninguno): si espera turno, solo sale mientras ese animal siga a la
+ * vista y como mucho 4 s después (19-nov: «el conejo se asustó…» y lo de las hormigas salían cuando ya no estaban) */
+static int8_t s_globo_animal = -1;
+static bool animal_a_la_vista(int a);
 static globo_pend_t s_gpend[4];
 static int s_gpend_n;
 static void globo(int ico, const char *texto, uint32_t ms)
@@ -804,6 +814,7 @@ static void globo(int ico, const char *texto, uint32_t ms)
         for (int i = 0; i < s_gpend_n; i++) if (s_gpend[i].ico == ico && !strcmp(s_gpend[i].t, texto ? texto : "")) return;
         if (s_gpend_n >= 4) { for (int i = 1; i < 4; i++) s_gpend[i - 1] = s_gpend[i]; s_gpend_n = 3; }
         s_gpend[s_gpend_n].ico = ico; s_gpend[s_gpend_n].ms = ms;
+        s_gpend[s_gpend_n].desde = s_ms; s_gpend[s_gpend_n].escena = (int8_t)s_escena; s_gpend[s_gpend_n].animal = s_globo_animal;
         snprintf(s_gpend[s_gpend_n].t, sizeof s_gpend[0].t, "%s", texto ? texto : "");
         s_gpend_n++;
         return;
@@ -905,6 +916,13 @@ listo:
 static void seguir_globos(void)
 {
     criatura_t *c = &s_mascota;
+    { /* (1.0.27) las que ya no vienen al caso se botan (también mientras esperan) */
+        int n = 0;
+        for (int i = 0; i < s_gpend_n; i++)
+            if (s_ms - s_gpend[i].desde <= (s_gpend[i].animal >= 0 ? 4000u : GLOBO_VENCE_MS) && s_gpend[i].escena == (int8_t)s_escena &&
+                (s_gpend[i].animal < 0 || animal_a_la_vista(s_gpend[i].animal))) s_gpend[n++] = s_gpend[i];
+        s_gpend_n = n;
+    }
     if (lv_obj_has_flag(s_globo, LV_OBJ_FLAG_HIDDEN) && s_gpend_n > 0 && !po_globo_visible() && !mundo_en_pausa()) { /* le toca a ella */
         globo_pend_t g = s_gpend[0];
         for (int i = 1; i < s_gpend_n; i++) s_gpend[i - 1] = s_gpend[i];
@@ -1407,6 +1425,17 @@ static lv_obj_t *icono(lv_obj_t *padre, art_icono_t ico, int escala)
 static art_img_t s_noche_art;
 static bool s_pag_mundo; /* el panel de Ella se abrió deslizando desde el mundo (primero la afinidad, luego las barras) */
 static lv_obj_t *s_fin_num[16]; /* (el contador de objetos del final; se declara aquí para poder soltarlo al cerrar) */
+/* (1.0.25b) la hoja vieja del final (girada, con sombra y texto girado adentro) se dibuja UNA vez en una imagen: girarla en
+ * cada cuadro costaba ~2 µs por pixel y dejaba el final regular en ~120 ms por cuadro. Se sueltan al cerrar el panel. */
+#if LV_USE_SNAPSHOT
+static lv_draw_buf_t *s_pag_plana[2];
+#endif
+static void pagina_plana_soltar(void)
+{
+#if LV_USE_SNAPSHOT
+    for (int i = 0; i < 2; i++) if (s_pag_plana[i]) { lv_image_cache_drop(s_pag_plana[i]); lv_draw_buf_destroy(s_pag_plana[i]); s_pag_plana[i] = NULL; }
+#endif
+}
 static void zona_tras_panel(void);
 static void zona_bajo_panel(void);
 static bool zona_usa_pantalla(int id);
@@ -1418,6 +1447,7 @@ static void cerrar_panel_dentro(void)
     lv_anim_delete(s_tarjeta, NULL); /* las animaciones del panel (p. ej. el contador del final) siguen vivas aunque se borren sus objetos: tocaban memoria ya liberada y colgaban la placa */
     memset(s_fin_num, 0, sizeof s_fin_num);
     lv_obj_clean(s_tarjeta);
+    pagina_plana_soltar(); /* (1.0.25b) las hojas viejas del final, ya aplanadas en una imagen */
     art_pantalla_liberar(0); /* la foto del vivero */
     /* (v37) los lugares secretos (v97: salvo el que está de fondo en la zona de ahora: soltarlo dejaba la zona dibujando
      * memoria ya liberada -se veía basura arriba- cuando se cerraba una carta o un menú encima de la casita o el mirador) */
@@ -2445,11 +2475,16 @@ static void fecha_refrescar(void)
     }
 }
 
+/* (1.0.27) se mandó la fecha de nacimiento y el motor todavía no la anota: mientras tanto no se vuelve a la bienvenida.
+ * Antes, entre cerrar este panel y que el ciclo principal procesara la acción (con el cable al PC, ~1 s), la interfaz veía
+ * «sin fecha de nacimiento» y empezaba todo de nuevo: Libro, elegir el huevo… (19-nov, al crear una mascota nueva) */
+static uint32_t s_nac_pend_ms;
 static void fecha_cb(lv_event_t *e)
 {
     int k = (int)(intptr_t)lv_event_get_user_data(e);
     if (k == 6) {
         cerrar_panel();
+        s_nac_pend_ms = s_ms | 1u;
         accion(UI_ACCION_NACIMIENTO, s_fn_anio * 10000 + s_fn_mes * 100 + s_fn_dia);
         return;
     }
@@ -2912,6 +2947,7 @@ static void panel_modo(void);
 static void panel_modo_inicio(void);
 static void viaje_empezar(const pet_t *m);
 static uint32_t iconos_soltar(void); /* (más abajo) */
+static uint32_t pantallas_soltar(void); /* (más abajo) */
 static int elegir_vehiculo(void); /* el viaje sale en este vehículo (se lo cuenta al motor: desde ahí te escribe) */
 static const pet_device_t *s_disp_aj;  /* volumen, brillo y cuándo se apaga (de main) */
 static pet_device_t s_disp_vista;
@@ -3780,31 +3816,37 @@ void ui_set_pet_store(const ui_mascotas_t *m) { s_mascotas = m; }
 static EXT_RAM_BSS_ATTR pet_t s_masc_tmp;
 
 static bool masc_leer(int i, pet_t *out) { return s_mascotas && s_mascotas->leer && s_mascotas->leer(i, out); }
+static bool masc_adios(pet_t *out) { return s_mascotas && s_mascotas->leer_adios && s_mascotas->leer_adios(out); } /* (1.0.26) */
+static uint32_t s_masc_conf_desde; /* (1.0.26) cuándo se abrió el «¿DESPEDIR?»: el SÍ no vale antes de 1 s (toques atrasados) */
 
 static int8_t s_vive_ov[PET_GUARDADAS] = {-1, -1, -1}; /* lo elegido, mientras main lo guarda */
+static void otra_mascota_limpiar(void); /* (1.0.26) más abajo, junto al vecino */
 static void mascotas_cb(lv_event_t *e)
 {
     int q = (int)(intptr_t)lv_event_get_user_data(e);
     if (q >= 10 && q <= 12) memset(s_vive_ov, -1, sizeof s_vive_ov); /* cambian los lugares */
     if (q >= 0 && q < PET_GUARDADAS) { /* tocaste un lugar */
         if (masc_leer(q, &s_masc_tmp)) { s_masc_sel = s_masc_sel == q ? -1 : q; s_masc_conf = 0; }
-        else { s_masc_sel = -1; s_masc_conf = 1; } /* uno libre: mascota nueva */
+        else { s_masc_sel = -1; s_masc_conf = masc_adios(&s_masc_tmp) ? 3 : 1; } /* uno libre: mascota nueva (o que vuelva la que se fue) */
         panel_mascotas();
         return;
     }
     if (q == 10) { /* sí, mascota nueva */
         cerrar_panel();
         po_fuera();   /* (fw 108) Pochi no se pasa a la mascota nueva */
+        otra_mascota_limpiar(); /* (1.0.26) ni la visita ni el vecino de la otra */
         s_nombre[0] = 0;
         s_masc_conf = 0;
         accion(UI_ACCION_NUEVA, 0);
     } else if (q == 11 && s_masc_sel >= 0) { /* jugar con la elegida */
         cerrar_panel();
         po_fuera();   /* (fw 108) la visita de Pochi es de la otra mascota: no sigue en este mundo */
+        otra_mascota_limpiar(); /* (1.0.26) */
         accion(UI_ACCION_CAMBIAR, s_masc_sel);
         s_masc_sel = -1;
     } else if (q == 12 && s_masc_sel >= 0) { /* se va de viaje: se confirma */
-        if (s_masc_conf != 2) { s_masc_conf = 2; panel_mascotas(); return; }
+        if (s_masc_conf != 2) { s_masc_conf = 2; s_masc_conf_desde = lv_tick_get(); panel_mascotas(); return; }
+        if (lv_tick_elaps(s_masc_conf_desde) < 1000u) return; /* (1.0.26) un toque que llegó atrasado no la despide */
         static EXT_RAM_BSS_ATTR pet_t viajera;
         bool hay = masc_leer(s_masc_sel, &viajera);
         accion(UI_ACCION_SOLTAR, s_masc_sel | (elegir_vehiculo() + 1) << 8);
@@ -3812,6 +3854,16 @@ static void mascotas_cb(lv_event_t *e)
         cerrar_panel();
         if (hay) viaje_empezar(&viajera);
     } else if (q == 13) { s_masc_conf = 0; s_masc_sel = -1; panel_mascotas(); }
+    else if (q == 16 && masc_adios(&s_masc_tmp)) { /* (1.0.26) que vuelva de su viaje */
+        char t[64];
+        snprintf(t, sizeof t, "¡%s VOLVIÓ DE SU VIAJE!", s_masc_tmp.nombre[0] ? s_masc_tmp.nombre : "TU MASCOTA");
+        memset(s_vive_ov, -1, sizeof s_vive_ov);
+        s_masc_conf = 0; s_masc_sel = -1;
+        accion(UI_ACCION_VOLVER_VIAJE, 0);
+        cerrar_panel();
+        globo(ICO_CORAZON, s_nino ? NULL : t, 3500);
+    }
+    else if (q == 17) { s_masc_conf = 1; panel_mascotas(); } /* (1.0.26) no: un huevo nuevo */
     else if (q == 15 && s_masc_sel >= 0 && masc_leer(s_masc_sel, &s_masc_tmp)) { /* que venga de visita */
         char t[64];
         snprintf(t, sizeof t, "¡%s VIENE DE VISITA!", s_masc_tmp.nombre[0] ? s_masc_tmp.nombre : "TU OTRA MASCOTA");
@@ -3904,6 +3956,17 @@ static void panel_mascotas(void)
                                   : texto(vb, vive ? "SIN TI: VIVE" : "SIN TI: DESCANSA", C_BLANCO, 2, 186);
             lv_obj_center(vt);
         }
+    } else if (s_masc_conf == 3 && masc_adios(&s_masc_tmp)) { /* (1.0.26) la última que se fue de viaje puede volver */
+        snprintf(t, sizeof t, "%s SE FUE DE VIAJE. ¿QUIERES QUE VUELVA?", s_masc_tmp.nombre[0] ? s_masc_tmp.nombre : "LA QUE SE FUE");
+        if (!s_nino) { lv_obj_t *q = texto(s_tarjeta, t, C_TINTA, 2, 300); lv_obj_align(q, LV_ALIGN_TOP_MID, 0, 240); }
+        else { lv_obj_t *mc = mini_criatura(s_tarjeta, 4, pet_look(&s_masc_tmp), s_masc_tmp.etapa, s_masc_tmp.forma, 2, EXP_FELIZ); lv_obj_align(mc, LV_ALIGN_TOP_MID, 0, 236); }
+        lv_obj_t *si = boton(s_tarjeta, 140, 46, mascotas_cb, 16);
+        lv_obj_align(si, LV_ALIGN_BOTTOM_MID, -76, -20);
+        lv_obj_set_style_bg_color(si, lv_color_hex(C_VERDE), 0);
+        lv_obj_t *st = s_nino ? icono(si, ICO_CORAZON, 3) : texto(si, "¡QUE VUELVA!", C_BLANCO, 2, 130); lv_obj_center(st);
+        lv_obj_t *no = boton(s_tarjeta, 140, 46, mascotas_cb, 17);
+        lv_obj_align(no, LV_ALIGN_BOTTOM_MID, 76, -20);
+        lv_obj_t *nt = s_nino ? icono(no, ICO_HUEVO, 3) : texto(no, "HUEVO NUEVO", C_BLANCO, 2, 130); lv_obj_center(nt);
     } else if (s_masc_conf == 1) {
         snprintf(t, sizeof t, "¿UN HUEVO NUEVO? %s SE QUEDA DESCANSANDO", s_pet->nombre[0] ? s_pet->nombre : "LA DE AHORA");
         if (!s_nino) { lv_obj_t *q = texto(s_tarjeta, t, C_TINTA, 2, 300); lv_obj_align(q, LV_ALIGN_TOP_MID, 0, 240); }
@@ -6162,6 +6225,10 @@ static void fondo_cb(lv_event_t *e)
         if (d < mejor) { mejor = d; cerca = l; }
     }
     flotar(ICO_MANO, NULL, 0, pt.x, pt.y, 0);
+    if (s_pet->dormida) { /* (1.0.26) dormida no viene: que se sepa cómo despertarla (como mucho cada 30 s) */
+        static uint32_t ult;
+        if (!ult || s_ms - ult > 30000u) { ult = s_ms | 1u; globo(ICO_ZETA, s_nino ? NULL : "SHH... ESTÁ DURMIENDO. PARA DESPERTARL{A}, TÓCAL{A} VARIAS VECES SEGUIDAS", 3500); }
+    }
     accion(ACT_LLAMAR, cerca);
 }
 
@@ -6806,6 +6873,15 @@ static void esconder_vecino(void)
     ocultar(s_pelota2, true);
     ocultar(s_objeto2, true);
     if (s_vec_mantel) ocultar(s_vec_mantel, true);
+}
+/* (1.0.26) cambió la mascota (nueva o de Perfiles): la visita y el vecino eran de la otra, se van al tiro. Antes la visita
+ * se quedaba en el prado junto al huevo nuevo (19-nov: «creé una mascota nueva y ya hay una en el prado») porque solo se
+ * iba con EV_VISITA_SE_VA, y la mascota nueva nunca lo manda. */
+static void otra_mascota_limpiar(void)
+{
+    if (s_visita.visible) mostrar_criatura(&s_visita, false);
+    s_visita.amigo = 0;
+    if (s_vecino.visible) esconder_vecino();
 }
 
 /* posiciones de los dos en cada actividad: la mascota a la izquierda del punto de encuentro */
@@ -8509,7 +8585,7 @@ static void picnic_abrir(void)
     lv_obj_move_to_index(s_mascota.img, lv_obj_get_index(s_picnic) + 2);
     s_mascota.x = 233; s_mascota.y = 352; s_mascota.tx = 233; s_mascota.ty = 352; /* grande, al centro del mantel */
     mascota_modo(M_LIBRE, 0);
-    if (!s_nino) globo(ICO_COMIDA, "¿QUÉ LE DAMOS?", 2500);
+    /* (1.0.27) sin frase: la bandeja ya dice qué hacer (y la frase salía después de comer) */
 }
 static void empezar_comida(int f)
 {
@@ -8598,6 +8674,7 @@ static bool animar_comida(criatura_t *c, const pet_t *p, bool *caminando)
 /* --- menú Jugar y trucos --- */
 static int s_truco = TRUCO_DORMIDA;
 static bool s_rotada;
+static uint32_t s_huevo_mimo; /* (1.0.26) cuándo tocaste el huevo: se mece un momento */
 static void panel_trucos(void);
 
 static void cristales_empezar(void); /* ui_magia.inc */
@@ -9681,39 +9758,57 @@ static lv_obj_t *icono_pieza(lv_obj_t *padre, int c, int i, int escala, bool tie
     return ic;
 }
 
-/* una foto del álbum: se vuelve a dibujar la escena (cielo según la hora, la zona, ella y lo especial) */
+/* una foto del álbum: se vuelve a dibujar la escena (cielo según la hora, el suelo de la zona, ella y lo especial).
+ * (1.0.27) cada momento grande tiene su dibujo propio al centro (antes todas iguales, con un corazoncito en la esquina) */
 static void dibujar_foto(lv_obj_t *padre, const foto_t *f, int slot, int x, int y)
 {
     lv_obj_t *m = caja(padre);
     lv_obj_set_size(m, 120, 104);
     lv_obj_set_pos(m, x, y);
     bool noche = f->hora >= 20 || f->hora < 6, tarde = !noche && (f->hora >= 18 || f->hora < 7);
+    /* el suelo de cada zona: prado, bosque, lago, colina, cueva, isla, claro, mirador */
+    static const uint32_t SUELO[ESC_COUNT] = {0x7FD36B, 0x3E8A4E, 0x4FA8D8, 0xC8A060, 0x4A4562, 0xE8D49A, 0x6CC47A, 0xB8C8E8};
+    const uint32_t suelo = SUELO[f->escena % ESC_COUNT];
     lv_obj_set_style_bg_color(m, lv_color_hex(noche ? 0x2A2C68 : (tarde ? 0xFFB07A : 0x9ED8FF)), 0);
-    lv_obj_set_style_bg_grad_color(m, lv_color_hex(f->escena == ESC_CUEVA ? 0x4A4562 : (noche ? 0x2E5A44 : 0x7FD36B)), 0);
+    lv_obj_set_style_bg_grad_color(m, lv_color_hex(noche ? (suelo >> 1 & 0x7F7F7F) : suelo), 0);
     lv_obj_set_style_bg_grad_dir(m, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_bg_main_stop(m, 120, 0);
     lv_obj_set_style_bg_opa(m, LV_OPA_COVER, 0);
     const bool oro = s_pet && pet_final_seen(s_pet, PET_FINAL_SECRETO); /* tras el final secreto, todas las fotos llevan marco dorado */
     lv_obj_set_style_border_width(m, oro ? 5 : 4, 0);
     lv_obj_set_style_border_color(m, lv_color_hex(oro ? 0xE8B83C : 0xFFFFFF), 0);
     if (oro) { lv_obj_set_style_shadow_width(m, 10, 0); lv_obj_set_style_shadow_color(m, lv_color_hex(0xFFD76A), 0); lv_obj_set_style_shadow_opa(m, LV_OPA_50, 0); }
     lv_obj_set_style_radius(m, 6, 0);
-    static const art_icono_t ZONA[ESC_COUNT] = {ICO_ZONA_PRADO, ICO_ZONA_BOSQUE, ICO_ZONA_LAGO, ICO_ZONA_COLINA, ICO_ZONA_CUEVA, ICO_ZONA_ISLA, ICO_ZONA_CLARO, ICO_ZONA_MIRADOR};
-    lv_obj_t *z = icono(m, ZONA[f->escena % ESC_COUNT], 6);
-    lv_obj_set_style_opa(z, LV_OPA_40, 0);
-    lv_obj_align(z, LV_ALIGN_TOP_RIGHT, 18, -8);
+    /* lo especial de ese momento: un dibujo grande y, en algunos, un adorno */
+    art_icono_t grande = ICO_ESTRELLA, adorno = (art_icono_t)-1;
+    switch (f->motivo) {
+    case DIA_NACIO: grande = ICO_HUEVO; adorno = ICO_ESTRELLA; break;
+    case DIA_CRECIO: grande = ICO_ESTRELLA; adorno = ICO_ESTRELLA_FUGAZ; break;
+    case DIA_SU_CUMPLE: grande = ICO_PASTEL_VELAS; adorno = ICO_GLOBO_FIESTA; break;
+    case DIA_CUMPLE_DUENO: grande = ICO_REGALO; adorno = ICO_GLOBO_FIESTA; break;
+    case DIA_BALLENA: grande = ICO_NUBE; adorno = ICO_ESTRELLA; break;
+    case DIA_FIESTA: grande = ICO_GUIRNALDA; adorno = ICO_GLOBO_FIESTA; break;
+    case DIA_FINAL: grande = ICO_LIBRO_MAGICO; adorno = ICO_ESTRELLA; break;
+    case DIA_GUARDIANA: grande = ICO_CORONA; adorno = ICO_MEDIO_CORAZON; break;
+    case DIA_FAMILIA: grande = ICO_HUEVO_ORO; adorno = ICO_CORAZON; break;
+    default: { /* las fotos viejas, de antes de la 1.0.27 */
+        entrada_diario_t e = {f->t, f->motivo, f->a, 0, 0};
+        if (f->motivo == DIA_HABILIDAD) e.a = (int8_t)(f->a / 10);
+        grande = icono_diario(&e);
+    }
+    }
+    if (f->motivo == DIA_FIESTA) { lv_obj_t *g = icono(m, grande, 4); lv_obj_align(g, LV_ALIGN_TOP_MID, 0, -6); } /* la guirnalda, colgada arriba */
+    else { lv_obj_t *g = icono(m, grande, 4); lv_obj_align(g, LV_ALIGN_TOP_RIGHT, -6, 6); }
+    if ((int)adorno >= 0) { lv_obj_t *a = icono(m, adorno, 2); lv_obj_align(a, LV_ALIGN_TOP_LEFT, 8, 8); }
     static const art_expresion_t EX[MOOD_COUNT] = {EXP_FELIZ, EXP_ABIERTOS, EXP_TRISTE, EXP_CERRADOS, EXP_TRISTE, EXP_ABURRIDO, EXP_TRISTE,
                                                    EXP_ENOJADO, EXP_MAREADO, EXP_FELIZ, EXP_CERRADOS, EXP_CURIOSO, EXP_MIEDO, EXP_ORGULLO, EXP_CELOS};
     int look = s_pet && f->especie == s_pet->especie ? pet_look(s_pet) : f->especie; /* es ella: con su mezcla y sus colores */
     lv_obj_t *yo = mini_criatura(m, slot, look, f->etapa, f->forma, 3, EX[f->emocion % MOOD_COUNT]);
-    lv_obj_align(yo, LV_ALIGN_BOTTOM_MID, f->vecino_especie != 0xFF ? -22 : 0, -2);
+    lv_obj_align(yo, LV_ALIGN_BOTTOM_LEFT, 8, -2);
     if (f->vecino_especie != 0xFF) {
         lv_obj_t *v = mini_criatura(m, slot + 1, (f->vecino_especie & 7) | ((f->vecino_especie >> 3) & 7) << 7, f->etapa, 0, 2, EXP_FELIZ);
-        lv_obj_align(v, LV_ALIGN_BOTTOM_MID, 32, -4);
+        lv_obj_align(v, LV_ALIGN_BOTTOM_RIGHT, -8, -4);
     }
-    entrada_diario_t e = {f->t, f->motivo, f->a, 0, 0};
-    if (f->motivo == DIA_HABILIDAD) e.a = (int8_t)(f->a / 10);
-    lv_obj_t *pr = icono(m, f->motivo == DIA_CRECIO ? ICO_ESTRELLA : icono_diario(&e), 3);
-    lv_obj_align(pr, LV_ALIGN_TOP_LEFT, 4, 4);
     char fc[16];
     fecha_corta(f->t, fc, sizeof fc);
     lv_obj_t *t = texto(padre, fc, C_GRIS, 2, 0);
@@ -9808,18 +9903,6 @@ static void foto_nota_cb(lv_event_t *e)
     pet_diary_text(s_pet, &d, txt, sizeof txt);
     nota_mostrar(ICO_FOTO, 0, fc, txt);
 }
-static void diario_nota_cb(lv_event_t *e)
-{
-    int i = (int)(intptr_t)lv_event_get_user_data(e);
-    const entrada_diario_t *d = s_pet ? pet_diary_get(s_pet, i) : NULL;
-    if (!d) return;
-    if (d->tipo == DIA_HISTORIA) { panel_historia((uint8_t)d->a >= NARR_COUNT ? 0 : (uint8_t)d->a, d->b); return; } /* la historia se relee entera */
-    if (d->tipo == DIA_NUESTRA && pet_song_count(s_pet)) { panel_canciones(); return; } /* (v38) el cuaderno: se escuchan */
-    char fc[16], txt[120];
-    fecha_corta(d->t, fc, sizeof fc);
-    pet_diary_text(s_pet, d, txt, sizeof txt);
-    nota_mostrar(icono_diario(d), 0, fc, txt);
-}
 /* una zona tocable invisible sobre algo dibujado */
 static void tocable(lv_obj_t *padre, int x, int y, int w, int h, lv_event_cb_t cb, int q)
 {
@@ -9877,7 +9960,7 @@ static void panel_diario(void)
                 if (k >= s_pet->meta_progreso) lv_obj_set_style_opa(d, LV_OPA_30, 0);
             }
         }
-        /* las páginas: una lista que se desliza; cada una se lee entera al tocarla */
+        /* las páginas: una lista que se desliza (1.0.27: cada fila con su texto entero; ya no se abre aparte) */
         total = pet_diary_count(s_pet);
         por_pag = 1000;
         lv_obj_t *ar = area_texto(s_tarjeta, 20, 96, 320, 232);
@@ -9886,12 +9969,12 @@ static void panel_diario(void)
         for (int i = 0; i < total && i < 60; i++) {
             const entrada_diario_t *e = pet_diary_get(s_pet, i);
             if (!e) break;
+            if (e->tipo == DIA_HISTORIA || e->tipo == DIA_NUESTRA) continue; /* (1.0.27) historias y canciones: en el Baúl y en el Libro */
             lv_obj_t *fila = caja(ar);
             lv_obj_set_size(fila, 306, LV_SIZE_CONTENT);
             lv_obj_set_style_pad_bottom(fila, 4, 0);
-            lv_obj_add_flag(fila, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_remove_flag(fila, LV_OBJ_FLAG_CLICKABLE); /* (1.0.27) ya no se abre en grande: la fila dice todo */
             lv_obj_add_flag(fila, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
-            lv_obj_add_event_cb(fila, diario_nota_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
             lv_obj_t *ic = icono(fila, icono_diario(e), s_nino ? 3 : 2);
             lv_obj_set_pos(ic, 4, 2);
             char fc[16];
@@ -9899,7 +9982,7 @@ static void panel_diario(void)
             lv_obj_t *ft = texto(fila, fc, C_GRIS, 2, 0);
             lv_obj_set_pos(ft, 44, 0);
             if (!s_nino) {
-                char txt[96];
+                char txt[120]; /* (1.0.27) el texto entero (lo mismo que mostraba la nota grande) */
                 pet_diary_text(s_pet, e, txt, sizeof txt);
                 for (char *q = txt; *q; q++) if (*q >= 'a' && *q <= 'z') *q = (char)(*q - 32);
                 lv_obj_t *t = texto(fila, txt, C_TINTA, 2, 250);
@@ -10384,8 +10467,10 @@ static void panel_cofre_async(void *u) { (void)u; if (s_panel == PANEL_COFRE) pa
 static void cofre_hub_cb(lv_event_t *e)
 {
     const int q = (int)(intptr_t)lv_event_get_user_data(e);
-    if (q < 6) {
+    if (q < 8) {
         switch (q) {
+        case 6: libro_historias_abrir(); return; /* (1.0.27) */
+        case 7: panel_canciones(); return;       /* (1.0.27) */
         case 0: s_rincon_tab = 0; panel_rincon(); return;
         case 1: s_cofre_vista = 1; s_cofre_sub = -1; break; /* tesoros: todas las categorías en cuadrícula */
         case 2: s_cofre_vista = 2; s_cofre_sub = -1; break; /* la enciclopedia abre su propio menú */
@@ -10463,10 +10548,46 @@ static int cofre_obj_cuenta(int cat)
     }
     return n;
 }
+/* (1.0.27) dentro de una categoría de la enciclopedia el contenido va en CUADRÍCULA (como el menú): cada cosa en su
+ * casilla con el dibujo arriba y el nombre abajo; si hay más, se desliza. s_enc_cuadro lo activa mientras se arma. */
+static bool s_enc_cuadro;
+static lv_obj_t *enc_celda(lv_obj_t *ar, lv_event_cb_t cb, int dato, const char *nombre, bool gris)
+{
+    lv_obj_t *b = boton(ar, s_nino ? 100 : 156, s_nino ? 84 : 104, cb, dato); /* dos por fila: caben los nombres largos */
+    lv_obj_set_style_radius(b, 18, 0);
+    lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+    if (!s_nino && nombre) {
+        char nm[48];
+        snprintf(nm, sizeof nm, "%s", nombre);
+        mayusculas(nm);
+        lv_obj_t *t = texto_c(b, nm, gris ? C_GRIS_CLARO : C_BLANCO, 2, 146);
+        lv_obj_align(t, LV_ALIGN_BOTTOM_MID, 0, -6);
+    }
+    return b;
+}
+static void enc_icono(lv_obj_t *b, lv_obj_t *ic) { if (s_nino) lv_obj_center(ic); else lv_obj_align(ic, LV_ALIGN_TOP_MID, 0, 8); }
+static void enc_cabecera(lv_obj_t *ar, const char *nombre) /* una fila entera con el nombre del grupo */
+{
+    if (s_nino) return;
+    lv_obj_t *cab = caja(ar);
+    lv_obj_set_size(cab, 316, 26);
+    lv_obj_t *t = texto(cab, nombre, 0xFFE9A8, 2, 300);
+    lv_obj_align(t, LV_ALIGN_LEFT_MID, 6, 2);
+}
 static void cofre_pieza(lv_obj_t *ar, int c, bool solo_tengo)
 {
     const int n = pet_collection_size((coleccion_t)c);
     if (solo_tengo && !s_pet->coleccion[c]) return;
+    if (s_enc_cuadro) {
+        enc_cabecera(ar, pet_collection_name((coleccion_t)c));
+        for (int i = 0; i < n; i++) {
+            const bool tiene = (s_pet->coleccion[c] >> i) & 1u;
+            if (solo_tengo && !tiene) continue;
+            lv_obj_t *b = enc_celda(ar, tesoro_cb, c * 8 + i, tiene ? pet_piece_name((coleccion_t)c, i) : "???", !tiene);
+            enc_icono(b, icono_pieza(b, c, i, 3, tiene));
+        }
+        return;
+    }
     lv_obj_t *cab = caja(ar);
     lv_obj_set_size(cab, 300, 24);
     lv_obj_t *t = texto(cab, pet_collection_name((coleccion_t)c), 0xFFE9A8, 2, 280);
@@ -10489,11 +10610,12 @@ static void panel_cofre(void)
     if (s_cofre_vista == 0) {
         lv_obj_t *ti = texto(s_tarjeta, "COFRE", C_TINTA, 3, 0);
         lv_obj_align(ti, LV_ALIGN_TOP_MID, 0, 44);
-        static const art_icono_t IC[6] = {ICO_PERCHA, ICO_COFRE, ICO_LIBRO, ICO_FOTO, ICO_CAMARA, ICO_CARTA};
-        static const char *const NM[6] = {"ACCESORIOS", "TESOROS", "ENCICLOPEDIA", "FOTOS", "CÁMARA", "CARTAS"};
-        for (int i = 0; i < 6; i++) {
-            lv_obj_t *b = boton(s_tarjeta, 188, 66, cofre_hub_cb, i);
-            lv_obj_align(b, LV_ALIGN_TOP_MID, (i % 2 ? 1 : -1) * 95, 88 + (i / 2) * 74);
+        /* (1.0.27) también HISTORIAS y CANCIONES (salieron del diario): ocho, en cuatro filas más bajitas para que quepan en el círculo */
+        static const art_icono_t IC[8] = {ICO_PERCHA, ICO_COFRE, ICO_LIBRO, ICO_FOTO, ICO_CAMARA, ICO_CARTA, ICO_LIBRO_MAGICO, ICO_NOTA};
+        static const char *const NM[8] = {"ACCESORIOS", "TESOROS", "ENCICLOPEDIA", "FOTOS", "CÁMARA", "CARTAS", "HISTORIAS", "CANCIONES"};
+        for (int i = 0; i < 8; i++) {
+            lv_obj_t *b = boton(s_tarjeta, 186, 54, cofre_hub_cb, i);
+            lv_obj_align(b, LV_ALIGN_TOP_MID, (i % 2 ? 1 : -1) * 94, 96 + (i / 2) * 60);
             lv_obj_set_style_radius(b, 18, 0);
             if (i == 0) lv_obj_set_style_border_color(b, lv_color_hex(0xFFE27A), 0); /* lo primero que se abre */
             lv_obj_t *ic = icono(b, IC[i], 3);
@@ -10582,10 +10704,18 @@ static void panel_cofre(void)
         }
         }
     } else {
-        static const art_icono_t IC[5] = {ICO_LIBRO, ICO_CRISTAL, ICO_HOJA, ICO_MARIPOSA, ICO_ESTRELLA};
+        /* (1.0.27) arriba solo el nombre de la categoría (sin «ENCICLOPEDIA» ni la fila de las otras) y el contenido en
+         * cuadrícula, con todo el alto que queda; para ir a otra categoría se vuelve al menú */
         static const char *const NM[5] = {"SU DÍA A DÍA", "PIEDRAS Y MINERALES", "FLORA", "FAUNA", "OBJETOS MÁGICOS"};
-        for (int k = 0; k < 4; k++) cofre_cat_boton(10 + k, IC[k], k == s_cofre_sub, (2 * k - 3) * 37);
-        { lv_obj_t *nm = texto(s_tarjeta, NM[s_cofre_sub], 0xFFE9A8, 2, 330); lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 158); }
+        ocultar(ti, true);
+        if (!s_nino) { lv_obj_t *nm = texto(s_tarjeta, NM[s_cofre_sub], 0xFFE9A8, strlen(NM[s_cofre_sub]) > 13 ? 2 : 3, 330); lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 44); }
+        lv_obj_set_pos(ar, 45, 78);
+        lv_obj_set_size(ar, 330, 262);
+        lv_obj_set_flex_flow(ar, LV_FLEX_FLOW_ROW_WRAP);
+        lv_obj_set_flex_align(ar, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_style_pad_column(ar, 8, 0);
+        lv_obj_set_style_pad_row(ar, 8, 0);
+        s_enc_cuadro = true;
         switch (s_cofre_sub) {
         case 1: cofre_pieza(ar, COL_PIEDRAS, false); cofre_pieza(ar, COL_CRISTALES, false); break;
         case 2: cofre_pieza(ar, COL_HOJAS, false); break;
@@ -10598,6 +10728,7 @@ static void panel_cofre(void)
             lv_obj_align(tx, LV_ALIGN_LEFT_MID, 56, 0);
         }
         }
+        s_enc_cuadro = false;
     }
     area_lista(ar);
 }
@@ -11548,10 +11679,10 @@ static void viaje_empezar(const pet_t *m)
     /* (1.0.24) el paisaje (468×468, RGB565 = 428 KB) necesita un bloque seguido: sin él, la despedida quedaba pegada */
     if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < 470u * 1024u) {
         lv_image_cache_drop(NULL);
-        const uint32_t b = iconos_soltar();
+        const uint32_t b = iconos_soltar() + pantallas_soltar(); /* (1.0.25) + las fotos de pantalla guardadas */
         art_fondos_soltar_otros();
         extern void hal_evento(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-        hal_evento("despedida: se hizo lugar para el paisaje (íconos %u KB; bloque mayor ahora %u KB)", (unsigned)(b / 1024),
+        hal_evento("despedida: se hizo lugar para el paisaje (soltados %u KB; bloque mayor ahora %u KB)", (unsigned)(b / 1024),
                    (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
     }
 #endif
@@ -13406,6 +13537,7 @@ static void animar_alarma(void)
 
 /* sin casita, duerme en su tapete (aparece cada vez que se duerme fuera de la casita) */
 static lv_obj_t *s_tapete;
+static uint32_t s_siesta_ms; /* (1.0.26) el cuadro en que estaba echada durmiendo una siesta (de día, sin estar «dormida») */
 static void crear_tapete(void)
 {
     s_tapete = caja(s_mundo);
@@ -13428,7 +13560,9 @@ static void animar_tapete(void)
 {
     const pet_t *p = s_pet;
     /* si va a dormir a su casita no lleva el tapete; fuera de ella, sí */
-    bool ver = p && p->dormida && p->etapa != STAGE_HUEVO && !s_interior && !duerme_en_casita(p) && !lv_obj_has_flag(s_mascota.img, LV_OBJ_FLAG_HIDDEN);
+    /* (1.0.26) también en la siesta de día: echada con sus zzz, antes sin colchoneta */
+    const bool siesta = p && !p->dormida && s_ms && s_siesta_ms == s_ms && s_mascota.modo == M_LIBRE;
+    bool ver = p && (p->dormida || siesta) && p->etapa != STAGE_HUEVO && !s_interior && !duerme_en_casita(p) && !lv_obj_has_flag(s_mascota.img, LV_OBJ_FLAG_HIDDEN);
     ocultar(s_tapete, !ver);
     if (!ver) return;
     if (s_escena == ESC_LAGO) { /* en el lago, la colchoneta va sobre la orilla firme: nunca sobre el agua */
@@ -13495,14 +13629,15 @@ static void pag_global_cb(lv_event_t *e)
 {
     const lv_event_code_t c = lv_event_get_code(e);
     if (c == LV_EVENT_PRESSED) {
-        s_pag_vale = s_panel == PANEL_MAS || s_panel == PANEL_OBJETO;
-        if (s_pag_vale) { if (s_panel == PANEL_MAS) ella_pag_cb(e); else obj_desliza_cb(e); }
+        s_pag_vale = s_panel == PANEL_MAS || s_panel == PANEL_OBJETO || s_panel == PANEL_LIBHIST;
+        if (s_pag_vale) { if (s_panel == PANEL_MAS) ella_pag_cb(e); else if (s_panel == PANEL_OBJETO) obj_desliza_cb(e); else libro_desliza_cb(e); }
         return;
     }
     if (c != LV_EVENT_RELEASED || !s_pag_vale) return;
     s_pag_vale = false;
     if (s_panel == PANEL_MAS) ella_pag_cb(e);
     else if (s_panel == PANEL_OBJETO) obj_desliza_cb(e);
+    else if (s_panel == PANEL_LIBHIST) libro_desliza_cb(e);
 }
 
 volatile int g_ui_paso; /* v88: por dónde va ui_init / ui_update (si el arranque se cuelga, el vigilante lo anota) */
@@ -13946,6 +14081,27 @@ static void splash_timer_cb(lv_timer_t *t)
     if (lv_obj_is_valid(o)) lv_obj_delete(o);
     lv_timer_delete(t);
 }
+/* (1.0.25) cuentapasos: al volver de caminar con ella se muestran los pasos del paseo, los de hoy y los de la semana */
+static void miles(char *o, size_t n, uint32_t v) /* 12345 -> "12.345" */
+{
+    char t[16]; int k = snprintf(t, sizeof t, "%lu", (unsigned long)v), j = 0;
+    for (int i = 0; i < k && j < (int)n - 1; i++) { o[j++] = t[i]; if ((k - i - 1) % 3 == 0 && i < k - 1 && j < (int)n - 1) o[j++] = '.'; }
+    o[j] = 0;
+}
+void ui_splash(const char *l1, const char *l2, bool fallo, uint32_t ms);
+void ui_aviso_pasos(uint32_t pasos, uint32_t minutos, uint32_t hoy, uint32_t semana)
+{
+    if (!s_pet) return;
+    accion(UI_ACCION_SONAR, SND_ALEGRE);
+    if (s_nino) { globo(ICO_HUELLA, NULL, 6000); return; } /* modo infante: sin textos, las huellitas */
+    char a[16], b[16], c[16], l1[48], l2[72];
+    miles(a, sizeof a, pasos); miles(b, sizeof b, hoy); miles(c, sizeof c, semana);
+    snprintf(l1, sizeof l1, "¡CAMINAMOS %s PASOS!", a);
+    if (minutos) snprintf(l2, sizeof l2, "EN %lu MINUTOS\nHOY %s · SEMANA %s", (unsigned long)minutos, b, c);
+    else snprintf(l2, sizeof l2, "HOY %s · SEMANA %s", b, c);
+    ui_splash(l1, l2, false, 7000);
+}
+
 void ui_splash(const char *l1, const char *l2, bool fallo, uint32_t ms)
 {
     lv_obj_t *o = lv_obj_create(lv_layer_top());
@@ -13991,6 +14147,16 @@ static uint32_t iconos_soltar(void)
     lv_image_cache_drop(NULL);
     return b;
 }
+/* (1.0.25) las fotos de pantalla (art_pantalla) que ninguna imagen muestra: antes solo se soltaban al cargar otra */
+static __attribute__((unused)) uint32_t pantallas_soltar(void)
+{
+    if (!s_en_uso) s_en_uso = (const void **)malloc(sizeof(void *) * N_EN_USO);
+    if (!s_en_uso) return 0;
+    s_en_uso_n = 0;
+    en_uso_juntar(lv_screen_active()); en_uso_juntar(lv_layer_top()); en_uso_juntar(lv_layer_sys());
+    qsort(s_en_uso, (size_t)s_en_uso_n, sizeof *s_en_uso, en_uso_cmp);
+    return art_pantallas_soltar(en_uso);
+}
 uint32_t ui_soltar_iconos(void) { return iconos_soltar(); } /* (pruebas) */
 /* (pruebas) bytes en los textos y en los íconos grandes del panel abierto */
 uint32_t ui_mem_panel(int que)
@@ -14032,7 +14198,9 @@ void ui_update(const pet_t *p, uint32_t utc)
                 if (!t_iconos || ahora - t_iconos > 10000u) {
                     t_iconos = ahora | 1u;
                     const uint32_t b = iconos_soltar();
+                    const uint32_t bp = pantallas_soltar(); /* (1.0.25) y las fotos de pantalla que no se ven (antes se quedaban: ~1,5 MB) */
                     if (b > 64u * 1024u) hal_evento("memoria baja: se soltaron %u KB de íconos guardados (PSRAM %u KB)", (unsigned)(b / 1024), (unsigned)(ps / 1024));
+                    if (bp) hal_evento("memoria baja: se soltaron %u KB de fotos de pantalla guardadas (PSRAM %u KB)", (unsigned)(bp / 1024), (unsigned)(ps / 1024));
                 }
                 static uint32_t ult_aviso; /* al resumen de eventos raros, a lo más uno por minuto */
                 if (!ult_aviso || ahora - ult_aviso > (s_pantalla_visible ? 60000u : 1800000u)) { ult_aviso = ahora | 1u; hal_evento("memoria baja: PSRAM %u KB, RAM interna %u B; se soltó la caché de imágenes (panel %d)", (unsigned)(ps / 1024), (unsigned)ri, (int)s_panel); }
@@ -14117,8 +14285,10 @@ void ui_update(const pet_t *p, uint32_t utc)
     /* primera vez: bienvenida y tu fecha de nacimiento, luego el nombre; con huevo no hay barra de botones */
     /* si el Libro de bienvenida se cerró sin pasar por "seguir" (la X, o la pantalla se apagó y se encendió), la configuración igual continúa:
      * si no, quedaba el huevo en el prado sin fecha, sin aspecto y sin nombre */
-    if (s_libro_inicio && s_panel == PANEL_NINGUNO && !p->edad_dueno) { s_libro_inicio = false; inicio_huevo(); }
-    bool bloqueante = s_panel == PANEL_FECHA || s_panel == PANEL_HORA || s_panel == PANEL_RESTAURAR || s_libro_inicio ||
+    if (p->edad_dueno) s_nac_pend_ms = 0;
+    const bool nac_pend = s_nac_pend_ms && (int32_t)(s_ms - s_nac_pend_ms) < 8000; /* (1.0.27) la fecha va en camino */
+    if (s_libro_inicio && s_panel == PANEL_NINGUNO && !p->edad_dueno && !nac_pend) { s_libro_inicio = false; inicio_huevo(); }
+    bool bloqueante = nac_pend || s_panel == PANEL_FECHA || s_panel == PANEL_HORA || s_panel == PANEL_RESTAURAR || s_libro_inicio ||
                     (!p->edad_dueno && (s_panel == PANEL_ASPECTO || s_panel == PANEL_GENERO));
     if (!p->edad_dueno) { if (!s_bienv_activa && !bloqueante) bienvenida(); }
     else if ((s_hora_dudosa || pet_clock_behind(p, utc)) && !bloqueante && !s_bienv_activa && !s_arrancando && s_pantalla_visible &&
@@ -14140,8 +14310,7 @@ void ui_update(const pet_t *p, uint32_t utc)
     else if (s_nace_desde && p->etapa == STAGE_HUEVO) { /* (1.0.10) los 5 minutos: se mece, se raja; las caricias le dan calor */
         const uint32_t r = pet_hatch_remaining(p, utc);
         if (s_nace_paso == 0 && (int32_t)(s_ms - s_nace_desde) >= 4000) {
-            s_nace_paso = 1;
-            globo(ICO_HUEVO, "NACERÁ EN UNOS 5 MINUTOS. ACARÍCIALO PARA DARLE CALOR", 4500);
+            s_nace_paso = 1; /* (1.0.26) sin aviso escrito: al tocarlo se mece y suelta corazones (ver ACT_ACARICIAR) */
         } else if (s_nace_paso == 1 && r <= PET_HUEVO_SEGUNDOS / 2) {
             s_nace_paso = 2;
             globo(ICO_HUEVO, "¡ALGO SE MUEVE ADENTRO!", 2600);
@@ -14231,6 +14400,7 @@ void ui_update(const pet_t *p, uint32_t utc)
         c->grietas = r > 200 ? 0 : (r > 100 ? 1 : (r > 30 ? 2 : 3)); /* (1.0.10) el primer huevo también: con su reloj de 5 min */
     }
 
+    if (p->etapa == STAGE_HUEVO && (s_visita.visible || s_vecino.visible)) otra_mascota_limpiar(); /* (1.0.26) un huevo no tiene visitas */
     /* visita que ya estaba al encender */
     if (p->visita_actual >= 0 && !s_visita.visible && !s_interior) {
         s_visita.pose.especie = p->visitantes[p->visita_actual].especie;
@@ -14438,7 +14608,11 @@ void ui_show_event(const pet_t *p, const pet_event_t *e)
             break;
         case ACT_ACARICIAR: {
             int tx = s_toque_x ? s_toque_x : hx, ty = s_toque_y ? s_toque_y : hy;
-            if (p->etapa == STAGE_HUEVO) { flotar(ICO_CORAZON, NULL, 0, hx, hy + 20, 0); mascota_modo(M_SALTA, 400); break; }
+            if (p->etapa == STAGE_HUEVO) { /* (1.0.26) el huevo se mece de gusto y suben corazoncitos con una chispa de calor */
+                s_huevo_mimo = s_ms | 1u;
+                for (int i = 0; i < 3; i++) flotar(i == 1 ? ICO_ESTRELLA : ICO_CORAZON, NULL, 0, hx - 24 + i * 24, hy + 18 - (i == 1 ? 12 : 0), (uint32_t)i * 160);
+                break;
+            }
             if (p->dormida) { flotar(ICO_ZETA, NULL, 0, hx + 20, hy, 0); break; }
             if (e->b < 0 && s_gesto == GESTO_MUCHOS) { /* mareada */
                 flotar(ICO_MAREO, NULL, 0, hx, hy - 10, 0);
@@ -14829,7 +15003,7 @@ void ui_show_event(const pet_t *p, const pet_event_t *e)
         s_viaje_con_huevo = false;
         if (s_panel == PANEL_NINGUNO) panel_pide_viaje();
         break;
-    case EV_ANIMAL: evento_animal(e, hx, hy); break;
+    case EV_ANIMAL: s_globo_animal = (int8_t)e->a; evento_animal(e, hx, hy); s_globo_animal = -1; break; /* (1.0.27) sus frases van marcadas */
     case EV_ANIMAL_NUEVO: case EV_CRIATURA: case EV_ESPECIAL: case EV_PISTA: case EV_HIST_NIMBA: evento_magia(e, hx, hy); break;
     case EV_TILDE: case EV_BRIZNA: case EV_PRISMA: case EV_TILO: case EV_ANIMAL_DICE: case EV_LUGAR: evento_historia(e); break;
     case EV_PIEZA: evento_pieza(e); break;     /* (v38) */
@@ -15638,6 +15812,9 @@ typedef struct {
     uint32_t estado_hasta, proximo;
     uint32_t visto_desde; /* desde cuándo está a la vista (para contarlo como visto juntos) */
     bool contado, espejo;
+    bool saliendo, sale_vuela; /* (1.0.27) se va caminando (o volando) hasta salir por un borde: no desaparece de golpe */
+    float sale_x, sale_y;
+    uint32_t sale_desde;
 } animal_vista_t;
 static animal_vista_t s_ani[ANIMAL_COUNT]; /* (1.0.15) interna: cada cuadro */
 #define N_RASTRO 8
@@ -15838,9 +16015,11 @@ static void toque_mostrar(int res, float ax, float ay)
     }
 }
 
+static bool animal_a_la_vista(int a) { return a >= 0 && a < ANIMAL_COUNT && s_ani[a].visible; } /* (1.0.27) aunque vaya saliendo */
 static void animal_cb(lv_event_t *e)
 {
     int a = (int)(intptr_t)lv_event_get_user_data(e);
+    if (a >= 0 && a < ANIMAL_COUNT && s_ani[a].saliendo) return; /* (1.0.27) el que ya se va no se toca */
     accion(UI_ACCION_ANIMAL_TOCAR, pet_card_of_animal((animal_t)a)); /* (v39) si ya lo conoce, a lo mejor le cuenta algo del Rey */
     { /* (fw 103) el primer toque saluda, el siguiente avisa, y si insistes pasa algo (el motor decide) */
         const int veces = toques_animal(5000 + a);
@@ -15856,7 +16035,9 @@ static void animal_cb(lv_event_t *e)
     for (int i = 0; s_pet && i < pet_cards_known(s_pet); i++) if (pet_card_get(s_pet, i) == pet_card_of_animal((animal_t)a)) conoce = true;
     if (conoce && s_pet && !s_pet->dormida && s_panel == PANEL_NINGUNO && a != ANIMAL_TOPO && a != ANIMAL_ERIZO && (uint32_t)(s_ms - s_opino_ms) > 6000u && azar() % 100 < 35) {
         s_opino_ms = s_ms;
+        s_globo_animal = (int8_t)a;
         globo(ICO_ANIMAL[a], s_nino ? NULL : OPINA_ANIMAL[a][azar() & 1u], 4200);
+        s_globo_animal = -1;
         if (s_nino) flotar(ICO_CORAZON, NULL, 0, (int)s_ani[a].x, (int)s_ani[a].y - 30, 0);
     }
 }
@@ -15936,7 +16117,22 @@ static void animar_animales(void)
             v->estado = ANI_LLEGA; v->proximo = s_ms + 2000;
             v->visible = true;
         }
-        if (!aqui && v->visible) v->visible = false;
+        /* (1.0.27) irse: antes se borraba en el mismo cuadro (19-nov: el conejo pasó detrás de ella y desapareció). Ahora se va
+         * por el borde más cercano, caminando, o hacia arriba si vuela; recién afuera se oculta. Si cambió la zona, está adentro
+         * de la casita o es un huevo, sí se quita al tiro. El topo se mete en su hoyo (como siempre). */
+        if (aqui) v->saliendo = false;
+        else if (v->visible) {
+            const bool al_tiro = s_escena != (int)p->escena || s_interior || p->etapa == STAGE_HUEVO || a == ANIMAL_TOPO;
+            if (al_tiro) { v->visible = false; v->saliendo = false; }
+            else if (!v->saliendo) {
+                const int est = a >= ANIMAL_V22 ? ESTILO_ANIMAL[a - ANIMAL_V22] : -1;
+                v->sale_vuela = a == ANIMAL_BUHO || a == ANIMAL_COLIBRI || a == ANIMAL_MURCIELAGO || est == AE_VUELA || est == AE_REVOLOTEA || est == AE_POSA;
+                v->saliendo = true;
+                v->sale_desde = s_ms;
+                if (v->sale_vuela) { v->sale_x = v->x + (v->x < CX ? -120.0f : 120.0f); v->sale_y = -60.0f; }
+                else { v->sale_x = v->x < CX ? -50.0f : W + 50.0f; v->sale_y = v->y; } /* por la orilla, a lo largo: nunca se mete al agua */
+            } else if (s_ms - v->sale_desde > 15000u || v->x < -40 || v->x > W + 40 || v->y < -40 || v->y > W + 40) { v->visible = false; v->saliendo = false; }
+        }
         ocultar(v->img, !v->visible);
         if (!v->visible) continue;
         if (v->estado != ANI_LLEGA && (int32_t)(s_ms - v->estado_hasta) > 0) v->estado = ANI_LLEGA;
@@ -16041,6 +16237,12 @@ static void animar_animales(void)
             }
             break;
         }
+        }
+        if (v->saliendo) { /* (1.0.27) va hacia su borde, un poco más rápido que de paseo */
+            v->tx = v->sale_x; v->ty = v->sale_y;
+            const float min = v->sale_vuela ? 3.0f : (a == ANIMAL_CARACOL || a == ANIMAL_TORTUGA ? 1.0f : 2.4f);
+            if (vel < min) vel = min;
+            if (v->sale_vuela) oy = sinf((float)s_ms / 160.0f) * 5;
         }
         float dx = v->tx - v->x, dy = v->ty - v->y, d = hypotf(dx, dy);
         if (d > vel) { v->x += dx / d * vel; v->y += dy / d * vel; espejo = dx < 0; }
@@ -16186,6 +16388,8 @@ static void animar_mascota(void)
     bool caminando = false;
     art_pose_t *ps = &c->pose;
 
+    if (s_gorro_dormir && (p->etapa == STAGE_HUEVO || !p->dormida) && !lv_obj_has_flag(s_gorro_dormir, LV_OBJ_FLAG_HIDDEN))
+        ocultar(s_gorro_dormir, true); /* (1.0.26) el gorrito de dormir de la otra mascota no se queda flotando sobre el huevo nuevo */
     if (p->etapa == STAGE_HUEVO) { /* el huevo se mece en el centro */
         c->tx = c->x = LXY(0)[0];
         c->ty = c->y = LXY(0)[1];
@@ -16193,6 +16397,15 @@ static void animar_mascota(void)
         ps->frame = (s_ms / ciclo) % 4 == 1 || (s_ms / ciclo) % 4 == 3;
         ps->espejo = (s_ms / ciclo) % 4 == 3;
         if (c->modo == M_SALTA && (int32_t)(s_ms - c->modo_hasta) < 0) sy = -fabsf(sinf((float)s_ms / 90.0f)) * 10;
+        { /* (1.0.26) lo tocaste: se mece de lado a lado desde la base, cada vez más suave (0,9 s) */
+            const uint32_t em = s_ms - s_huevo_mimo;
+            if (s_huevo_mimo && em < 900u) {
+                const int l = lado(c);
+                lv_image_set_pivot(c->img, l / 2, l);
+                lv_image_set_rotation(c->img, (int32_t)(sinf((float)em / 60.0f) * 110.0f * (1.0f - (float)em / 900.0f)));
+                s_rotada = true;
+            } else if (s_rotada) { s_huevo_mimo = 0; s_rotada = false; lv_image_set_rotation(c->img, 0); }
+        }
         dibujar(c);
         colocar(c, sx, sy);
         return;
@@ -16574,6 +16787,7 @@ static void animar_mascota(void)
         } else {
             switch (act) {
             case ACTV_SIESTA: ps->expr = EXP_CERRADOS; ps->postura = -2; ps->orejas = -1;
+                s_siesta_ms = s_ms; /* (1.0.26) echada: su colchoneta (animar_tapete) */
                 if (s_ms % 2400 < TICK_MS) flotar(ICO_ZETA, NULL, 0, (int)c->x + 22, cabeza_y(c) + 20, 0);
                 break;
             case ACTV_SOMBRA: ps->postura = -2; break;
@@ -17023,7 +17237,7 @@ static void tick_cb_cuerpo(void)
 /* ======================================================================
  * Prueba de los paneles: que nada quede fuera del círculo ni tape la X o la flecha de volver
  * ==================================================================== */
-#define PRUEBA_PANELES 85
+#define PRUEBA_PANELES 90 /* (1.0.27) +5: el Libro (portada y hoja 2), el Baúl, la enciclopedia por dentro y el diario */
 #ifndef MARGEN_PRUEBA
 #define MARGEN_PRUEBA 12 /* px hacia adentro del vidrio */
 #endif
@@ -17035,7 +17249,8 @@ static const char *const PRUEBA_NOMBRE[PRUEBA_PANELES] = {
     "rincon-ropa", "rincon-juguetes", "objeto", "genero", "carta-hoja", "historia", "pais", "ritmo", "pantalla2", "pecera",
     "verso-propuesta", "verso-tilo", "verso-nuestra", "verso-prisma", "verso-todos", "biblioteca", "comida-temporada", "ella-barras", "paleta-0", "paleta-1", "paleta-2", "paleta-3", "paleta-4", "paleta-5", "paleta-6", "paleta-7", "verso-cuchara",
     "verso-nombre", "verso-carta", "prisma", "tilde-chisme", "brizna", "pagina-tilo", "pagina-tilo-leer", "animales", "rito-pantalla", "rito-hoja", "nota-tilde",
-    "cristales-menu", "canciones", "canciones-5", "libro-narradores", "verso-fin", "rito-oro", "version"};
+    "cristales-menu", "canciones", "canciones-5", "libro-narradores", "verso-fin", "rito-oro", "version",
+    "libro-portada", "libro-hoja2", "baul", "encic-flora", "diario"};
 int ui_panel_actual(void) { return (int)s_panel; }
 int ui_periodo(void) { return s_pet ? (int)periodo_de(s_pet, s_ultimo_t) : -1; } /* (pruebas) */
 int ui_test_count(void) { return PRUEBA_PANELES; }
@@ -17158,6 +17373,11 @@ int ui_test_panel(int k)
     case 57: s_mas_tab = 0; s_ella_pag = 0; panel_mas(); s_ella_pag = 1; panel_mas(); break;
     case 55: s_bolsa_libro = 1; s_bolsa_pag = 0; panel_bolsa(); break;
     case 84: panel_version(); break; /* (1.0.09) */
+    case 85: panel_libro_hist(); break;           /* (1.0.27) */
+    case 86: panel_libro_hoja(); break;           /* (1.0.27) deslizar a la izquierda en el Libro */
+    case 87: ui_demo_cofre(0, -1); break;         /* (1.0.27) el Baúl con historias y canciones */
+    case 88: ui_demo_cofre(2, 2); break;          /* (1.0.27) la enciclopedia: flora en cuadrícula */
+    case 89: s_diario_tab = 0; s_diario_pag = 0; panel_diario(); break; /* (1.0.27) el diario, sin historias ni canciones */
     case 42: { int id = -1; for (int i = 0; i < PET_OBJETOS && id < 0; i++) if (s_pet->bolsa[i]) id = i; if (id < 0) return 0; panel_objeto(id); break; }
     }
     if (s_panel == PANEL_NINGUNO) return 0;

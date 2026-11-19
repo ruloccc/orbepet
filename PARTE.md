@@ -1,4 +1,34 @@
-# PARTE — estado del trabajo (18-nov-2026, 22:10)
+# PARTE — estado del trabajo (19-nov-2026, 11:30)
+
+> **1.0.27 «TODO EN SU LUGAR» (19-nov ~11:30): hecho TODO lo de la lista 000–000h** (ver README 1.0.27). Esta sesión SÍ
+> tuvo GitHub (add_repo ruloccc/orbepet después de que el usuario pidió subir) y se bajaron LVGL, wasi-sdk y binaryen:
+> ui.c pasa -fsyntax-only sin avisos, test_core 1224/1224, paneles 18 (la base), redibujo, fondos por franjas 1260/0,
+> dos/isla/olor bien, regresión regrabada (cambios esperados: versión, fotos, verso-* de la 1.0.25c y 5 paneles nuevos
+> 85-89: libro-portada, libro-hoja2, baul, encic-flora, diario). La 1.0.26 la compiló el usuario en su PC y anduvo.
+> Los puntos 000–000h de abajo quedan como historia de lo pedido.
+
+> **19-nov 10:00: la 1.0.26 COMPILÓ en el PC del usuario (idf.py, ESP-IDF 5.5.6) y arrancó.** Foto: huevo nuevo y al lado
+> una criatura verde con flor = la visita (s_visita) de la mascota anterior, que solo se iba con EV_VISITA_SE_VA.
+> Arreglado: `otra_mascota_limpiar()` (ui.c, junto a esconder_vecino) al crear/cambiar y si la mascota es huevo.
+> Dato del registro: al volver de la isla al prado (24 s tras arrancar) la PSRAM quedó en **153 KB (bloque 38 KB)** y
+> subió a 1944 KB recién al crear la mascota nueva: el paso isla → prado retiene ~1,8 MB. Mirar eso (fondos de la isla /
+> pantallas guardadas) cuando se investigue la memoria.
+>
+> **19-nov 9:40, el usuario aclaró: la noche lenta fue SIN cable.** Causa encontrada: el sueño profundo de la noche pide
+> `pet_is_bedtime` y una mascota nueva tiene `dormir.modo = DORMIR_NO` → nunca dormía profundo. Arreglado en la 1.0.26
+> (`noche_profunda`: sin hora elegida, 22:00-7:00). En el próximo informe buscar «energia: SUEÑO PROFUNDO de noche».
+>
+> **Sesión del 19-nov mañana (zip 1.0.26 «NADIE SE PIERDE», sin subir a GitHub: la sesión no tuvo permiso para el repo
+> ni para leer los informes).** Se perdió Tova de Perfiles tras una noche lenta. Arreglado (ver README 1.0.26):
+> guardado seguro de m*.bin (`hal_res_save_seguro` + arreglo en `hal_res_init`), cambio de perfil anotado en
+> `mcambio.bin` (`cambio_reparar` al arrancar), la que se va «DE VIAJE» queda en `adios.bin` y puede volver
+> (UI_ACCION_VOLVER_VIAJE 192, `pet_traveller_back`), guardado en segundo plano numerado, respaldo del PC con «recursos»,
+> reinicio de mantenimiento con PSRAM < 900 KB por 10 min. Además: faro con barquitos «guiados», huevo sin «NACERÁ…» y
+> con meneo al tocarlo, gorrito de dormir oculto en el huevo, textos del Libro, colchoneta en la siesta, aviso de cómo
+> despertarla. Probado aquí: test_core 1223/1223 y dos arneses en el PC (guardado seguro: 8 casos; cambio a medias: 4
+> casos). NO se pudo compilar el firmware ni correr el simulador (el zip no trae `sim/` y no hay LVGL ni ESP-IDF): lo
+> primero es la compilación de GitHub. Falta saber: qué se come la PSRAM de noche (pedir un informe tras una noche con
+> cable) y si la mascota dormida sin colchoneta del 19-nov era la siesta (ahora con colchoneta) u otra cosa (pedir foto).
 
 > **Sesión del 18-nov 19:10-19:45:** se revisaron los informes (prueba total 17:10, rendimiento 18:39 y 19:06,
 > registro 18:30) y se arregló el probador (solo herramientas, sin firmware nuevo): **3a hecho** (respaldo en
@@ -9,7 +39,8 @@
 Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4, ESP-IDF 5.5). **Responder siempre en
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
-Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.24 → 1.0.25 («EL FINAL SIN PEGARSE»), aún NO publicada. Partida **versión 42** (no cambia desde el 104).
+Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. Nueva: **1.0.27**
+(«TODO EN SU LUGAR»), subida a GitHub para publicar por Wi-Fi. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
@@ -208,6 +239,87 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
 
 ## 3. Qué falta (en orden)
 
+000. **PRÓXIMA REVISIÓN — pedido del usuario 19-nov 10:16: crear mascota nueva entra en un bucle.** Perfiles → huevo
+   nuevo → elige huevo → pone la fecha y su cumpleaños → vuelve a la pantalla inicial y a elegir huevo otra vez. Mirar el
+   camino de UI_ACCION_NUEVA (main.c: pet_new_fresh + `edad_dueno = 0`, `dueno_dia/mes = 0`) y en ui.c la secuencia del
+   inicio (vivero → hora → cumpleaños → país → `s_asp_listo` → ASPECTO/GENERO/HUEVO_EMPIEZA): qué condición devuelve al
+   vivero (¿se pierde el aspecto elegido, `aspecto_ok`, al guardar la fecha? ¿UI_ACCION_HORA/poner_hora reinicia algo?).
+   Pedir el registro de ese momento. Revisar también si lo provoca algo de la 1.0.26 (cambio_reparar, otra_mascota_limpiar).
+000b. **PRÓXIMA REVISIÓN — el texto nuevo de la 2.ª página del Libro no cabe** (foto 19-nov 10:16: se corta en «AHORA TE
+   TOCA DESCUBRIRME Y», el SIGUE tapa el resto). Son 198 letras y antes eran 184. Propuesta, sin aplicar (el usuario pidió
+   esperar), de 176 letras: «GUARDÉ LISTAS DE COSAS POR CUIDAR, RECETAS DE GALLETAS, CHISTES E HISTORIAS.» / «MI DUEÑO
+   ENFERMÓ Y QUEDÉ OLVIDADO EN UN RINCÓN, HASTA HOY.» / «AHORA DESCÚBREME Y COMPLÉTAME CON TU VIDA.» Mejor aún: que la
+   página del Libro se ajuste sola (letra más chica o dos hojas si no cabe). Revisar también la 1.ª página (158 letras).
+000c. **PRÓXIMA REVISIÓN — textos que llegan tarde (foto 19-nov 10:21: «¿QUÉ LE DAMOS?» sale DESPUÉS de darle la comida).**
+   Causa vista en el código: picnic_abrir() (ui.c, ~8565) llama globo("¿QUÉ LE DAMOS?") con el picnic ya abierto;
+   mundo_en_pausa() es true durante el picnic, así que globo() lo guarda en la cola s_gpend y seguir_globos() lo suelta
+   cuando el picnic termina. Pasa con CUALQUIER globo dicho dentro de una actividad que pausa el mundo (juegos, bote,
+   picnic, paneles) o mientras habla Pochi. El usuario: «no debería pasar en ningún lado». Arreglo propuesto:
+   (a) cada globo en cola guarda cuándo se pidió y la escena/actividad; si espera más de ~6 s o cambió la actividad, se
+   descarta (los avisos importantes que sí deben esperar, marcarlos aparte); (b) los textos propios de la actividad
+   (como el del picnic) se muestran dentro de ella (s_po_bypass o un globo de la actividad), no en la cola del mundo.
+   Buscar todos los globo() llamados justo después de abrir algo que pausa el mundo.
+   **Decisión del usuario (10:22): en la comida NO va ninguna frase** → borrar el globo de picnic_abrir() (el título
+   «¿QUÉ LE DAMOS?» de la tarjeta de comidas, ui.c ~1769, se queda). El arreglo general de la cola igual hace falta.
+000d. **PRÓXIMA REVISIÓN — álbum de fotos (decisión del usuario 19-nov 10:34: «segunda»).** Hoy todas se ven iguales
+   (dibujar_foto en ui.c ~9739: marco 120×104 con degradé, ícono de zona al 40 %, mini criatura y un iconito en la esquina,
+   casi siempre el corazón) y repiten el diario. Se decidió: **pocas fotos, y cada una distinta.** Solo momentos grandes
+   (DIA_NACIO, DIA_CRECIO, DIA_SU_CUMPLE, DIA_CUMPLE_DUENO, DIA_BALLENA, DIA_FIESTA, DIA_FINAL; ver si DIA_GUARDIANA,
+   DIA_FAMILIA y DIA_ESTRENO también) con un dibujo propio grande en el centro (pastel, ballena, guirnaldas…) y los
+   colores reales de la zona, en vez del corazón en la esquina. Los demás motivos dejan de sacar foto (siguen en el
+   diario). En core/pet.c, `foto(p, DIA_…)` se llama en 25 lugares: filtrar ahí o en foto() con una lista de motivos;
+   las fotos viejas que ya están guardadas se pueden dejar o filtrar al mostrarlas. Las fotos de la CÁMARA no se tocan.
+   Ojo con la memoria: nada de fondos grandes por foto; dibujos de íconos del tamaño de los que ya hay.
+000e. **PRÓXIMA REVISIÓN — la enciclopedia por dentro (pedido 19-nov 10:38).** El menú (cuadrícula de 4: SU DÍA A DÍA,
+   PIEDRAS Y MINERALES, FLORA, FAUNA) está PERFECTO: no tocar. Lo malo es al entrar a una categoría (panel_cofre, ui.c
+   ~10611, rama `s_cofre_vista == 2` con `s_cofre_sub >= 0`): arriba dice «ENCICLOPEDIA», debajo la fila de 4 botones
+   (`cofre_cat_boton(10 + k…)`) con la elegida marcada, el nombre chico de la categoría (y 158) y abajo una lista que se
+   desliza (area_texto 45,186 330×146). Lo que pide el usuario:
+   - título = SOLO el nombre de la categoría (como ya hace Tesoros: ocultar «ENCICLOPEDIA», poner NM[s_cofre_sub] grande);
+   - QUITAR la fila de categorías;
+   - el contenido también en CUADRÍCULA (fichas como las del menú), usando todo el alto que queda libre;
+   - si hay más, se desliza (scroll vertical de la cuadrícula).
+   Hay que cambiar cofre_pieza(…, false) y tesoros_magia() para que dibujen celdas de cuadrícula en vez de filas (ojo: las
+   mismas funciones las usa Tesoros con `true`; tesoros_magia crea solo las filas de la página por la RAM interna:
+   ts_toca/s_ts_lo/s_ts_hi). Volver: sigue yendo al menú de la enciclopedia (cofre_hub_cb 21). Revisar también modo
+   infante (sin textos). Probar con el simulador: paneles.js y una foto de cada categoría.
+000f. **PRÓXIMA REVISIÓN — diario sin la pantalla grande (pedido 19-nov 10:40).** Al tocar un hito del diario se abre
+   nota_mostrar() con lo mismo que ya dice la fila: QUITAR. En diario_nota_cb (ui.c ~9865) dejar solo los dos casos que
+   abren otra cosa (DIA_HISTORIA → panel_historia, DIA_NUESTRA → panel_canciones) y no llamar nota_mostrar para el
+   resto. Las filas normales dejan de ser tocables (sin LV_OBJ_FLAG_CLICKABLE ni el evento; mantener SCROLL_CHAIN_VER
+   para deslizar). Revisar antes que la fila muestre el texto ENTERO (ancho 306, LV_SIZE_CONTENT) y no lo corte, porque
+   la nota era lo único que mostraba el texto completo. Cambiar el comentario «cada una se lee entera al tocarla».
+   (El álbum y los tesoros también usan nota_mostrar: esos NO se pidieron.)
+000g. **PRÓXIMA REVISIÓN — los animales desaparecen de golpe (19-nov 10:41: el conejo se fue detrás de la mascota y
+   desapareció).** Llegar sí: animar_animales (ui.c ~16000) los hace entrar desde un borde (izq/der/arriba/abajo, ANI_LLEGA).
+   Irse NO: `if (!aqui && v->visible) v->visible = false;` (ui.c ~16033) los oculta en el mismo cuadro en que el motor
+   deja de tenerlos (pet_animal_here = false: se acabó su animal_hasta, o animal_se_va / ANI_SE_VA). Regla del usuario:
+   **un animal llega caminando o volando y se va caminando o volando**, siempre por un borde. Arreglo: un estado
+   «saliendo» (como ya tiene la fauna, s_fauna[].saliendo, ~6747): al dejar de estar `aqui`, elegir el borde más cercano
+   (o por arriba los que vuelan, nunca por el agua para los que caminan), caminar hasta salir de la pantalla y recién ahí
+   ocultar. Excepciones con su propia animación que se deben conservar: el topo se mete en su hoyo (ANI_SE_ESCONDE) y el
+   caracol/topo que salen despacito desde abajo. Si cambia la escena o se abre un panel/juego (mundo en pausa), ahí sí
+   se pueden ocultar sin animación. Ojo: que el que va saliendo no se pueda tocar (ni cuente como presente para Pochi o
+   los encuentros). Revisar también Pochi y el vecino por si algo se esfuma igual.
+000h. **PRÓXIMA REVISIÓN — historias y canciones salen del diario y van al Baúl y al Libro (pedido 19-nov 10:43).**
+   - Diario: NO mostrar las entradas DIA_HISTORIA ni DIA_NUESTRA en la lista de hitos (filtrar al dibujar en el panel del
+     diario, ui.c ~9940; el motor las sigue anotando: anotar(p, DIA_HISTORIA…) en core/pet.c 1734/6011 y la estrellita
+     lib_nuevo en 6741). Con esto, 000f queda: ninguna fila del diario se abre.
+   - Baúl (cofre_hub, ui.c ~10547: ACCESORIOS, TESOROS, ENCICLOPEDIA, FOTOS, CÁMARA, CARTAS): dos entradas nuevas,
+     HISTORIAS (abre las historias por narrador: panel_historia / lo que hoy abre el Libro) y CANCIONES (panel_canciones).
+   - Libro (CONFIRMADO 10:46): el Libro se abre como siempre, deslizando de izquierda a derecha. ESTANDO en el Libro
+     (panel_libro_hist, ui_magia.inc ~669), deslizar hacia la izquierda pasa a una hoja con dos botones grandes:
+     HISTORIAS y CANCIONES (los mismos destinos que en el Baúl). Deslizar a la derecha vuelve al Libro. Usar el mismo
+     mecanismo de hojas de los paneles (pag_ir / s_pag_n, pag_global_cb) para que se sienta igual que el resto.
+     Propuesto al usuario: puntitos abajo (2 hojas) para que se note que hay otra hoja; con algo nuevo sin ver, la
+     estrellita en el botón; en modo infante, solo los dos dibujos.
+00. **1.0.26: compilar en GitHub y revisar** (main.c, services.c, ui.c, ui_isla.inc no se pudieron compilar aquí).
+   En el orbe probar: Perfiles → traer a otra y volver; «DE VIAJE» y después «¿QUIERES QUE VUELVA?»; el faro (alumbrar un
+   barquito y traer la luz de vuelta: tiene que seguirla); tocar el huevo nuevo. En el registro buscar «perfiles:»,
+   «guardar seguro:» y «memoria: … reinicio de mantenimiento».
+   Pendiente de fondo: **qué retiene la PSRAM con las horas** (ver «Problema general de memoria» en 0a). El reinicio de
+   mantenimiento solo lo tapa.
+
 0. **Esperar los informes del probador nuevo** (RENDIMIENTO automático y Probar lo nuevo, ya midiendo despierta).
    Revisar: la línea «RESPALDO: tus mascotas quedaron como antes…» al final del informe; si los 6 juegos, la niebla
    y el bote siguen fallando con la pantalla encendida (si siguen, ahí sí es el firmware); y la tabla de velocidad
@@ -227,6 +339,18 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
      (164 ms/cuadro). La 1.0.25 hace lugar antes de abrir el final (final_revisar) y anota «final: empieza…».
      Si sigue pesado: el Libro de escala 10 con fin_pop (transformación de imagen cada cuadro) y el fondo de 466×466
      con LV_RADIUS_CIRCLE + degradé (máscara redonda) son lo caro; se podría armar el fondo una vez como imagen.
+   - **Prueba del 18-nov 22:59 (1.0.25 por cable): el final ya NO se pega** (PSRAM tras los paneles 1110 KB, bloque
+     928 KB). Final regular 132 ms/cuadro (máx 261), secreto 10 ms. Los «826 kpx por cuadro» eran pedidos, no dibujo
+     real (inv_evento sumaba cada pedido aunque cayera dentro de otro). Zip 1.0.25b (sin subir a GitHub):
+     services.c cuenta en LV_EVENT_REFR_START las zonas ya juntadas (kpx reales); fin_fondo sin LV_RADIUS_CIRCLE
+     (el borde dorado va en un aro aparte); el Libro flota de a 2 px; luciérnagas con bg_opa/border_opa en vez de
+     style_opa (no capa aparte). «PROBAR EL ARREGLO» mide 2 veces VELOCIDAD en cada final.
+     Si sigue lento: las hojas con shadow_width 18-22 que suben (páginas 1, 5, 6) y los aros de hasta 424 px.
+   - **Prueba 23:16 (1.0.25b):** kpx reales del final regular = 54-66 por cuadro (¡no 826!), pero 118-135 ms → ~2 µs
+     por pixel (el mundo normal ~0,5; el secreto ~1). Lo caro era `pagina_vieja`: hoja con transform_rotation + sombra +
+     texto y cucharita girados adentro → LVGL la arma en una capa y la gira en CADA redibujo (los aros la cruzan).
+     1.0.25c: pagina_vieja la arma en un marco con margen y la aplana UNA vez con lv_snapshot_take (ARGB8888, ~260 KB
+     PSRAM, s_pag_plana[2], se suelta en cerrar_panel_dentro → pagina_plana_soltar). Si no hay memoria, queda girada.
    - **Problema general de memoria:** en RENDIMIENTO la PSRAM baja de ~1,8 MB a ~0,3 MB al recorrer los paneles
      (desde «panel 29 aspecto») y no vuelve. Algo retiene ~1,5 MB (¿pantallas art_pantalla_* guardadas? ¿caché?). Es
      lo próximo a investigar: con poca PSRAM todo se pone lento (íconos que se sueltan y rehacen).
@@ -429,6 +553,9 @@ Propuesto (en este orden; esperar la tabla de velocidad del orbe antes de decidi
 - **Pochi no va a la isla** (no sabe nadar) y **no llega con una visita** (espera que se vaya + 6 min).
 - **Durante una actividad el mundo se apaga** (juegos, bote, comer, paneles, diario): ni Pochi ni globos; el baño no.
 - **El micrófono viene apagado** y se abre solo mientras algo espera un soplido (niebla, olor, bote, velas, pesca).
+- **Una mascota de Perfiles nunca se pierde** (19-nov): guardado seguro, cambio anotado, «DE VIAJE» con vuelta atrás.
+  Ojo: el respaldo de las PRUEBAS (Documentos\Respaldos mascota\Antes de las pruebas) sigue siendo solo nvs: las que
+  descansan (recursos/m*.bin) no entran. El «Respaldar mascota» del programa sí (1.0.26).
 - **Toda prueba por cable respalda al empezar (en Documentos\Respaldos mascota\Antes de las pruebas) y restaura desde ese
   mismo archivo al terminar, aunque falle o se cancele** (pedido del 18-nov).
 - No dañar lo que ya existe: tras cada cambio, test_core, paneles (18), regresión y, si toca el motor, soak.

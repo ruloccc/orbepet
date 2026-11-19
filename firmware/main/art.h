@@ -590,6 +590,7 @@ void art_cruce_fondo(art_img_t *dst, int periodo);
 /* fondos de pantalla como foto (0 elegir huevo, 1 juego de la fruta, 2 picnic: capa con transparencia). NULL si no hay: se pinta con formas. */
 const lv_image_dsc_t *art_pantalla(int id, int *x, int *y);
 void art_pantalla_liberar(int id);
+uint32_t art_pantallas_soltar(bool (*en_uso)(const void *src)); /* (1.0.25) suelta las fotos de pantalla que ninguna imagen muestra; bytes liberados */
 /* (1.0.17) los fondos de los juegos de a dos viven en la MEMORIA DE RECURSOS (/res/pjN.bin), no en el programa.
  * art_lector: quién lee esos archivos (main: hal_res_read). art_fondo_dos(n): el fondo n (0..3) o NULL si falta. */
 #define ART_PANT_DOS 16 /* las pantallas 16..19 son los fondos de los juegos de a dos; 20 y 21 los de la isla (pj4, pj5) */

@@ -184,6 +184,9 @@ class App(tk.Tk):
 
         # ---------- 2. las pruebas
         t_prue = self.hoja("Pruebas")
+        g = self.plegable(t_prue, "Probar el arreglo de esta versión (lo primero)",
+                          "Prueba corta (3–5 min): solo lo que arregla la versión nueva. Respalda tus mascotas al empezar y las devuelve al terminar.", abierto=True)
+        self.rejilla(g, (("PROBAR EL ARREGLO (3 min)", "arreglo"),), self.probar, por_fila=1)
         g = self.plegable(t_prue, "La prueba completa (la importante)",
                           "Usa UNA de las dos para empezar. La guiada es la recomendada: al comienzo te pide tocar, sacudir, girar y soplar; después sigue sola. "
                           "Si se corta (la placa se cae o se desenchufa), «CONTINUAR» sigue desde la fase donde quedó, sin repetir lo ya hecho.", abierto=True)
@@ -1040,7 +1043,9 @@ class App(tk.Tk):
                 print("No pude leer la placa. Ponla en modo descarga (BOOT + RESET) y vuelve a intentar."); return False
             self.poner_pct(10)
             hechos = []
-            lista = ("nvs", "coredump", "fotos") if incluir else ("nvs", "coredump")  # coredump = el informe del último fallo
+            # coredump = el informe del último fallo. (1.0.26) «recursos» también: ahí viven las mascotas que DESCANSAN en
+            # Perfiles (m0.bin, m1.bin, m2.bin) y la que se fue de viaje (adios.bin). Antes el respaldo no las tenía.
+            lista = ("nvs", "coredump", "recursos", "fotos") if incluir else ("nvs", "coredump", "recursos")
             pesos = {n: tabla[n][1] for n in lista if n in tabla}
             total_p = max(1, sum(pesos.values()))
             acum = 0
@@ -1079,7 +1084,7 @@ class App(tk.Tk):
         carpeta = filedialog.askdirectory(initialdir=base if os.path.isdir(base) else os.path.expanduser("~"), title="Carpeta del respaldo (la que tiene nvs.bin)")
         if not carpeta or not os.path.exists(os.path.join(carpeta, "manifiesto.txt")):
             return
-        if not messagebox.askyesno("Restaurar", f"Esto reemplaza la partida de la mascota (y las fotos, si el respaldo las tiene) por las de:\n{carpeta}\n\n¿Seguro?"):
+        if not messagebox.askyesno("Restaurar", f"Esto reemplaza la partida de la mascota, sus perfiles (y las fotos, si el respaldo las tiene) por las de:\n{carpeta}\n\n¿Seguro?"):
             return
         def f():
             print("=== RESTAURAR RESPALDO ===")
@@ -1305,7 +1310,8 @@ class App(tk.Tk):
         """Traduce las direcciones del último FALLO_BT del registro a archivo y línea del código (con el programa que se compiló)."""
         def f():
             import glob
-            regs = sorted(glob.glob(os.path.join(PROYECTO, "registro_placa*.txt")) + glob.glob(os.path.join(probar.carpeta_datos(), "registro_placa*.txt")), key=os.path.getmtime)
+            regs = sorted(glob.glob(os.path.join(PROYECTO, "registro_placa*.txt")) + glob.glob(os.path.join(probar.carpeta_datos(), "registro_placa*.txt"))
+                          + glob.glob(os.path.join(probar.carpeta_registros(), "registro_placa*.txt")), key=os.path.getmtime)
             reg = regs[-1] if regs else os.path.join(PROYECTO, "registro_placa.txt")
             try:
                 lineas = open(reg, encoding="utf-8", errors="replace").read().splitlines()
@@ -1457,6 +1463,7 @@ class App(tk.Tk):
         "total_guiado": ("PRUEBA TOTAL + guiada (con tus manos)", "Igual que la prueba total, pero al comienzo una ventana te guía paso a paso para tocar la pantalla, sacudir, girar, apretar PWR, soplar y desenchufar el cable. Después sigue sola.", "Tener la placa en la mano al comienzo (unos 5 minutos). Luego te puedes olvidar.", "1 hora aprox."),
         "nuevo": ("Probar lo nuevo (guiada)", "Revisa lo de las versiones 1.0.16 a 1.0.23: los 6 fondos de los juegos, los juegos de a dos y de la isla (se juegan solos y se cierran), tocar el faro y la piedra en la isla, que el micrófono se encienda solo con niebla o mal olor, la velocidad con y sin la mejora de la 1.0.22 (lluvia, nieve, tormenta, noche) y la memoria. Al final baja el registro.", "Tener el orbe en la mano cuando te lo pida: SOPLAR la niebla, el mal olor y la vela del bote (3 veces, unos segundos cada una).", "10–15 min"),
         "nuevo_auto": ("Probar lo nuevo (sin manos)", "Lo mismo que la guiada, sin las pruebas de soplar (esas quedan como aviso). Al final baja el registro.", "Nada: déjala enchufada.", "10 min aprox."),
+        "arreglo": ("PROBAR EL ARREGLO (3 min)", "Prueba solo lo que arregla la versión nueva, sin repetir lo que ya anda bien. En la 1.0.25: gasta la memoria abriendo todos los paneles (como la prueba larga) y después abre los dos finales, que dejaban al orbe sin contestar. Respalda tus mascotas al empezar, las devuelve al terminar y baja el registro.", "Nada: déjala enchufada.", "3–5 min"),
         "rendimiento": ("RENDIMIENTO automático", "Mide velocidad y memoria: cada zona, estación y hora, climas, niebla, casita, paneles y juegos. Resume lo más lento y lo que más memoria gasta.", "Nada.", "20–30 min"),
         "reinicios": ("Solo REINICIOS (3 veces)", "Reinicia la placa 3 veces seguidas y mide si vuelve a contestar. Sirve para ver si el reinicio por software la deja colgada. Baja el registro al final.", "Nada. Si la placa no vuelve: saca la batería, vuelve a ponerla y usa «Obtener log del dispositivo».", "2–3 min"),
         "total_continuar": ("CONTINUAR la prueba cortada", "Retoma la última prueba total que se cortó: salta las fases ya hechas y repite solo desde la fase donde quedó (esa la hace entera). El informe junta lo de antes con lo nuevo.", "Que la placa esté encendida y conectada. Si era la guiada, las pruebas con las manos no se repiten.", "lo que falte"),
@@ -1486,7 +1493,7 @@ class App(tk.Tk):
     # aunque la prueba falle, se corte o se detenga. Antes el respaldo vivía en la placa y las fases 22-26 lo usaban
     # y lo borraban a mitad de camino: al final ya no quedaba nada que devolver.
     PRUEBAS_CON_RESPALDO = {"todo", "paneles", "juegos", "zonas", "secretos", "finales", "panel", "actividades", "cantar",
-                            "rendimiento", "tamano", "total", "total_guiado", "total_continuar", "nuevo", "nuevo_auto"}
+                            "rendimiento", "arreglo", "tamano", "total", "total_guiado", "total_continuar", "nuevo", "nuevo_auto"}
     RESP_PRUEBAS_MAX = 10  # se guardan los 10 más nuevos
 
     @staticmethod
@@ -1606,7 +1613,7 @@ class App(tk.Tk):
             linea = ("RESPALDO: NO pude devolver tus mascotas todavía. El respaldo está a salvo en " + carpeta +
                      "; se devuelve solo la próxima vez que abras este programa, o con «Restaurar el último respaldo de prueba».")
         print(linea)
-        for ruta in (os.path.join(os.getcwd(), "informe.txt"), os.path.join(probar.carpeta_datos(), "informe.txt")):
+        for ruta in (os.path.join(os.getcwd(), "informe.txt"), probar.ULTIMO_INFORME or ""):
             try:
                 if os.path.exists(ruta) and time.time() - os.path.getmtime(ruta) < 6 * 3600:
                     open(ruta, "a", encoding="utf-8").write(linea + "\n")
@@ -1695,8 +1702,9 @@ class App(tk.Tk):
 
     def copiar_informe(self):
         ruta = os.path.join(os.getcwd(), "informe.txt")
-        if not os.path.exists(ruta):
-            ruta = os.path.join(probar.carpeta_datos(), "informe.txt")
+        if not os.path.exists(ruta):  # (1.0.25) el más nuevo de Documentos\MascotaPruebas\Informes
+            todos = sorted(glob.glob(os.path.join(probar.carpeta_informes(), "informe_*.txt")))
+            ruta = todos[-1] if todos else os.path.join(probar.carpeta_datos(), "informe.txt")
         if not os.path.exists(ruta):
             messagebox.showinfo("Informe", "Todavía no hay informe: haz una prueba primero."); return
         self.copiar(open(ruta, encoding="utf-8").read(), "Informe copiado. Pégalo en el chat.")

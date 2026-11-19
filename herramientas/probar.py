@@ -85,6 +85,26 @@ def carpeta_datos():
     except Exception:
         return os.getcwd()
 
+def carpeta_informes():
+    """(1.0.25) Documentos\\MascotaPruebas\\Informes: un informe_AAAA-MM-DD_HH-MM-SS.txt por prueba."""
+    ruta = os.path.join(carpeta_datos(), "Informes")
+    try:
+        os.makedirs(ruta, exist_ok=True)
+        return ruta
+    except Exception:
+        return carpeta_datos()
+
+def carpeta_registros():
+    """(1.0.25) Documentos\\MascotaPruebas\\Registros de la placa: un registro_placa_AAAA-MM-DD_HH-MM-SS.txt por vez."""
+    ruta = os.path.join(carpeta_datos(), "Registros de la placa")
+    try:
+        os.makedirs(ruta, exist_ok=True)
+        return ruta
+    except Exception:
+        return carpeta_datos()
+
+ULTIMO_INFORME = None  # (1.0.25) ruta del informe con fecha de la última prueba (ahí se agrega la línea del respaldo)
+
 class Cancelado(Exception):
     pass
 
@@ -448,6 +468,48 @@ def finales(p, sal):
         print(sal[-1]); avanza()
         p.cmd("CERRAR", 1)
         p.cmd("FINAL BORRAR", 1)
+
+
+def arreglo(p, sal):
+    """(1.0.25) Prueba CORTA solo de lo que arregla esta versión (unos 3 min en vez de 30): primero gasta la memoria como
+    la prueba larga (abre todos los paneles, rápido) y después mide los dos finales, que eran los que dejaban al orbe
+    sin contestar con poca memoria. Cambiar esta función en cada versión según lo que se arregló."""
+    sal.append("== PRUEBA DEL ARREGLO (1.0.25c: el final regular lento, hoja aplanada) ==")
+    medir_despierta(p)
+    d0 = p.info() or {}
+    sal.append(f"memoria al empezar: PSRAM {d0.get('psram')} KB, RAM interna {d0.get('ram')} B")
+    r = p.cmd("PANELES", 0.2)
+    n = len(r.split()[4:]) if r else 85
+    etapa("Gastando memoria como la prueba larga (todos los paneles, rápido)")
+    for k in range(n):
+        p.cmd(f"PANEL {k}", 0.6)
+        avanza()
+    p.cmd("CERRAR", 1)
+    d1 = p.info() or {}
+    sal.append(f"memoria después de los paneles: PSRAM {d1.get('psram')} KB, RAM interna {d1.get('ram')} B (así estaba cuando el final se pegaba)")
+    print(sal[-1])
+    # (1.0.25b) cada final se mide 2 veces (3 s cada una) con la placa despierta: ms por cuadro y kpx DE VERDAD dibujados
+    sal.append("== FINALES (velocidad) ==")
+    etapa("Midiendo los finales")
+    for nombre in ("REGULAR", "SECRETO"):
+        p.cmd("CERRAR", 1)
+        p.cmd("FINAL " + nombre, 5)
+        d = p.info()
+        ok = d is not None and d.get("panel", 0) != 0
+        sal.append(linea("final " + nombre.lower(), d, [] if ok else ["NO SE MOSTRÓ"]))
+        print(sal[-1]); avanza()
+        for k in (1, 2):
+            v = p.cmd("VELOCIDAD", 0.2)
+            sal.append(f"   velocidad {k}: " + (v.split("OK", 1)[1].strip() if v and "OK" in v else "sin respuesta"))
+            print(sal[-1])
+            time.sleep(3.2)
+        p.cmd("CERRAR", 1)
+        p.cmd("FINAL BORRAR", 1)
+    d2 = p.info()
+    sal.append("después de los finales: " + ("la placa contesta bien" if d2 else "LA PLACA NO CONTESTA (se pegó)") +
+               (f" — PSRAM {d2.get('psram')} KB" if d2 else ""))
+    print(sal[-1])
+    medir_despierta(p, False)
 
 
 NOM_EST = ["primavera", "verano", "otoño", "invierno"]
@@ -1251,7 +1313,7 @@ def leer_registro(p, borrar=False):
     with open(ruta, "w", encoding="utf-8") as f:
         f.write("# registro pedido el " + time.strftime("%d-%m-%Y a las %H:%M:%S") + "\n")
         f.write("\n".join(lineas) + "\n")
-    try: shutil.copy(ruta, carpeta_datos())  # copia a Documentos: sobrevive a borrar C:\mascota
+    try: shutil.copy(ruta, carpeta_registros())  # (1.0.25) copia a Documentos\MascotaPruebas\Registros de la placa: sobrevive a borrar C:\mascota
     except Exception: pass
     global ULTIMO_REGISTRO
     ULTIMO_REGISTRO = "\n".join(lineas) + "\n"
@@ -1324,10 +1386,10 @@ def ejecutar():
     n_pan = max(1, len(r_pan.split()[4:])) if r_pan else 67  # los paneles que tiene ESTA placa
     n_act = len(NOM_ACT)
     _total[0] = {"todo": n_pan + 4 + 6 + 4 + 2 + n_act + 4, "paneles": n_pan, "juegos": 4, "zonas": 6, "secretos": 4, "finales": 2, "panel": 1, "sonido": 3,
-                 "actividades": n_act, "cantar": 4, "rendimiento": RENDIMIENTO_PASOS, "tamano": 330, "total": 640 + n_pan, "total_guiado": 640 + n_pan, "total_continuar": 640 + n_pan, "nuevo": 60, "nuevo_auto": 60}.get(que, 1)
+                 "actividades": n_act, "cantar": 4, "rendimiento": RENDIMIENTO_PASOS, "tamano": 330, "arreglo": n_pan + 4, "total": 640 + n_pan, "total_guiado": 640 + n_pan, "total_continuar": 640 + n_pan, "nuevo": 60, "nuevo_auto": 60}.get(que, 1)
     hubo = False
     try:
-        if que in ("todo", "paneles", "juegos", "zonas", "secretos", "finales", "panel", "actividades", "cantar", "rendimiento", "tamano", "total", "total_guiado", "total_continuar", "nuevo", "nuevo_auto"):
+        if que in ("todo", "paneles", "juegos", "zonas", "secretos", "finales", "panel", "actividades", "cantar", "rendimiento", "arreglo", "tamano", "total", "total_guiado", "total_continuar", "nuevo", "nuevo_auto"):
             hubo = desbloquear_todo(p)
         if que in ("todo", "paneles"): paneles(p, sal)
         if que in ("todo", "juegos"): juegos(p, sal)
@@ -1336,6 +1398,10 @@ def ejecutar():
         if que in ("todo", "finales"): finales(p, sal)
         if que in ("todo", "actividades"): actividades(p, sal)
         if que in ("todo", "cantar"): cantar(p, sal)
+        if que == "arreglo":  # (1.0.25) solo lo de esta versión
+            arreglo(p, sal)
+            etapa("Bajando el registro de la placa")
+            leer_registro(p)
         if que == "rendimiento":
             rendimiento(p, sal)
             etapa("Bajando el registro de la placa")
@@ -1393,11 +1459,11 @@ def ejecutar():
     else:
         sal.append("Sin errores ni avisos de la placa.")
     open("informe.txt", "w", encoding="utf-8").write("\n".join(sal) + "\n")
-    try:  # copia a Documentos\\MascotaPruebas: la última y una con fecha
-        d = carpeta_datos()
-        open(os.path.join(d, "informe.txt"), "w", encoding="utf-8").write("\n".join(sal) + "\n")
-        open(os.path.join(d, "informe_" + time.strftime("%Y-%m-%d_%H-%M-%S") + ".txt"), "w", encoding="utf-8").write("\n".join(sal) + "\n")
-        print("Copia del informe en: " + d)
+    try:  # (1.0.25) copia con fecha en Documentos\\MascotaPruebas\\Informes (los registros de la placa van en otra carpeta)
+        global ULTIMO_INFORME
+        ULTIMO_INFORME = os.path.join(carpeta_informes(), "informe_" + time.strftime("%Y-%m-%d_%H-%M-%S") + ".txt")
+        open(ULTIMO_INFORME, "w", encoding="utf-8").write("\n".join(sal) + "\n")
+        print("Informe guardado en: " + ULTIMO_INFORME)
     except Exception:
         pass
     print("\nListo: informe.txt")

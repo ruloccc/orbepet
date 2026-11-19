@@ -15,6 +15,7 @@
 #include "board.h"
 #include "bsp/esp-bsp.h"
 #include "esp_lv_adapter.h"
+#include "src/display/lv_display_private.h" /* (1.0.25) inv_areas / inv_p: contar lo que de verdad se dibuja */
 #include "driver/gpio.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
@@ -66,8 +67,7 @@ void hal_vel_info2(int *cuadros, int *prom_ms, int *max_ms, int *kpx, int *tick_
 }
 static void inv_evento(lv_event_t *e)
 {
-    const lv_area_t *a = (const lv_area_t *)lv_event_get_param(e);
-    if (a) s_inv_px += (uint64_t)lv_area_get_width(a) * (uint64_t)lv_area_get_height(a);
+    (void)e; /* (1.0.25) ya no se cuenta aquí: se cuenta al empezar cada cuadro (refr_evento) */
 }
 
 /* ---------- registro dentro del dispositivo ----------
@@ -225,7 +225,15 @@ const char *hal_ram_fases(void) { return s_ram_fases; }
 static void refr_evento(lv_event_t *e)
 {
     int64_t ahora = esp_timer_get_time();
-    if (lv_event_get_code(e) == LV_EVENT_REFR_START) { s_ref_ini = ahora; return; }
+    if (lv_event_get_code(e) == LV_EVENT_REFR_START) {
+        s_ref_ini = ahora;
+        /* (1.0.25) lo que de verdad se dibuja en este cuadro: las zonas ya juntadas por LVGL (antes se sumaba cada pedido,
+         * aunque cayera dentro de otro, y el registro decía 826 kpx con una pantalla de 217) */
+        lv_display_t *d = (lv_display_t *)lv_event_get_current_target(e);
+        if (d) for (uint32_t i = 0; i < d->inv_p; i++)
+            if (!d->inv_area_joined[i]) s_inv_px += (uint64_t)lv_area_get_width(&d->inv_areas[i]) * (uint64_t)lv_area_get_height(&d->inv_areas[i]);
+        return;
+    }
     int ms = (int)((ahora - s_ref_ini) / 1000);
     s_ref_n++;
     s_ref_suma += ms;
@@ -1032,6 +1040,7 @@ static void res_lista_poner(const char *nombre, int t)
     portEXIT_CRITICAL(&s_res_mux);
 }
 
+static void ruta_res(const char *nombre, char *r, size_t n);
 esp_err_t hal_res_init(void)
 {
     esp_vfs_spiffs_conf_t c = {.base_path = RES_DIR, .partition_label = "recursos", .max_files = 3, .format_if_mount_failed = true};
@@ -1049,6 +1058,24 @@ esp_err_t hal_res_init(void)
             if (stat(r, &st) == 0) res_lista_poner(de->d_name, (int)st.st_size);
         }
         if (d) closedir(d);
+        /* (1.0.26) un guardado seguro que se cortó a mitad (ver hal_res_save_seguro): si el archivo de verdad no está, la copia
+         * «~» (que se escribió y comprobó entera antes de borrar nada) pasa a ser el archivo; si está, la copia sobra */
+        char pend[4][20];
+        int np = 0;
+        for (int i = 0; i < s_res_cuenta && np < 4; i++) {
+            const size_t l = strlen(s_res_lista[i].n);
+            if (l > 1 && s_res_lista[i].n[l - 1] == '~') { memcpy(pend[np], s_res_lista[i].n, l + 1); np++; }
+        }
+        for (int k = 0; k < np; k++) {
+            char base[20], rt[48], rb[48];
+            memcpy(base, pend[k], sizeof base);
+            base[strlen(base) - 1] = 0;
+            ruta_res(pend[k], rt, sizeof rt);
+            ruta_res(base, rb, sizeof rb);
+            const int tt = hal_res_size(pend[k]);
+            if (hal_res_size(base) < 0 && rename(rt, rb) == 0) { res_lista_poner(pend[k], -1); res_lista_poner(base, tt); ESP_LOGW(TAG, "recuperado %s", base); }
+            else if (hal_res_size(base) >= 0) { remove(rt); res_lista_poner(pend[k], -1); }
+        }
     }
     return e;
 }
@@ -1067,6 +1094,55 @@ bool hal_res_save(const char *nombre, const void *datos, int n)
     fclose(f);
     if (!ok) { remove(r); res_lista_poner(nombre, -1); }
     else res_lista_poner(nombre, n);
+    return ok;
+}
+
+/* (1.0.26) guardar SIN poder perder lo anterior (las mascotas que descansan en perfiles). hal_res_save abre con "wb": eso
+ * borra el archivo viejo ANTES de escribir, y si la escritura fallaba (flash llena, sin memoria, un reinicio a mitad) el
+ * archivo quedaba borrado: así se perdió una mascota de perfiles el 19-nov. Aquí se escribe primero «nombre~», se relee y se
+ * compara, y recién entonces se cambia por el viejo. Si algo se corta a mitad, hal_res_init lo arregla al arrancar. */
+static bool res_iguales(const char *ruta, const void *datos, int n)
+{
+    FILE *f = fopen(ruta, "rb");
+    if (!f) return false;
+    uint8_t b[256];
+    int i = 0;
+    bool ok = true;
+    while (ok && i < n) {
+        const int k = n - i < (int)sizeof b ? n - i : (int)sizeof b;
+        ok = (int)fread(b, 1, (size_t)k, f) == k && memcmp(b, (const uint8_t *)datos + i, (size_t)k) == 0;
+        i += k;
+    }
+    if (ok) ok = fread(b, 1, 1, f) == 0; /* y que no sobre nada */
+    fclose(f);
+    return ok;
+}
+bool hal_res_save_seguro(const char *nombre, const void *datos, int n)
+{
+    if (!s_res_ok || !datos || n <= 0) return false;
+    char tmp_n[24];
+    if (snprintf(tmp_n, sizeof tmp_n, "%s~", nombre) >= (int)sizeof tmp_n || strlen(tmp_n) >= sizeof s_res_lista[0].n) return false;
+    spiffs_limpiar_pasos("recursos", 2 * n + 4096);
+    char r[48], rt[48];
+    ruta_res(nombre, r, sizeof r);
+    ruta_res(tmp_n, rt, sizeof rt);
+    FILE *f = fopen(rt, "wb");
+    if (!f) { hal_evento("guardar seguro: no se pudo abrir %s (el de antes sigue igual)", tmp_n); return false; }
+    bool ok = fwrite(datos, 1, (size_t)n, f) == (size_t)n;
+    if (fclose(f) != 0) ok = false;
+    if (ok) ok = res_iguales(rt, datos, n);
+    if (!ok) { remove(rt); res_lista_poner(tmp_n, -1); hal_evento("guardar seguro: %s NO se pudo escribir bien (el de antes sigue igual)", nombre); return false; }
+    res_lista_poner(tmp_n, n);
+    remove(r); /* (si no estaba, da igual) */
+    res_lista_poner(nombre, -1);
+    if (rename(rt, r) == 0) { res_lista_poner(tmp_n, -1); res_lista_poner(nombre, n); return true; }
+    /* no se pudo renombrar: se escribe directo; la copia «~» se queda hasta que el directo esté comprobado */
+    f = fopen(r, "wb");
+    ok = f && fwrite(datos, 1, (size_t)n, f) == (size_t)n;
+    if (f && fclose(f) != 0) ok = false;
+    if (ok) ok = res_iguales(r, datos, n);
+    if (ok) { res_lista_poner(nombre, n); remove(rt); res_lista_poner(tmp_n, -1); }
+    else hal_evento("guardar seguro: %s quedó solo como %s (se arregla al arrancar)", nombre, tmp_n);
     return ok;
 }
 
@@ -1431,6 +1507,10 @@ static SemaphoreHandle_t s_guardar_mtx;
 static TaskHandle_t s_guardar_tarea;
 static EXT_RAM_BSS_ATTR pet_t s_guardar_copia;
 static volatile bool s_guardar_pend;
+/* (1.0.26) número de cada guardado: una copia vieja que la tarea tenía pendiente no puede pisar un guardado directo más nuevo
+ * (al cambiar de perfil se guarda la que llega con hal_storage_save; si después la tarea escribía la copia de la que se fue,
+ * al arrancar podía volver la de antes, que además ya estaba en su lugar de perfiles: dos iguales y la otra perdida) */
+static uint32_t s_guardar_num, s_guardar_num_copia, s_guardar_num_escrito;
 static void guardar_tarea(void *arg)
 {
     (void)arg;
@@ -1449,6 +1529,7 @@ void hal_storage_save_async(pet_t *p)
     if (!s_guardar_mtx) s_guardar_mtx = xSemaphoreCreateMutex();
     if (xSemaphoreTake(s_guardar_mtx, pdMS_TO_TICKS(30)) != pdTRUE) return; /* justo está escribiendo una copia de hace instantes: basta con esa */
     memcpy(&s_guardar_copia, p, sizeof s_guardar_copia);
+    s_guardar_num_copia = ++s_guardar_num;
     xSemaphoreGive(s_guardar_mtx);
     s_guardar_pend = true;
     xTaskNotifyGive(s_guardar_tarea);
@@ -1461,6 +1542,9 @@ esp_err_t hal_storage_save(pet_t *p)
     const int64_t t0 = esp_timer_get_time();
     if (!s_guardar_mtx) s_guardar_mtx = xSemaphoreCreateMutex();
     xSemaphoreTake(s_guardar_mtx, portMAX_DELAY);
+    const uint32_t num = p == &s_guardar_copia ? s_guardar_num_copia : ++s_guardar_num;
+    if (p == &s_guardar_copia && num < s_guardar_num_escrito) { xSemaphoreGive(s_guardar_mtx); return ESP_OK; } /* ya se guardó algo más nuevo */
+    s_guardar_num_escrito = num;
     esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
     if (err == ESP_OK) {
         err = nvs_set_blob(h, RANURAS[s_proxima_ranura], p, sizeof(*p));

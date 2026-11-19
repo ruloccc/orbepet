@@ -86,6 +86,34 @@ static QueueHandle_t s_acciones;
 static volatile bool s_guardar_ext; /* un comando del probador cambió la partida: guardarla pronto */
 static lv_display_t *s_disp;
 static bool s_pantalla_on = true;
+/* (1.0.25) cuentapasos: pasos de hoy (p[0]) y de los 6 días anteriores, guardados aparte de la partida (NVS «pasos7») */
+static struct { int32_t dia; uint32_t p[7]; } s_pasos7;
+static bool s_pasos7_leido, s_pasos7_sucio;
+static uint32_t s_pasos_aviso, s_pasos_aviso_min;
+static void pasos_semana_guardar(void)
+{
+    if (s_pasos7_sucio) { hal_storage_set("pasos7", &s_pasos7, sizeof s_pasos7); s_pasos7_sucio = false; }
+}
+static uint32_t pasos_semana_total(void) { uint32_t n = 0; for (int i = 0; i < 7; i++) n += s_pasos7.p[i]; return n; }
+static void pasos_semana_sumar(uint32_t d, uint32_t t)
+{
+    if (!s_pasos7_leido) {
+        size_t n = sizeof s_pasos7;
+        if (!hal_storage_get("pasos7", &s_pasos7, &n) || n != sizeof s_pasos7) memset(&s_pasos7, 0, sizeof s_pasos7);
+        s_pasos7_leido = true;
+    }
+    if (t < 1700000000u) return; /* sin hora todavía: no se sabe de qué día es */
+    const int32_t hoy = (int32_t)(((int64_t)t + s_pet.zona_horaria) / 86400);
+    if (hoy != s_pasos7.dia) { /* cambió el día: se corren los días */
+        const int32_t salto = s_pasos7.dia && hoy > s_pasos7.dia ? hoy - s_pasos7.dia : 7;
+        for (int i = 6; i >= 0; i--) s_pasos7.p[i] = i - salto >= 0 && salto < 7 ? s_pasos7.p[i - salto] : 0;
+        s_pasos7.dia = hoy;
+        s_pasos7_sucio = true;
+    }
+    if (d && d < 20000u) { s_pasos7.p[0] += d; s_pasos7_sucio = true; }
+    static uint32_t ult;
+    if (s_pasos7_sucio && t - ult >= 600u) { ult = t; pasos_semana_guardar(); } /* cada 10 min como mucho (y al terminar un paseo) */
+}
 static bool s_apagada_boton; /* la apagaste con el botón: sigue apagada hasta que lo vuelvas a apretar */
 /* matriz del acelerómetro al marco de la pantalla: de fábrica la medida en la placa (el chip está girado 90°); se puede recalibrar */
 static const int8_t GIRO_M_FABRICA[4] = {0, 1, -1, 0};
@@ -143,6 +171,22 @@ static uint32_t ahora(void) { return (uint32_t)((int64_t)time(NULL) + s_pet.desf
 static esp_pm_lock_handle_t s_pm_rapido;
 static bool s_pm_tomado;
 static uint32_t s_inactivo_ms; /* hace cuánto nadie toca la pantalla */
+/* (1.0.26) reinicio de mantenimiento: tras muchas horas la PSRAM se va quedando sin lugar (19-nov: una noche entera y al
+ * despertar todo muy lento y los botones sin íconos). Con ella dormida y nadie mirando, la placa guarda y se reinicia sola
+ * (como al despertar del sueño profundo); si la pantalla estaba apagada, sigue apagada hasta que la despiertes. */
+#define MANT_MAGIC 0x4D414E54u
+static RTC_NOINIT_ATTR uint32_t s_mant_marca, s_mant_apagada;
+/* (1.0.26) ¿es de noche para el sueño profundo? Con su hora de dormir elegida, esa. Una mascota NUEVA no tiene ninguna
+ * (dormir.modo = DORMIR_NO): antes, con ella la placa nunca entraba al sueño profundo y pasaba la noche entera despierta
+ * (19-nov, sin cable: en la mañana todo lento y los botones sin íconos). Ahora vale la noche de siempre: 22:00 a 7:00. */
+static bool noche_profunda(const pet_t *p, uint32_t t)
+{
+    if (p->dormir.modo != DORMIR_NO) return pet_is_bedtime(p, t);
+    const int h = (int)((((int64_t)t + p->zona_horaria) % 86400 + 86400) % 86400 / 3600);
+    return h >= 22 || h < 7;
+}
+static bool s_quieto;             /* arrancó del reinicio de mantenimiento con la pantalla apagada: así sigue hasta que la despiertes */
+static uint32_t s_quieto_inact;
 static volatile int s_n_sac, s_n_mov, s_n_pwr1, s_n_pwr2, s_giro_pos; /* contadores para las pruebas guiadas: sacudidas, movimientos, botón PWR (una y dos veces), giro actual */
 static int s_amb_dbg;           /* el ambiente que suena (para el probador) */
 static struct { uint32_t ms; int16_t mv; int8_t pct; uint8_t vbus; } s_cev[8]; /* cambios del cable USB / cargador (para la prueba de carga: el computador no oye mientras está desconectado) */
@@ -469,8 +513,10 @@ static void poner_hora(int32_t local)
     s_hora_dudosa = false;
     hal_rtc_trusted(true); /* v88: desde ahora la hora se guarda cada 2 min en la memoria (si no hay chip de reloj) */
     if (!s_pet.edad_dueno && pet_is_egg(&s_pet) && !s_pet.nombre[0]) { /* primera vez: el huevo empieza ahora */
+        const uint8_t pais = s_pet.pais, hemi = s_pet.hemisferio_sur; /* (1.0.27) el país es del orbe: con una mascota nueva no se vuelve a preguntar */
         pet_init(&s_pet, "", s_pet.especie, utc, esp_random());
         pet_set_timezone(&s_pet, s_zona);
+        if (pais) { s_pet.pais = pais; s_pet.hemisferio_sur = hemi; }
     }
     ESP_LOGI(TAG, "hora puesta a mano");
 }
@@ -584,11 +630,8 @@ static void comando_especie(const char *l)
 }
 
 /* ---------- mis mascotas: las que descansan, en la partición de recursos (m0.bin, m1.bin, m2.bin) ---------- */
-static bool guardada_leer(int i, pet_t *out)
+static bool archivo_mascota_leer(const char *n, pet_t *out)
 {
-    if (i < 0 || i >= PET_GUARDADAS) return false;
-    char n[16];
-    snprintf(n, sizeof n, "m%d.bin", i);
     static EXT_RAM_BSS_ATTR pet_t tmp;
     int k = hal_res_size(n);
     if (k <= 0 || k > (int)sizeof tmp) return false;
@@ -598,13 +641,68 @@ static bool guardada_leer(int i, pet_t *out)
     if (out) *out = tmp;
     return true;
 }
+static bool guardada_leer(int i, pet_t *out)
+{
+    if (i < 0 || i >= PET_GUARDADAS) return false;
+    char n[16];
+    snprintf(n, sizeof n, "m%d.bin", i);
+    return archivo_mascota_leer(n, out);
+}
 static bool guardada_escribir(int i, const pet_t *p)
 {
     char n[16];
     snprintf(n, sizeof n, "m%d.bin", i);
-    return i >= 0 && i < PET_GUARDADAS && hal_res_save(n, p, (int)sizeof *p);
+    return i >= 0 && i < PET_GUARDADAS && hal_res_save_seguro(n, p, (int)sizeof *p); /* (1.0.26) nunca borra la de antes si falla */
 }
-static const ui_mascotas_t MASCOTAS = {guardada_leer};
+/* (1.0.26) la última que se fue de viaje desde Perfiles queda guardada aquí: Perfiles ofrece traerla de vuelta */
+#define ADIOS_ARCHIVO "adios.bin"
+static bool adios_leer(pet_t *out) { return archivo_mascota_leer(ADIOS_ARCHIVO, out); }
+static const ui_mascotas_t MASCOTAS = {guardada_leer, adios_leer};
+
+/* (1.0.26) CAMBIAR DE PERFIL SIN PERDER A NADIE. El 19-nov se perdió una mascota de perfiles: el cambio son dos escrituras (la
+ * de ahora a su lugar de perfiles, la que llega a la partida) y si la placa se cortaba entre una y otra (sin memoria, un
+ * reinicio, la flash llena) quedaban dos copias de la misma y la otra, ninguna. Ahora, antes de tocar nada, las dos quedan
+ * anotadas juntas en mcambio.bin; al terminar se borra. Si al arrancar sigue ahí, cambio_reparar() termina o deshace el cambio. */
+#define CAMBIO_ARCHIVO "mcambio.bin"
+#define CAMBIO_MAGIC 0x43414D31u
+typedef struct {
+    uint32_t magic, lugar;
+    pet_t vieja, otra; /* la que se va a descansar y la que llega */
+} cambio_t;
+static EXT_RAM_BSS_ATTR cambio_t s_cambio;
+static bool misma_mascota(const pet_t *a, const pet_t *b)
+{
+    return a->nacimiento == b->nacimiento && a->especie == b->especie && !strncmp(a->nombre, b->nombre, PET_NAME_LEN);
+}
+static void guardar_partida_doble(void) /* las dos copias de la partida con la misma mascota (al arrancar se elige por la hora) */
+{
+    hal_storage_save(&s_pet);
+    hal_storage_save(&s_pet);
+}
+static void cambio_reparar(uint32_t t)
+{
+    const int k = hal_res_size(CAMBIO_ARCHIVO);
+    if (k < 0) return;
+    const bool ok = k == (int)sizeof s_cambio && hal_res_read(CAMBIO_ARCHIVO, &s_cambio, (int)sizeof s_cambio) == k && s_cambio.magic == CAMBIO_MAGIC &&
+                    s_cambio.lugar < PET_GUARDADAS && pet_validate(&s_cambio.vieja) && pet_validate(&s_cambio.otra);
+    if (!ok) { hal_evento("perfiles: había un cambio anotado que no se pudo leer (%d B): se descarta", k); hal_res_delete(CAMBIO_ARCHIVO); return; }
+    static EXT_RAM_BSS_ATTR pet_t lugar;
+    const bool hay = guardada_leer((int)s_cambio.lugar, &lugar);
+    const bool ya_llego = misma_mascota(&s_pet, &s_cambio.otra);
+    const bool ya_descansa = hay && misma_mascota(&lugar, &s_cambio.vieja);
+    const char *que;
+    if (ya_llego && ya_descansa) que = "ya estaba terminado";
+    else if (ya_llego) { que = guardada_escribir((int)s_cambio.lugar, &s_cambio.vieja) ? "faltaba guardar a la que descansa: listo" : "NO se pudo guardar a la que descansa"; }
+    else if (ya_descansa) { /* la de ahora ya quedó en perfiles pero la partida seguía con ella: llega la otra */
+        s_pet = s_cambio.otra;
+        pet_resume(&s_pet, &s_cambio.vieja, t);
+        guardar_partida_doble();
+        que = "faltaba traer a la otra: listo";
+    } else if (!hay) que = guardada_escribir((int)s_cambio.lugar, &s_cambio.otra) ? "no alcanzó a empezar; se devolvió a la que descansaba" : "NO se pudo devolver a la que descansaba";
+    else que = "no alcanzó a empezar: todo como antes";
+    hal_evento("perfiles: un cambio de mascota quedó a medias (%s / %s): %s", s_cambio.vieja.nombre, s_cambio.otra.nombre, que);
+    if (strncmp(que, "NO ", 3)) hal_res_delete(CAMBIO_ARCHIVO); /* si no se pudo, se reintenta en el próximo arranque */
+}
 
 /* al encender: lo que quedó guardado de otras veces */
 static void cargar_recursos(void)
@@ -1912,6 +2010,8 @@ static void arranque_vigilante(void *arg)
 
 void app_main(void)
 {
+    const bool mant = s_mant_marca == MANT_MAGIC && esp_reset_reason() == ESP_RST_SW; /* (1.0.26) */
+    s_mant_marca = 0;
     const bool tenia_marca = s_arr_marca == ARR_MARCA;
     const uint32_t paso_antes = tenia_marca ? s_arr_paso : 0, sub_antes = tenia_marca ? s_arr_sub : 0, ui_antes = tenia_marca ? s_arr_ui : 0;
     s_arr_sub = 0; s_arr_ui = 0;
@@ -1979,6 +2079,7 @@ void app_main(void)
     cargar_celebraciones();
     cargar_recursos();
     cargar_o_crear_mascota();
+    cambio_reparar(ahora()); /* (1.0.26) un cambio de perfil que quedó a medias */
     PASO(16);
 
     hal_ram_log("mascota");
@@ -2019,13 +2120,17 @@ void app_main(void)
             } else if (nueva) {
                 hal_evento("ACTUALIZACIÓN: ahora en la versión %s (antes %s)", FW_VERSION, vant[0] ? vant : "sin número");
                 ui_splash("¡VERSIÓN " FW_VERSION "!", FW_NOMBRE, false, 6000);
-            } else ui_splash("¡HOLA! ¡VOLVISTE!", "", false, 3000);
+            } else if (!mant) ui_splash("¡HOLA! ¡VOLVISTE!", "", false, 3000); /* (1.0.26) tras el reinicio de mantenimiento, nada */
         }
         hal_display_unlock();
         hal_ram_log("interfaz");
     }
     PASO(18);
     if (hal_display_lock()) { ui_boot_done(); hal_display_unlock(); } /* recién ahora puede abrirse la pregunta de la hora */
+    if (mant) { /* (1.0.26) */
+        hal_evento("memoria: arrancó del reinicio de mantenimiento (pantalla %s)", s_mant_apagada == 1u ? "apagada: sigue apagada" : "encendida");
+        if (s_mant_apagada == 1u) { s_quieto = true; s_quieto_inact = 0; encender_pantalla(false, 0); }
+    }
     hal_rtc_trusted(!s_hora_dudosa);
     { /* memoria al terminar de arrancar: el piso de PSRAM con el que parte el juego */
         hal_evento("ARRANQUE listo: PSRAM libre %u KB (bloque mayor %u KB), RAM interna %u B | por fase: %s", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
@@ -2334,7 +2439,7 @@ void app_main(void)
                 if (m.arg && s_hay_respaldo) {
                     s_pet = s_respaldo;
                     pet_set_timezone(&s_pet, s_zona);
-                    hal_storage_save(&s_pet); /* ya: que no se pierda */
+                    guardar_partida_doble(); /* ya, y en las dos copias (1.0.26): que no vuelva la de antes al arrancar */
                     ultimo_guardado = t;
                     printf("MASCOTA RESTAURADA\n");
                 } else printf("MASCOTA RECHAZADA\n");
@@ -2352,14 +2457,31 @@ void app_main(void)
             case UI_ACCION_NOMBRE: pet_set_name(&s_pet, ui_pending_name()); break;
             case UI_ACCION_INVITAR: pet_invite(&s_pet, m.arg, t); ultima_baliza = 0; break;
             case UI_ACCION_RESPONDER: pet_answer_invite(&s_pet, m.arg != 0, t); ultima_baliza = 0; break;
-            case UI_ACCION_CAMBIAR: {
-                static EXT_RAM_BSS_ATTR pet_t otra, vieja;
-                if (!guardada_leer(m.arg, &otra)) break;
+            case UI_ACCION_CAMBIAR: { /* (1.0.26) anotado antes de tocar nada: ver cambio_reparar */
+                if (m.arg < 0 || m.arg >= PET_GUARDADAS || !guardada_leer(m.arg, &s_cambio.otra)) break;
                 pet_seal(&s_pet);
-                vieja = s_pet;
-                if (!guardada_escribir(m.arg, &vieja)) break; /* la de ahora se queda descansando */
-                s_pet = otra;
-                pet_resume(&s_pet, &vieja, t); /* toma el mundo (jardín, baúl, clima...) de la que se queda */
+                pet_seal(&s_cambio.otra);
+                s_cambio.magic = CAMBIO_MAGIC;
+                s_cambio.lugar = (uint32_t)m.arg;
+                s_cambio.vieja = s_pet;
+                if (!hal_res_save_seguro(CAMBIO_ARCHIVO, &s_cambio, (int)sizeof s_cambio)) { hal_evento("perfiles: no se pudo anotar el cambio: no se cambia (las dos siguen como estaban)"); break; }
+                if (!guardada_escribir(m.arg, &s_cambio.vieja)) { cambio_reparar(t); break; } /* la de ahora se queda descansando */
+                s_pet = s_cambio.otra;
+                pet_resume(&s_pet, &s_cambio.vieja, t); /* solo lo del orbe (hora, país, clima...): cada una tiene su mundo */
+                guardar_partida_doble(); /* ya, y en las dos copias: si se corta ahora, al arrancar sigue la que llegó */
+                hal_res_delete(CAMBIO_ARCHIVO);
+                hal_evento("perfiles: llegó %s, descansa %s", s_pet.nombre, s_cambio.vieja.nombre);
+                break;
+            }
+            case UI_ACCION_VOLVER_VIAJE: { /* (1.0.26) la que se fue de viaje desde Perfiles vuelve a su lugar (si hay uno libre) */
+                static EXT_RAM_BSS_ATTR pet_t vuelve;
+                int libre = -1;
+                for (int i = 0; i < PET_GUARDADAS && libre < 0; i++) if (!guardada_leer(i, NULL)) libre = i;
+                if (libre < 0 || !adios_leer(&vuelve)) break;
+                if (!guardada_escribir(libre, &vuelve)) break;
+                hal_res_delete(ADIOS_ARCHIVO);
+                pet_traveller_back(&s_pet, &vuelve);
+                hal_evento("perfiles: %s volvió de su viaje (lugar %d)", vuelve.nombre, libre);
                 break;
             }
             case UI_ACCION_SOLTAR: {
@@ -2368,7 +2490,12 @@ void app_main(void)
                 snprintf(n, sizeof n, "m%d.bin", lugar);
                 if (lugar >= 0 && lugar < PET_GUARDADAS) {
                     static EXT_RAM_BSS_ATTR pet_t viajera;
-                    if (guardada_leer(lugar, &viajera)) pet_add_traveller(&s_pet, &viajera, veh < 0 ? 0 : veh, t); /* te escribirá desde su viaje */
+                    if (guardada_leer(lugar, &viajera)) {
+                        pet_add_traveller(&s_pet, &viajera, veh < 0 ? 0 : veh, t); /* te escribirá desde su viaje */
+                        /* (1.0.26) no se pierde: queda guardada y desde Perfiles se puede traer de vuelta */
+                        const bool copia = hal_res_save_seguro(ADIOS_ARCHIVO, &viajera, (int)sizeof viajera);
+                        hal_evento("perfiles: %s se fue de viaje (lugar %d)%s", viajera.nombre, lugar, copia ? "; puede volver desde Perfiles" : "; NO quedó copia para que vuelva");
+                    }
                     hal_res_delete(n);
                 }
                 break;
@@ -2654,7 +2781,11 @@ void app_main(void)
                         const int bajo = br * BOARD_ATENUAR_PCT / 100;
                         br = bajo < 8 ? (br < 8 ? br : 8) : bajo;
                     }
-                    encender_pantalla((inactivo < limite || ui_battery_aviso_activo()) && !s_apagada_boton, br);
+                    if (s_quieto) { /* (1.0.26) a oscuras hasta que algo la despierte (el botón, una alarma o un aviso reinician la inactividad) */
+                        if (inactivo < s_quieto_inact || alarma || ui_battery_aviso_activo()) s_quieto = false;
+                        s_quieto_inact = inactivo;
+                    }
+                    encender_pantalla((inactivo < limite || ui_battery_aviso_activo()) && !s_apagada_boton && !s_quieto, br);
                 }
                 /* ella, efectos y alarmas tienen su volumen: la alarma suena aunque las barras estén en 0 */
                 int vol = (s_dispo.volumen * 1000 + s_dispo.efectos) * 1000 + s_dispo.alarmas;
@@ -2806,6 +2937,7 @@ void app_main(void)
             const uint32_t d_min = pasos_antes && pasos >= pasos_antes ? pasos - pasos_antes : 0;
             if (d_min) pet_steps_add(&s_pet, d_min, t);
             pasos_antes = pasos ? pasos : pasos_antes;
+            pasos_semana_sumar(d_min, t); /* (1.0.25) cuentapasos: hoy y los últimos 7 días */
             /* (fw 104) paseo de verdad: minutos seguidos caminando (≥ 40 pasos por minuto) con la pantalla casi siempre apagada (en el
              * bolsillo o en la mano). Se permiten 2 minutos de pausa (un semáforo); con 3 sin caminar, o al encender la pantalla, el
              * paseo termina y, si fueron 8 minutos o más y 800 pasos o más, cuenta como una excursión juntos. Agitarlo no sirve: el
@@ -2820,9 +2952,17 @@ void app_main(void)
                 const int r = vale ? pet_walk_together(&s_pet, paseo_pasos, t) : 0;
                 hal_log("paseo: %u pasos en %u min (pantalla %u min) -> %s", (unsigned)paseo_pasos, (unsigned)paseo_min, (unsigned)paseo_pant,
                         r == 2 ? "contó y trajo algo" : (r == 1 ? "contó" : (vale ? "ya van 2 hoy (no cuenta)" : "muy corto")));
+                if (!r) pet_walk_diary(&s_pet, paseo_pasos, t); /* (1.0.25) también los cortos van al diario (300 pasos o más) */
+                if (paseo_pasos >= 300u) { s_pasos_aviso = paseo_pasos; s_pasos_aviso_min = paseo_min; pasos_semana_guardar(); } /* se muestra al encender la pantalla */
                 /* (si terminó porque encendiste la pantalla, lo ve en vivo; si no, sale en el resumen de lo que pasó) */
                 paseo_pasos = paseo_min = paseo_pausa = paseo_pant = 0;
             }
+        }
+
+        if (s_pasos_aviso && s_pantalla_on && hal_display_lock()) { /* (1.0.25) cuentapasos: el paseo que terminó, al mirarla */
+            ui_aviso_pasos(s_pasos_aviso, s_pasos_aviso_min, s_pasos7.p[0], pasos_semana_total());
+            hal_display_unlock();
+            s_pasos_aviso = 0;
         }
 
         { /* con la pantalla apagada y dormida, una vez por hora: limpia la flash de las fotos (si no, guardar una foto puede congelar la animación 2 s) */
@@ -2881,10 +3021,10 @@ void app_main(void)
              * Al despertar arranca de nuevo (1-2 s) y el motor avanza las horas que pasaron (ella no se congela: prueba P0). */
             static uint32_t noche_mira;
             if (puede && s_pet.dormida && !s_hora_dudosa && ms_ya - apagada_ms > BOARD_NOCHE_TRAS_MS && ms_ya > 180000u && !s_desc.activo &&
-                ui_panel_actual() == 0 && t - noche_mira >= 30u && pet_is_bedtime(&s_pet, t)) {
+                ui_panel_actual() == 0 && t - noche_mira >= 30u && noche_profunda(&s_pet, t)) {
                 noche_mira = t;
                 uint32_t hasta = 0;
-                for (uint32_t k = 600u; k <= 14u * 3600u; k += 600u) if (!pet_is_bedtime(&s_pet, t + k)) { hasta = t + k; break; } /* fin de la noche */
+                for (uint32_t k = 600u; k <= 14u * 3600u; k += 600u) if (!noche_profunda(&s_pet, t + k)) { hasta = t + k; break; } /* fin de la noche */
                 if (!hasta) hasta = t + 8u * 3600u;
                 uint32_t alarma = 0; /* sus alarmas y las de las mascotas que descansan */
                 for (int i = 0; i < PET_ALARMAS; i++) { uint32_t x = pet_alarm_next(&s_pet, i, t); if (x && (!alarma || x < alarma)) alarma = x; }
@@ -2906,6 +3046,25 @@ void app_main(void)
                 }
             }
 #endif
+        }
+        { /* (1.0.26) reinicio de mantenimiento: la PSRAM lleva 10 min bajo 900 KB (ahí se sueltan los íconos y todo se pone lento),
+           * la placa lleva más de una hora andando, ella duerme, nadie toca hace 10 min y no hay panel, alarma, sonido ni pruebas */
+            static uint32_t baja_desde;
+            const uint32_t ms_m = (uint32_t)(esp_timer_get_time() / 1000);
+            const size_t ps = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+            if (ps >= 900u * 1024u) baja_desde = 0;
+            else if (!baja_desde) baja_desde = ms_m | 1u;
+            if (baja_desde && ms_m - baja_desde > 10u * 60000u && ms_m > 60u * 60000u && s_pet.dormida && s_inactivo_ms > 10u * 60000u &&
+                !ui_alarm_ringing() && ui_panel_actual() == 0 && s_prueba_amb < 0 && !s_desc.activo && !hal_sound_open() && !guardar_pronto) {
+                hal_evento("memoria: PSRAM %u KB (bloque %u KB) hace %u min, tras %u h andando: reinicio de mantenimiento", (unsigned)(ps / 1024),
+                           (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024), (unsigned)((ms_m - baja_desde) / 60000u), (unsigned)(ms_m / 3600000u));
+                hal_storage_save(&s_pet);
+                hal_log_flush(true);
+                ota_arranque_ok();
+                s_mant_apagada = s_pantalla_on ? 2u : 1u;
+                s_mant_marca = MANT_MAGIC;
+                esp_restart();
+            }
         }
         s_espera_ms = (s_profundo || s_dormitando) ? 250u : (!s_pantalla_on && !s_cargando && !ui_alarm_ringing() ? 140u : (s_energia_suave ? 90u : 50u));
         vTaskDelay(pdMS_TO_TICKS(s_espera_ms));

@@ -66,17 +66,23 @@ static float s_zf_x[ZF_BOTES], s_zf_y[ZF_BOTES], s_zf_fase[ZF_BOTES], s_zf_dir[Z
 static int8_t s_zf_est[ZF_BOTES];     /* 0 nada, 1 navegando, 2 se hunde, 3 llegó */
 static uint32_t s_zf_t[ZF_BOTES], s_zf_sale;
 static float s_zf_ax = 233.0f, s_zf_ay = 233.0f; /* hacia dónde apunta la luz */
-static bool zf_iluminado(float x, float y)
+/* (1.0.26) ¿está en la dirección del haz? media = medio ancho en radianes; alcance: además no más allá de la punta (+60 px) */
+static bool zf_rayo(float x, float y, float media, bool alcance)
 {
     const float bx = x - ZF_LX, by = y - ZF_LY, ax = s_zf_ax - ZF_LX, ay = s_zf_ay - ZF_LY;
     const float db = sqrtf(bx * bx + by * by), da = sqrtf(ax * ax + ay * ay);
-    if (db < 1 || da < 1 || db > da + 60.0f) return false;
+    if (db < 1 || da < 1 || (alcance && db > da + 60.0f)) return false;
     const float c = (bx * ax + by * ay) / (db * da);
-    return c > cosf(s_nino ? 0.32f : 0.24f);
+    return c > cosf(media);
 }
+static bool zf_iluminado(float x, float y) { return zf_rayo(x, y, s_nino ? 0.32f : 0.24f, true); }
+/* (1.0.26) un barquito que alumbraste queda «guiado»: sigue a la luz aunque la acortes (la traigas de vuelta) o la muevas
+ * un poco de lado. Antes, al retraer la luz quedaba fuera del alcance y se quedaba a oscuras: no la seguía. Se suelta solo si
+ * pasa 1,2 s fuera de un haz más ancho (sin límite de largo). */
+static uint32_t s_zf_guia[ZF_BOTES];
 static void zf_empezar(void)
 {
-    for (int i = 0; i < ZF_BOTES; i++) s_zf_est[i] = 0;
+    for (int i = 0; i < ZF_BOTES; i++) { s_zf_est[i] = 0; s_zf_guia[i] = 0; }
     s_zf_sale = s_zj_t + 2500u; /* (el primero, cuando ya se leyó cómo se juega) */
     s_zf_ax = 130.0f; s_zf_ay = 220.0f;
     s_zi_vidas = 3; s_zi_perdidos = 0; s_zi_triste = 0;
@@ -89,7 +95,7 @@ static void zf_empezar(void)
     lv_obj_t *m = zj_caja(29, 76, 76, 0xFFE27A, LV_RADIUS_CIRCLE); /* la meta: un anillo que late en la punta del muelle */
     lv_obj_set_style_bg_opa(m, LV_OPA_TRANSP, 0); lv_obj_set_style_border_width(m, 3, 0); lv_obj_set_style_border_color(m, lv_color_hex(0xFFE27A), 0);
     zj_centro(m, ZF_MX, ZF_MY);
-    zj_texto("ARRASTRA EL DEDO: LA LUZ DEL FARO LO SIGUE Y LOS BARQUITOS ILUMINADOS TAMBIÉN. ¡LLÉVALOS AL MUELLE!", 4500);
+    zj_texto("ARRASTRA EL DEDO Y ALUMBRA LOS BARQUITOS: TE SIGUEN A DONDE LLEVES LA LUZ. ¡LLÉVALOS AL MUELLE!", 4500);
     zd_mano(ICO_MANO_DESLIZA, 130.0f, 220.0f, 5000u);
 }
 static void zf_dibujar_haz(void)
@@ -123,7 +129,7 @@ static void zf_animar(float dt)
     if (queda_tiempo && (int32_t)(s_zj_t - s_zf_sale) >= 0) {
         for (int i = 0; i < ZF_BOTES; i++)
             if (s_zf_est[i] == 0) {
-                s_zf_est[i] = 1; s_zf_fase[i] = azar01() * 6.28f; s_zf_dir[i] = 0;
+                s_zf_est[i] = 1; s_zf_fase[i] = azar01() * 6.28f; s_zf_dir[i] = 0; s_zf_guia[i] = 0;
                 for (int k = 0; k < 30; k++) { /* aparece en el mar abierto, lejos del muelle (a la izquierda, arriba o abajo) */
                     const float a = 3.14159f - 1.75f + azar01() * 3.3f; /* (1.0.24: de arriba a abajo pasando por la izquierda) */
                     s_zf_x[i] = CX + cosf(a) * 200.0f; s_zf_y[i] = CX + sinf(a) * 200.0f;
@@ -151,6 +157,14 @@ static void zf_animar(float dt)
             continue;
         }
         float vx, vy;
+        bool guia = false;
+        if (!s_zj_trampa) { /* (1.0.26) alumbrado una vez, sigue a la luz */
+            const bool antes = s_zf_guia[i] != 0;
+            if (zf_iluminado(s_zf_x[i], s_zf_y[i]) || (antes && zf_rayo(s_zf_x[i], s_zf_y[i], s_nino ? 0.60f : 0.48f, false))) s_zf_guia[i] = s_zj_t | 1u;
+            guia = s_zf_guia[i] && s_zj_t - s_zf_guia[i] < 1200u;
+            if (!guia) s_zf_guia[i] = 0;
+            else if (!antes) zj_chispas(s_zf_x[i], s_zf_y[i] - 6.0f, 5, 0xFFF0B0, 90.0f, 260.0f); /* ¡te vio! */
+        }
         if (s_zj_trampa) { /* (pruebas) va al muelle rodeando la isla: si adelante hay tierra, gira (siempre hacia el mismo lado) */
             const float base = atan2f(ZF_MY - s_zf_y[i], ZF_MX - s_zf_x[i]);
             if (s_zf_dir[i] == 0) s_zf_dir[i] = s_zf_y[i] < CX ? 1.0f : -1.0f; /* por arriba o por abajo de la isla (girando hacia el oeste) */
@@ -167,10 +181,10 @@ static void zf_animar(float dt)
             }
             if (k == 28) vel = 0;
             vx = cosf(a) * vel; vy = sinf(a) * vel;
-        } else if (zf_iluminado(s_zf_x[i], s_zf_y[i])) { /* en la luz: navega hacia donde apunta */
+        } else if (guia) { /* guiado por la luz: navega hacia donde apunta (y frena suave al llegar a la punta) */
             vx = s_zf_ax - s_zf_x[i]; vy = s_zf_ay - s_zf_y[i];
-            const float d = sqrtf(vx * vx + vy * vy);
-            const float v = d < 10.0f ? 0.0f : (s_nino ? 50.0f : 58.0f);
+            const float d = sqrtf(vx * vx + vy * vy), vmax = s_nino ? 50.0f : 58.0f;
+            const float v = d < 8.0f ? 0.0f : (d * 1.6f + 12.0f < vmax ? d * 1.6f + 12.0f : vmax);
             vx = d > 0.1f ? vx / d * v : 0; vy = d > 0.1f ? vy / d * v : 0;
         } else { /* a oscuras: la corriente lo lleva despacito hacia la isla (si nadie lo guía, encalla) */
             const float dx0 = ZF_CX - s_zf_x[i], dy0 = ZF_CY - s_zf_y[i], d0 = sqrtf(dx0 * dx0 + dy0 * dy0) + 0.01f;
@@ -179,7 +193,7 @@ static void zf_animar(float dt)
             vy = dy0 / d0 * v;
         }
         s_zf_x[i] += vx * dt; s_zf_y[i] += vy * dt;
-        const bool luz = s_zj_trampa || zf_iluminado(s_zf_x[i], s_zf_y[i]);
+        const bool luz = s_zj_trampa || guia;
         zj_tinte(o, 0x0A1430, luz ? 0 : 120);
         /* el balanceo de las olas */
         zj_centro(o, s_zf_x[i], s_zf_y[i] + 2.0f * sinf((float)s_zj_t / 260.0f + s_zf_fase[i]));

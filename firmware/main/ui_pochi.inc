@@ -1082,7 +1082,7 @@ static bool pa_buscar(void)
         if (k >= 0 && PA_AMIGO[k][0] == 0 && PA_AMIGO[k][1] == f) { s_pa_src = 0; s_pa_id = f; s_pa_tipo = AT_AMIGO; s_pa_amigo_nuevo = s_pet && !pet_pochi_pup_friend(s_pet, k); return true; }
         if (n < 8) { src[n] = 0; id[n++] = f; }
     }
-    for (int a = 0; a < ANIMAL_COUNT; a++) if (s_ani[a].visible && pa_en_pantalla(s_ani[a].x, s_ani[a].y)) {
+    for (int a = 0; a < ANIMAL_COUNT; a++) if (s_ani[a].visible && !s_ani[a].saliendo && pa_en_pantalla(s_ani[a].x, s_ani[a].y)) {
         if (k >= 0 && PA_AMIGO[k][0] == 1 && PA_AMIGO[k][1] == a) { s_pa_src = 1; s_pa_id = a; s_pa_tipo = AT_AMIGO; s_pa_amigo_nuevo = s_pet && !pet_pochi_pup_friend(s_pet, k); return true; }
         if (n < 8) { src[n] = 1; id[n++] = a; }
     }

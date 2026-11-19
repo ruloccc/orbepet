@@ -807,6 +807,67 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.27 — todo en su lugar
+
+- **Crear una mascota nueva ya no vuelve al comienzo.** Al poner tu fecha de nacimiento, la interfaz alcanzaba a ver
+  «sin fecha» antes de que el motor la anotara (con el cable al PC, ~1 s) y empezaba todo de nuevo: Libro y elegir el
+  huevo. Ahora espera a que la fecha llegue (`s_nac_pend_ms`). Además, el país ya no se borra al poner la hora con una
+  mascota nueva (es del orbe).
+- **El Libro:** la segunda página del comienzo vuelve a caber en la pantalla (texto más corto). Y el Libro de historias
+  tiene dos hojas: deslizando a la izquierda aparecen **HISTORIAS** y **CANCIONES** (puntitos arriba; estrellita si
+  hay algo nuevo); a la derecha se vuelve.
+- **El Baúl** suma HISTORIAS y CANCIONES (ocho casillas). **El diario** ya no las muestra como hitos y sus filas ya no
+  se abren en una pantalla grande que repetía lo mismo: cada fila trae su texto entero.
+- **La enciclopedia por dentro:** arriba solo el nombre de la categoría, sin la fila de las otras, y el contenido en
+  cuadrícula (dos por fila, dibujo y nombre); si hay más, se desliza.
+- **El álbum:** solo los momentos grandes (nacer, crecer, su cumpleaños, el tuyo, la ballena, la fiesta, el final, la
+  guardiana, la familia), cada foto con su dibujo propio y el suelo de su zona. Lo demás queda en el diario.
+- **Frases que salían tarde:** una frase que espera turno se bota si pasan 8 s o cambió la zona (antes salía fuera de
+  contexto). La comida ya no dice «¿QUÉ LE DAMOS?». Las frases sobre un animal (lo que opina de él, «el conejo se asustó»,
+  lo que hacen las hormigas) solo salen mientras ese animal sigue a la vista y como mucho 4 s después.
+- **Los animales se van como llegan:** caminando hasta un borde (por la orilla, nunca al agua) o volando hacia arriba;
+  recién afuera desaparecen. El que se va no se puede tocar. El topo se mete en su hoyo como siempre.
+
+## Versión 1.0.26 — nadie se pierde en Perfiles
+
+- **Una mascota de Perfiles ya no se puede perder.** El 19-nov, tras una noche con todo muy lento, se perdió Tova.
+  Había tres caminos posibles y se cerraron los tres:
+  1. *Guardar en su lugar de Perfiles borraba primero lo de antes* (`hal_res_save` abre con «wb»): si la escritura fallaba
+     (flash llena, sin memoria, un reinicio) el archivo quedaba borrado. Ahora `hal_res_save_seguro` escribe «m1.bin~»,
+     lo relee y compara, y recién ahí reemplaza; si algo se corta, `hal_res_init` lo arregla al arrancar.
+  2. *El cambio de perfil son dos escrituras* (la de ahora a Perfiles, la otra a la partida): si la placa se cortaba entre
+     las dos quedaban dos copias de una y ninguna de la otra. Ahora las dos se anotan juntas en `mcambio.bin` antes de tocar
+     nada; al arrancar, si quedó a medias, `cambio_reparar` lo termina o lo deshace (eventos «perfiles: …»). La que llega
+     se guarda al instante en las dos copias de la partida, y una copia vieja que el guardado en segundo plano tenía
+     pendiente ya no puede pisar a una más nueva (número de guardado en services.c).
+  3. *«DE VIAJE» era para siempre*: si se tocaba sin querer (con la pantalla lenta y sin íconos no se sabe qué botón es),
+     se perdía. Ahora la última que se fue desde Perfiles queda en `adios.bin` y, tocando un lugar libre, Perfiles pregunta
+     «¿QUIERES QUE VUELVA?» (deja de ser viajera y sus cartas se quitan: `pet_traveller_back`). Además el «MANTÉN: SÍ»
+     no vale en el primer segundo.
+- **El respaldo del PC ahora incluye «recursos»**, donde viven las que descansan en Perfiles (m0..m2.bin). Antes el
+  respaldo solo tenía la partida activa.
+- **La noche sin cable vuelve a dormir profundo con una mascota nueva.** El sueño profundo de la noche (que además deja la
+  memoria limpia al despertar) exigía «su hora de dormir», y una mascota recién creada no tiene ninguna: la placa pasaba
+  la noche entera despierta y en la mañana todo estaba lento y sin íconos (19-nov, sin cable). Ahora, si no tiene hora de
+  dormir elegida, vale la noche de siempre (22:00 a 7:00) con ella dormida (`noche_profunda` en main.c).
+- **Reinicio de mantenimiento:** si la PSRAM lleva 10 min bajo 900 KB (ahí se sueltan los íconos y todo se pone lento),
+  la placa lleva más de 1 h andando, ella duerme y nadie la toca hace 10 min, guarda y se reinicia sola; si la pantalla
+  estaba apagada, sigue apagada hasta que la despiertes. (Con batería ya pasaba: el sueño profundo de la noche reinicia.
+  Con el cable puesto toda la noche, no.) La causa de fondo de la memoria que se va quedando sigue pendiente: pedir un informe.
+- **El faro se juega mejor:** un barquito que alumbraste queda «guiado» y sigue a la luz aunque la acortes o la muevas
+  un poco de lado (antes, al traer la luz de vuelta quedaba fuera del alcance y se quedaba a oscuras). Se suelta si pasa
+  1,2 s fuera de un haz más ancho; al engancharse suelta unas chispitas y frena suave al llegar a la punta.
+- **El huevo del inicio:** sin el aviso «NACERÁ EN UNOS 5 MINUTOS…». Al tocarlo se mece desde la base y suben dos
+  corazones y una estrella. Y ya no se queda flotando el gorrito de dormir de la otra mascota sobre el huevo nuevo.
+- **El Libro:** «HOY LLEGASTE TÚ A ESCRIBIR TU PROPIA HISTORIA.» y la segunda página nueva (listas de cosas por cuidar,
+  recetas de galletas, chistes y hasta historias; su dueño enfermó y quedó olvidado en un rincón hasta hoy; ahora te toca
+  descubrirlo y completarlo con tu vida).
+- **Una mascota nueva ya no hereda la visita de la otra:** la visita (y el vecino) de la anterior se quedaban en el prado
+  junto al huevo nuevo, porque solo se iban cuando el motor avisaba que se iban, y la nueva nunca lo avisa. Ahora se van al
+  cambiar de mascota y nunca se quedan con un huevo (`otra_mascota_limpiar`).
+- **La siesta de día lleva su colchoneta** (antes solo dormida de noche). Si la llamas con doble toque mientras duerme,
+  dice cómo despertarla (tocarla varias veces seguidas), como mucho cada 30 s.
+
 ## Versión 1.0.25 — el final del juego ya no deja pegado al orbe
 
 - **El final (el Libro que brilla, la última página, la carta) dejaba al orbe sin contestar** cuando había poca memoria
@@ -814,6 +875,16 @@ En el orbe:
   luciérnagas sobre el fondo con degradé pedían más de lo que había y los íconos se soltaban y se rehacían sin parar.
   Ahora, antes de abrirlo, suelta la caché de imágenes, los íconos guardados y los fondos de otras horas. El registro
   anota «final: empieza…» con la memoria antes y después.
+- **Las fotos de pantalla guardadas se sueltan cuando falta memoria:** antes solo se soltaban al abrir otra pantalla y se
+  quedaban reteniendo hasta ~1,5 MB (en la prueba la PSRAM bajaba de 1,8 MB a 0,3 MB y no volvía; el final encontraba
+  bloques de 68 KB como mucho). Ahora la vigilancia de memoria, el final y la despedida las sueltan (las que ninguna
+  imagen muestra).
+- **Cuentapasos:** al volver de caminar con ella (300 pasos o más), cuando enciendes la pantalla sale «¡CAMINAMOS 1.234
+  PASOS!» con los minutos, los pasos de hoy y los de la semana (en modo infante, las huellitas). Todo paseo de 300 pasos
+  o más queda en el diario. Los pasos de cada día se guardan aparte de la partida. (Pendiente: un panel para verlos
+  cuando quieras.)
+- Programa del PC: «PROBAR EL ARREGLO (3 min)» prueba solo lo de la versión nueva; los informes van con fecha a
+  Documentos\MascotaPruebas\Informes y los registros de la placa a Documentos\MascotaPruebas\Registros de la placa.
 - Trae todo lo de la 1.0.24 (los sonidos ya no congelan la pantalla: el ambiente 5 bajó de 1018 ms por cuadro a 24 ms).
   La 1.0.24 por Wi-Fi volvió sola a la 1.0.23, pero instalada por cable funcionó bien.
 

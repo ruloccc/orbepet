@@ -20,7 +20,10 @@ static void fin_luci_cb(void *var, int32_t v)
     lv_obj_set_pos(o, bx + (int)(sinf((float)v * 0.012f + (float)(base % 7)) * 9.0f), y);
     int op = v < 250 ? v * 255 / 250 : (v > 700 ? (1000 - v) * 255 / 300 : 255);
     op = (op + 21) / 43 * 43; /* 7 niveles */
-    lv_obj_set_style_opa(o, (lv_opa_t)(op < 0 ? 0 : op > 255 ? 255 : op), 0);
+    op = op < 0 ? 0 : op > 255 ? 255 : op;
+    /* (1.0.25) opacidad del fondo y del halo, no la del objeto: style_opa < 255 obliga a dibujarlo en una capa aparte */
+    lv_obj_set_style_bg_opa(o, (lv_opa_t)op, 0);
+    lv_obj_set_style_border_opa(o, (lv_opa_t)(op * 40 / 100), 0);
 }
 static void fin_luciernagas(lv_obj_t *padre, int n, int y0, int y1)
 {
@@ -114,14 +117,24 @@ static void fin_fondo(void)
     lv_obj_remove_style_all(f);
     lv_obj_set_size(f, 466, 466);
     lv_obj_set_pos(f, 0, 0);
-    lv_obj_set_style_radius(f, LV_RADIUS_CIRCLE, 0);
+    /* (1.0.25) sin radio: la pantalla ya es redonda y las esquinas no se ven. Con LV_RADIUS_CIRCLE cada zona que se
+     * redibujaba (aros, Libro, luciérnagas) recortaba el degradé fila por fila con la máscara del círculo: era lo que
+     * dejaba el final regular en ~130 ms por cuadro. El borde dorado va aparte, en un aro solo de borde. */
     lv_obj_set_style_bg_color(f, lv_color_hex(0x0A0E2A), 0);
     lv_obj_set_style_bg_grad_color(f, lv_color_hex(0x2A2F6A), 0);
     lv_obj_set_style_bg_grad_dir(f, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(f, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(f, 3, 0);
-    lv_obj_set_style_border_color(f, lv_color_hex(0xD0B969), 0);
-    lv_obj_remove_flag(f, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(f, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    {
+        lv_obj_t *bo = lv_obj_create(s_tarjeta);
+        lv_obj_remove_style_all(bo);
+        lv_obj_set_size(bo, 466, 466);
+        lv_obj_set_pos(bo, 0, 0);
+        lv_obj_set_style_radius(bo, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_width(bo, 3, 0);
+        lv_obj_set_style_border_color(bo, lv_color_hex(0xD0B969), 0);
+        lv_obj_remove_flag(bo, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    }
     for (int i = 0; i < 46; i++) {
         lv_obj_t *e = lv_obj_create(f);
         lv_obj_remove_style_all(e);
@@ -166,6 +179,8 @@ static void final_cb(lv_event_t *e)
 
 /* --- movimiento del final: subir, aparecer, rebotar, aros de luz --- */
 static void fin_ty_cb(void *var, int32_t y) { lv_obj_set_style_translate_y((lv_obj_t *)var, y, 0); }
+/* (1.0.25) el Libro grande flota de a 2 px: moverlo 1 px por cuadro obligaba a redibujar todo lo que tiene debajo en cada cuadro */
+static void fin_ty2_cb(void *var, int32_t y) { lv_obj_set_style_translate_y((lv_obj_t *)var, y / 2 * 2, 0); }
 static void fin_escala_cb(void *var, int32_t s) { lv_image_set_scale((lv_obj_t *)var, (uint32_t)s); }
 
 /* sube desde abajo mientras aparece */
@@ -389,7 +404,7 @@ static void panel_final(int cual, int pag)
         lv_obj_align(x, LV_ALIGN_TOP_MID, 0, s_nino ? 36 : 40);
         fin_pop(x, 0, 40);
         { lv_anim_t a; lv_anim_init(&a); lv_anim_set_var(&a, x); lv_anim_set_values(&a, 0, -8); lv_anim_set_time(&a, 1400); lv_anim_set_playback_time(&a, 1400); lv_anim_set_delay(&a, 900);
-          lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE); lv_anim_set_exec_cb(&a, fin_ty_cb); lv_anim_start(&a); } /* flota */
+          lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE); lv_anim_set_exec_cb(&a, fin_ty2_cb); lv_anim_start(&a); } /* flota (de a 2 px) */
         /* (v99) una última página sale del Libro, escrita para ella con su letra chueca y la cucharita en la esquina: se ve, no se lee */
         snprintf(t, sizeof t, "PARA %s:\nTÚ APRENDISTE A CUIDARTE Y A CUIDAR. ¡GRACIAS!", s_pet->nombre);
         x = pagina_vieja(s_tarjeta, s_nino ? 190 : 176, 300, 132, t);
@@ -624,9 +639,10 @@ static void final_revisar(void)
         if (ps0 < 1200u * 1024u || heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < 600u * 1024u) {
             lv_image_cache_drop(NULL);
             b = iconos_soltar();
+            b += pantallas_soltar(); /* (1.0.25) las fotos de pantalla guardadas: era lo que retenía la memoria */
             art_fondos_soltar_otros();
         }
-        hal_evento("final: empieza (%s); PSRAM %u KB -> %u KB (bloque mayor %u KB; íconos soltados %u KB), RAM interna %u B",
+        hal_evento("final: empieza (%s); PSRAM %u KB -> %u KB (bloque mayor %u KB; soltados %u KB), RAM interna %u B",
                    f == PET_FINAL_SECRETO ? "secreto" : "regular", (unsigned)(ps0 / 1024),
                    (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
                    (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024), (unsigned)(b / 1024),
@@ -700,9 +716,9 @@ static uint8_t s_libro_cola;   /* páginas que esperan a que no haya otra cosa e
 static uint32_t s_libro_listo; /* no antes de este instante (ms) */
 
 static const char *const LIBRO_TXT[PET_LIBRO_PAGINAS][3] = {
-    /* (fw 108) las dos primeras, contadas por el Libro mismo y más concretas (antes mezclaban «este libro» con «tuve») */
-    {"TUVE UNA HISTORIA Y, CON EL TIEMPO, SE FUE BORRANDO.", "ME QUEDAN LAS TAPAS, UN HILO SUELTO Y LAS PÁGINAS EN BLANCO.", "HOY LLEGASTE TÚ: EMPECEMOS DE NUEVO."},
-    {"ANTES FUI UN DIARIO: COSAS POR CUIDAR, RECETAS DE GALLETAS Y CHISTES MALOS.", "CUANDO SU DUEÑO SE ENFERMÓ, ME OLVIDARON EN UN RINCÓN.", "HASTA HOY. AHORA ME LLENO CON LO QUE VIVAN USTEDES DOS."},
+    /* (1.0.26) textos nuevos del usuario en las dos primeras; (fw 108) contadas por el Libro mismo y más concretas (antes mezclaban «este libro» con «tuve») */
+    {"TUVE UNA HISTORIA Y, CON EL TIEMPO, SE FUE BORRANDO.", "ME QUEDAN LAS TAPAS, UN HILO SUELTO Y LAS PÁGINAS EN BLANCO.", "HOY LLEGASTE TÚ A ESCRIBIR TU PROPIA HISTORIA."},
+    {"GUARDÉ LISTAS DE COSAS POR CUIDAR, RECETAS DE GALLETAS, CHISTES E HISTORIAS.", "MI DUEÑO ENFERMÓ Y QUEDÉ OLVIDADO EN UN RINCÓN, HASTA HOY.", "AHORA DESCÚBREME Y COMPLÉTAME CON TU VIDA."} /* (1.0.27) más corto: el de la 1.0.26 no cabía */,
     {"PARA LLEGAR A LA ISLA HAY QUE CRUZAR EN BOTE.", "MAREA ACOMPAÑA A TODOS: DICE QUE NADIE DEBERÍA CRUZAR SOLO. ELLA SABE POR QUÉ.", NULL},
     {"LAS CRIATURAS RECUERDAN AL CUIDADOR, EL REY DE ESTE MUNDO.", "CADA UNA LO RECUERDA DISTINTO. QUIZÁS NINGUNA SE EQUIVOCA. QUIZÁS TODAS UN POCO.", NULL},
     {"AL DESCUBRIR UN SECRETO, UNA PÁGINA VIEJA VOLVIÓ A APARECER.", NULL, NULL}, /* (v99) la hoja se dibuja: se ve, no se lee */
@@ -715,10 +731,17 @@ static const char *const LIBRO_TXT[PET_LIBRO_PAGINAS][3] = {
  * una mancha de galleta y la cucharita en la esquina (su firma). */
 static lv_obj_t *pagina_vieja(lv_obj_t *padre, int y, int ancho, int alto, const char *escrito)
 {
-    lv_obj_t *h = lv_obj_create(padre);
+    /* (1.0.25b) se arma dentro de un marco transparente con margen (para el giro y la sombra) y después se aplana */
+    enum { MARGEN = 26 };
+    lv_obj_t *marco = lv_obj_create(padre);
+    lv_obj_remove_style_all(marco);
+    lv_obj_set_size(marco, ancho + 2 * MARGEN, alto + 2 * MARGEN);
+    lv_obj_align(marco, LV_ALIGN_TOP_MID, 0, y - MARGEN);
+    lv_obj_remove_flag(marco, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *h = lv_obj_create(marco);
     lv_obj_remove_style_all(h);
     lv_obj_set_size(h, ancho, alto);
-    lv_obj_align(h, LV_ALIGN_TOP_MID, 0, y);
+    lv_obj_set_pos(h, MARGEN, MARGEN);
     lv_obj_set_style_bg_color(h, lv_color_hex(0xF2E4C0), 0);
     lv_obj_set_style_bg_grad_color(h, lv_color_hex(0xE2CC9A), 0);
     lv_obj_set_style_bg_grad_dir(h, LV_GRAD_DIR_VER, 0);
@@ -748,7 +771,26 @@ static lv_obj_t *pagina_vieja(lv_obj_t *padre, int y, int ancho, int alto, const
     lv_obj_t *c = icono(h, ICO_CUCHARA_PALO, 2); /* la cucharita en la esquina: su firma */
     lv_obj_align(c, LV_ALIGN_BOTTOM_RIGHT, -6, -4);
     lv_obj_set_style_transform_rotation(c, 300, 0);
-    return h;
+#if LV_USE_SNAPSHOT
+    {
+        int libre = -1;
+        for (int i = 0; i < 2; i++) if (!s_pag_plana[i]) { libre = i; break; }
+        if (libre >= 0) {
+            lv_obj_update_layout(marco);
+            lv_draw_buf_t *db = lv_snapshot_take(marco, LV_COLOR_FORMAT_ARGB8888);
+            if (db) {
+                s_pag_plana[libre] = db;
+                lv_obj_t *img = lv_image_create(padre);
+                lv_image_set_src(img, db);
+                lv_obj_align(img, LV_ALIGN_TOP_MID, 0, y - MARGEN);
+                lv_obj_remove_flag(img, LV_OBJ_FLAG_CLICKABLE);
+                lv_obj_delete(marco);
+                return img;
+            }
+        }
+    }
+#endif
+    return marco; /* (sin memoria para aplanarla: queda girada como antes) */
 }
 
 /* (declarada en ui.c) */ /* la página 0 de una partida nueva: al seguir, empieza la configuración (hora, nombre...) */
