@@ -323,6 +323,13 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
    Probar en el simulador (foto del prado con un pensamiento y con un globo a la vez) y en paneles/regresión.
    PUBLICAR: la 1.0.27 está compilada (rama «compilados», 3de5994) pero NO publicada: falta acceso a
    ruloccc/orbepet-firmware desde la sesión o el secreto ORBEPET_FIRMWARE_TOKEN en el repo de código.
+0001. **1.0.28 — CUADRÍCULA EN TODOS LOS MENÚS menos el diario (pedido 19-nov 11:48).** Lo de la enciclopedia (1.0.27:
+   enc_celda / enc_icono / enc_cabecera y s_enc_cuadro en ui.c, dos por fila 156×104, scroll vertical) se usa en todas
+   las listas de cosas: Tesoros por dentro (panel_cofre vista 1, cofre_pieza(…, true) y cofre_objetos), la Bolsa
+   (panel_bolsa), los tesoros/colecciones de Más (panel_mas) y donde haya filas de objetos. Las que son LISTAS DE TEXTO
+   (cartas, títulos de historias de un narrador en panel_libro_indice, canciones del cuaderno): PREGUNTADO al usuario si
+   también (ver respuesta). El diario queda como lista. Las pantallas de LEER (carta abierta, historia, nota, resumen,
+   ficha de un objeto) no son menús: no cambian. Ojo modo infante (ya usa cuadritos de 56×52 sin texto en tesoros_magia).
 00. **1.0.26: compilar en GitHub y revisar** (main.c, services.c, ui.c, ui_isla.inc no se pudieron compilar aquí).
    En el orbe probar: Perfiles → traer a otra y volver; «DE VIAJE» y después «¿QUIERES QUE VUELVA?»; el faro (alumbrar un
    barquito y traer la luz de vuelta: tiene que seguirla); tocar el huevo nuevo. En el registro buscar «perfiles:»,
