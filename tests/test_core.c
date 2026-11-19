@@ -4873,6 +4873,50 @@ static void test_fw104(void)
                 CHECK(b2[0] && !strchr(b2, '{') && !strchr(b2, '%'), "(1.0.18) texto del diario de la isla: %s", b2);
             }
     }
+    /* --- (1.0.32) la colección de la pesca: 30 animales, cada uno en su estación, hora y clima --- */
+    {
+        static pet_t p;
+        nueva(&p, 32, T0);
+        uint32_t t = T0 + 2u * 24u * H;
+        pet_update(&p, t);
+        p.dormida = 0;
+        CHECK(pet_fish_species_found(&p) == 0, "(1.0.32) una mascota nueva no tiene peces");
+        char w[160];
+        for (int k = 0; k < PET_PECES; k++) {
+            pet_fish_species_when(k, w, sizeof w);
+            CHECK(pet_fish_species_name(k)[0] && pet_fish_species_desc(k)[0] && w[0] && !strchr(w, '%') && strlen(w) < 150,
+                  "(1.0.32) pez %d: %s — %s", k, pet_fish_species_name(k), w);
+        }
+        /* pescar mucho, en distintas fechas y horas: van apareciendo y quedan anotados */
+        int salieron = 0, nuevos = 0;
+        for (int i = 0; i < 400; i++) {
+            const uint32_t ti = t + (uint32_t)i * 7919u * 13u;
+            p.escena = ESC_LAGO; p.dormida = 0; p.actividad = ACTV_PESCAR; p.actividad_hasta = ti + 600u;
+            pet_event_t e; while (pet_poll_event(&p, &e)) {}
+            pet_fish_game(&p, 3, ti);
+            while (pet_poll_event(&p, &e))
+                if (e.type == EV_PESCA && (e.b >> 1 & 31)) { salieron++; nuevos += (e.b >> 6) & 1; CHECK((e.b >> 1 & 31) <= PET_PECES, "(1.0.32) el número del pez cabe"); }
+        }
+        CHECK(salieron > 100 && nuevos == pet_fish_species_found(&p) && pet_fish_species_found(&p) >= 12,
+              "(1.0.32) pescando salen animales de la colección (%d, %d distintos)", salieron, pet_fish_species_found(&p));
+        /* forzado (para probar): sale ese y se marca una sola vez */
+        p.escena = ESC_LAGO; p.actividad = ACTV_PESCAR; p.actividad_hasta = t + 600u;
+        static pet_t q;
+        memcpy(&q, &p, sizeof q);
+        q.peces_a[0] = q.peces_a[1] = q.peces_b[0] = q.peces_b[1] = 0;
+        int vio = 0;
+        for (int i = 0; i < 60 && !vio; i++) {
+            q.escena = ESC_LAGO; q.dormida = 0; q.actividad = ACTV_PESCAR; q.actividad_hasta = t + 600u;
+            pet_fish_species_force(28);
+            pet_fish_game(&q, 3, t + (uint32_t)i);
+            pet_event_t e; while (pet_poll_event(&q, &e)) if (e.type == EV_PESCA && (e.b >> 1 & 31) == 29) vio = 1 + ((e.b >> 6) & 1);
+        }
+        CHECK(vio == 2 && pet_fish_species_known(&q, 28) && pet_fish_species_found(&q) == 1, "(1.0.32) el pez arcoíris forzado sale nuevo y queda en la colección");
+        char b2[200];
+        const entrada_diario_t de = {t, DIA_PESCA, PESCA_PEZ, 1, 0};
+        pet_diary_text(&q, &de, b2, sizeof b2);
+        CHECK(strstr(b2, "trucha arcoíris") != NULL, "(1.0.32) el diario dice cuál pez: %s", b2);
+    }
     /* --- (1.0.18) a veces queda hedionda sola; se le quita soplándole o espantando el olor --- */
     {
         static pet_t p;

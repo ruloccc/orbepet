@@ -219,8 +219,8 @@ static void describir(const pet_event_t *e)
         else log_linea(e->t, "%s: %s", s_pet.vecino.nombre, pet_neighbor_activity_name((vecino_act_t)e->a));
         break;
     case EV_PESCA:
-        log_linea(e->t, "pesco %s%s", pet_catch_name((pesca_t)e->a),
-                  e->a == PESCA_PEZ ? (e->b ? " y se lo comio" : " y lo devolvio al agua") : "");
+        log_linea(e->t, "pesco %s%s", ((e->b >> 1) & 31) ? pet_fish_species_with_article(((e->b >> 1) & 31) - 1) : pet_catch_name((pesca_t)e->a),
+                  e->a == PESCA_PEZ ? ((e->b & 1) ? " y se lo comio" : " y lo devolvio al agua") : ""); /* (1.0.32: b trae cuál de la colección) */
         break;
     case EV_VINCULO: log_linea(e->t, "vinculo: ahora %s", pet_bond_name((vinculo_nivel_t)e->a), 0); break;
     case EV_HABILIDAD: {
@@ -1076,6 +1076,9 @@ EXPORT(sim_ano_nuevo) void sim_ano_nuevo(void) /* el 31 de diciembre, un minuto 
 void ui_demo_dragon_ausente(int v);
 EXPORT(sim_dragon_absent) void sim_dragon_absent(int v) { ui_demo_dragon_ausente(v); }
 EXPORT(sim_pochi) void sim_pochi(int f) { ui_demo_pochi(f); }
+EXPORT(sim_pez_dar) void sim_pez_dar(int k) { if (k >= 0 && k < PET_PECES) { uint8_t *b = k < 16 ? s_pet.peces_a : s_pet.peces_b; b[(k & 15) >> 3] |= (uint8_t)(1u << (k & 7)); } } /* (1.0.32) */
+EXPORT(sim_pez_forzar) void sim_pez_forzar(int k) { pet_fish_species_force(k); }
+EXPORT(sim_peces) int sim_peces(void) { return pet_fish_species_found(&s_pet); }
 EXPORT(sim_zr) int sim_zr(int q) { extern int ui_test_zr(int); return ui_test_zr(q); }
 EXPORT(sim_po_estado) int sim_po_estado(void) { extern int ui_test_po_estado(void); return ui_test_po_estado(); }
 /* (v39) las novedades: para probarlas rápido */

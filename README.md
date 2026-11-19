@@ -807,6 +807,19 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.32 — la colección de peces
+
+- **Colección de la pesca: 30 animales del agua.** Cuando sale un pez, un cangrejo o uno raro al pescar, ahora sale
+  CUÁL es, con su dibujo, y si es la primera vez dice «¡NUEVO EN TU COLECCIÓN!». Cada uno aparece en su estación, su
+  hora o su clima: la trucha arcoíris y el pejerrey todo el año; el puye en las mañanas de primavera; el bagrecito y el
+  pulpo de noche; la anguila solo cuando llueve; el pez luna en los días despejados de verano; el pez de hielo solo con
+  el lago congelado; la pancora, el camarón de río, la jaiba, el cangrejo ermitaño y la centolla entre los cangrejos; y
+  los muy raros: el pez dorado, el pez de las estrellas (noches despejadas) y el pez arcoíris (solo cuando hay un
+  arcoíris en el cielo). Los que todavía no tiene salen un poquito más seguido.
+- **En el Cofre, PECES:** los 30 en cuadrícula, con cuántos lleva («11 DE 30»); los que faltan se ven en sombra. Tocando
+  uno se abre su ficha: el dibujo, qué es y cuándo se pesca (de los que faltan, solo cuándo buscarlos).
+- El diario ahora dice cuál pescó («Hoy pesqué una trucha arcoíris»). La pesca que hace sola también cuenta.
+
 ## Versión 1.0.31 — el tobogán del arcoíris
 
 - **Juego nuevo: EL TOBOGÁN DEL ARCOÍRIS.** Solo existe mientras hay un arcoíris en el cielo: se abre tocando el

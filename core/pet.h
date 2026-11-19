@@ -1444,7 +1444,7 @@ typedef struct {
     uint8_t cancion_cuna;                     /* 0: la canción de cuna de siempre; k + 1: la canción k */
     uint8_t ramitas;                          /* materiales de la casita */
     uint8_t musgo;
-    uint8_t _res38[2];
+    uint8_t peces_a[2];                       /* (1.0.32, era relleno: parte en cero) bits: peces 0-15 de la colección de la pesca */
 
     /* versión 39: Pochi en la historia, la página suelta, las zonas del claro y el mirador, el segundo final */
     uint8_t pochi_charla;                     /* bits 0-1, 2-3, 4-5: charlas con Pochi en cada acto; bit6: ya le contó el nombre */
@@ -1460,7 +1460,7 @@ typedef struct {
     uint8_t excursion_dia;                    /* 1 + día & 0x7F de la última excursión sola (con excursiones: cuántas ese día) */
     uint8_t excursiones;
     uint8_t pochi_amigos;                     /* (fw 102, era relleno: parte en cero) bits 0-3: el cachorro k ya se hizo amigo de su animal */
-    uint8_t _pad40[2];
+    uint8_t peces_b[2];                       /* (1.0.32, era relleno) bits: peces 16-29 */
 
     /* versión 41: el claro y el mirador son zonas de verdad; los juegos de los lugares tienen récord y estrellas */
     uint16_t jl_record[5];                    /* el mejor puntaje de cada juego de los lugares (PET_JL_*) */
@@ -1959,6 +1959,17 @@ bool pet_neighbor_here(const pet_t *p);
 bool pet_can_fish(const pet_t *p, uint32_t ahora);
 /* v89: pesca con minijuego. arg 0: empezó (la pesca no se termina sola); 1: no picó; 2: se escapó; 3: lo sacó (lo que sale depende de la estación y la hora) */
 void pet_fish_game(pet_t *p, int arg, uint32_t ahora);
+/* (1.0.32) La colección de la pesca: 30 animales del agua (peces, cangrejos y algunos raros), cada uno en su estación,
+ * su hora y su clima. Cuando sale un pez, un cangrejo o el pez dorado, EV_PESCA trae en b: bit0 se lo comió,
+ * bits 1-5 = 1 + cuál (0: ninguno), bit6 = es nuevo en la colección. El diario guarda en b 1 + cuál. */
+#define PET_PECES 30
+bool pet_fish_species_known(const pet_t *p, int k);
+int pet_fish_species_found(const pet_t *p);
+const char *pet_fish_species_name(int k);          /* «Trucha arcoíris» */
+const char *pet_fish_species_with_article(int k);  /* «una trucha arcoíris» */
+const char *pet_fish_species_desc(int k);
+void pet_fish_species_when(int k, char *buf, int n); /* «En primavera, de mañana.» */
+void pet_fish_species_force(int k);                /* (pruebas) que el próximo sea este (-1: al azar) */
 
 /* Varias mascotas en el mismo reloj: la que no está se queda "descansando" guardada (el tiempo no
  * corre para ella). Al volver a traerla, toma del reloj lo que es de todos (tus datos, la hora y el

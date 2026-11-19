@@ -546,6 +546,8 @@ void art_recuerdo(art_img_t *dst, int especie, int escala);
 const lv_image_dsc_t *art_icono(art_icono_t ico, int escala);
 uint32_t art_iconos_soltar(bool (*en_uso)(const void *src)); /* (v96) suelta los íconos guardados que no se usan; bytes liberados */
 const lv_image_dsc_t *art_icono_espejo(art_icono_t ico, int escala); /* mirando a la izquierda */
+const lv_image_dsc_t *art_pez(int k, int escala, bool gris);        /* (1.0.32) un animal de la colección de la pesca (gris: silueta) */
+void art_peces_soltar(void);                                        /* (1.0.32) suelta esos dibujos (nada puede estar mostrándolos) */
 /* Íconos propios (desde el editor de Windows): 24x24 pixeles ARGB8888, ya con contorno (los del editor
  * antiguo, de 12x12, también sirven). px = NULL vuelve al dibujo de fábrica. Lo que está en pantalla se
  * actualiza solo. */

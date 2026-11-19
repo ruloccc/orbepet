@@ -1487,7 +1487,7 @@ static void cerrar_panel_dentro(void)
     s_portal = false;
     s_mic_objeto = -1;
 }
-static void cerrar_panel(void) { s_pag_mundo = false; cerrar_panel_dentro(); zona_tras_panel(); } /* (v97) la zona de debajo vuelve a verse al tiro: un toque en ese instante caía en los botones del mundo */
+static void cerrar_panel(void) { s_pag_mundo = false; cerrar_panel_dentro(); zona_tras_panel(); art_peces_soltar(); } /* (1.0.32: y los dibujos de los peces) */ /* (v97) la zona de debajo vuelve a verse al tiro: un toque en ese instante caía en los botones del mundo */
 
 static lv_obj_t *s_cerrar_x;
 static void cerrar_x_cb(lv_event_t *e) { (void)e; cerrar_panel(); }
@@ -9894,7 +9894,9 @@ static art_icono_t icono_meta(int m)
 
 /* --- una nota: al tocar un recuerdo (un tesoro, una foto, una página) se abre y se lee entero; otro toque la cierra --- */
 static void nota_cerrar_cb(lv_event_t *e) { lv_obj_delete_async((lv_obj_t *)lv_event_get_user_data(e)); }
-static void nota_mostrar(art_icono_t ico, uint32_t tinte, const char *titulo, const char *cuerpo)
+static void nota_mostrar_src(const lv_image_dsc_t *src, uint32_t tinte, const char *titulo, const char *cuerpo);
+static void nota_mostrar(art_icono_t ico, uint32_t tinte, const char *titulo, const char *cuerpo) { nota_mostrar_src(art_icono(ico, 3), tinte, titulo, cuerpo); }
+static void nota_mostrar_src(const lv_image_dsc_t *src, uint32_t tinte, const char *titulo, const char *cuerpo) /* (1.0.32: con cualquier dibujo) */
 {
     if (!s_tarjeta) return;
     lv_obj_t *velo = caja(s_tarjeta);
@@ -9912,10 +9914,14 @@ static void nota_mostrar(art_icono_t ico, uint32_t tinte, const char *titulo, co
     lv_obj_set_style_border_color(n, lv_color_hex(0xFFE27A), 0);
     lv_obj_add_flag(n, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(n, nota_cerrar_cb, LV_EVENT_CLICKED, velo);
-    lv_obj_t *ic = icono(n, ico, 3);
+    lv_obj_t *ic = lv_image_create(n);
+    lv_obj_remove_flag(ic, LV_OBJ_FLAG_CLICKABLE);
+    if (src) lv_image_set_src(ic, src);
     lv_obj_align(ic, LV_ALIGN_TOP_MID, 0, 12);
+    const int extra = src && (int)src->header.h > 40 ? (int)src->header.h - 40 : 0; /* (1.0.32) un dibujo más alto: el texto baja */
     if (tinte) { lv_obj_set_style_image_recolor(ic, lv_color_hex(tinte), 0); lv_obj_set_style_image_recolor_opa(ic, LV_OPA_50, 0); }
-    lv_obj_t *ar = area_texto(n, 14, 54, 262, 168);
+    lv_obj_set_height(n, 230 + extra);
+    lv_obj_t *ar = area_texto(n, 14, 54 + extra, 262, 168);
     lv_obj_set_style_pad_row(ar, 8, 0);
     lv_obj_add_event_cb(ar, nota_cerrar_cb, LV_EVENT_CLICKED, velo);
     lv_obj_add_flag(ar, LV_OBJ_FLAG_CLICKABLE);
@@ -9926,7 +9932,7 @@ static void nota_mostrar(art_icono_t ico, uint32_t tinte, const char *titulo, co
         int contenido = 0;
         for (uint32_t k = 0; k < lv_obj_get_child_count(ar); k++) contenido += lv_obj_get_height(lv_obj_get_child(ar, (int32_t)k)) + 8;
         contenido += 8;
-        if (contenido < 168) { lv_obj_set_height(ar, contenido); lv_obj_set_height(n, 54 + contenido + 14); }
+        if (contenido < 168) { lv_obj_set_height(ar, contenido); lv_obj_set_height(n, 54 + extra + contenido + 14); }
     }
     area_lista(ar);
 }
@@ -10548,7 +10554,8 @@ static void cofre_hub_cb(lv_event_t *e)
         case 4: s_diario_tab = 2; s_diario_pag = 0; panel_diario(); return;
         default: panel_cartas(); return;
         }
-    } else if (q == 20) s_cofre_vista = 0;
+    } else if (q == 9) { s_cofre_vista = 3; s_cofre_sub = -1; } /* (1.0.32) los peces */
+    else if (q == 20) s_cofre_vista = 0;
     else if (q == 21) { s_cofre_vista = 2; s_cofre_sub = -1; }
     else if (q >= 40 && q < 45) {
         if (q == 40) { s_diario_tab = 0; s_diario_pag = 0; panel_diario(); return; }
@@ -10688,6 +10695,21 @@ static void cofre_pieza(lv_obj_t *ar, int c, bool solo_tengo)
         lv_obj_align(tx, LV_ALIGN_LEFT_MID, 50, 0);
     }
 }
+/* (1.0.32) tocar un pez de la colección: su ficha (el dibujo grande, qué es y cuándo se pesca); si falta, solo cuándo */
+static void peces_cb(lv_event_t *e)
+{
+    const int k = (int)(intptr_t)lv_event_get_user_data(e);
+    if (!s_pet || (unsigned)k >= PET_PECES) return;
+    const bool tiene = pet_fish_species_known(s_pet, k);
+    char ti[64], cu[360], cu2[180];
+    snprintf(ti, sizeof ti, "%s", tiene ? pet_fish_species_name(k) : "???");
+    mayusculas(ti);
+    pet_fish_species_when(k, cu2, sizeof cu2);
+    if (tiene) snprintf(cu, sizeof cu, "%s\n\n%s", pet_fish_species_desc(k), cu2);
+    else snprintf(cu, sizeof cu, "Todavía no lo pescas. %s", cu2);
+    mayusculas(cu);
+    nota_mostrar_src(art_pez(k, 5, !tiene), 0, ti, s_nino ? NULL : cu);
+}
 static void panel_cofre(void)
 {
     abrir_tarjeta(PANEL_COFRE, 420, 420);
@@ -10696,19 +10718,46 @@ static void panel_cofre(void)
         lv_obj_t *ti = texto(s_tarjeta, "COFRE", C_TINTA, 3, 0);
         lv_obj_align(ti, LV_ALIGN_TOP_MID, 0, 44);
         /* (1.0.27) también HISTORIAS y CANCIONES (salieron del diario): ocho, en cuatro filas más bajitas para que quepan en el círculo */
-        static const art_icono_t IC[8] = {ICO_PERCHA, ICO_COFRE, ICO_LIBRO, ICO_FOTO, ICO_CAMARA, ICO_CARTA, ICO_LIBRO_MAGICO, ICO_NOTA};
-        static const char *const NM[8] = {"ACCESORIOS", "TESOROS", "ENCICLOPEDIA", "FOTOS", "CÁMARA", "CARTAS", "HISTORIAS", "CANCIONES"};
-        for (int i = 0; i < 8; i++) {
-            lv_obj_t *b = boton(s_tarjeta, 186, 54, cofre_hub_cb, i);
-            lv_obj_align(b, LV_ALIGN_TOP_MID, (i % 2 ? 1 : -1) * 94, 96 + (i / 2) * 60);
+        /* (1.0.32) y PECES (la colección de la pesca): nueve, en cinco filas (la última, sola al centro) */
+        static const art_icono_t IC[9] = {ICO_PERCHA, ICO_COFRE, ICO_LIBRO, ICO_FOTO, ICO_CAMARA, ICO_CARTA, ICO_LIBRO_MAGICO, ICO_NOTA, ICO_PEZ};
+        static const char *const NM[9] = {"ACCESORIOS", "TESOROS", "ENCICLOPEDIA", "FOTOS", "CÁMARA", "CARTAS", "HISTORIAS", "CANCIONES", "PECES"};
+        for (int i = 0; i < 9; i++) {
+            lv_obj_t *b = boton(s_tarjeta, 180, 48, cofre_hub_cb, i == 8 ? 9 : i);
+            lv_obj_align(b, LV_ALIGN_TOP_MID, i == 8 ? 0 : (i % 2 ? 1 : -1) * 92, 100 + (i / 2) * 52);
             lv_obj_set_style_radius(b, 18, 0);
             if (i == 0) lv_obj_set_style_border_color(b, lv_color_hex(0xFFE27A), 0); /* lo primero que se abre */
             lv_obj_t *ic = icono(b, IC[i], 3);
-            lv_obj_align(ic, LV_ALIGN_LEFT_MID, 7, 0);
+            lv_obj_align(ic, LV_ALIGN_LEFT_MID, 4, 0);
             lv_obj_t *tx = texto(b, NM[i], C_BLANCO, 2, 138);
-            lv_obj_align(tx, LV_ALIGN_LEFT_MID, 48, 0);
+            lv_obj_align(tx, LV_ALIGN_LEFT_MID, 41, 0);
             if (i == 1 && s_pet->bolsa_nueva) { lv_obj_t *st = icono(b, ICO_ESTRELLA, 2); lv_obj_align(st, LV_ALIGN_TOP_RIGHT, -4, 4); }
         }
+        return;
+    }
+    if (s_cofre_vista == 3) { /* (1.0.32) la colección de la pesca: los 30 en cuadrícula; los que faltan, en sombra */
+        volver(cofre_hub_cb, 20);
+        if (!s_nino) {
+            lv_obj_t *tp = texto(s_tarjeta, "PECES", C_TINTA, 3, 0);
+            lv_obj_align(tp, LV_ALIGN_TOP_MID, 0, 40);
+            char c[32];
+            snprintf(c, sizeof c, "%d DE %d", pet_fish_species_found(s_pet), PET_PECES);
+            lv_obj_t *tc = texto(s_tarjeta, c, C_VIOLETA, 2, 0);
+            lv_obj_align(tc, LV_ALIGN_TOP_MID, 0, 72);
+        }
+        lv_obj_t *ar = area_texto(s_tarjeta, 45, s_nino ? 70 : 96, 330, s_nino ? 260 : 236);
+        enc_rejilla(ar);
+        s_enc_cuadro = true;
+        for (int k = 0; k < PET_PECES; k++) {
+            const bool tiene = pet_fish_species_known(s_pet, k);
+            lv_obj_t *b = enc_celda(ar, peces_cb, k, tiene ? pet_fish_species_name(k) : "???", !tiene);
+            lv_obj_t *im = lv_image_create(b);
+            lv_obj_remove_flag(im, LV_OBJ_FLAG_CLICKABLE);
+            const lv_image_dsc_t *d = art_pez(k, 5, !tiene);
+            if (d) lv_image_set_src(im, d);
+            if (s_nino) lv_obj_center(im); else lv_obj_align(im, LV_ALIGN_TOP_MID, 0, 0);
+        }
+        s_enc_cuadro = false;
+        area_lista(ar);
         return;
     }
     if (s_cofre_vista == 2 && s_cofre_sub < 0) { /* el menú de la enciclopedia: la misma organización del cofre */
@@ -15400,7 +15449,14 @@ void ui_show_event(const pet_t *p, const pet_event_t *e)
         if (lv_obj_has_flag(s_boya, LV_OBJ_FLAG_HIDDEN)) { bx = hx - 60; by = hy; }
         for (int k = 0; k < 6; k++) salpicar(bx - 10 + k * 4, by, 0x9ED8FF);
         flotar(I[a], NULL, 0, bx, by - 10, 0);
-        if (a == PESCA_PEZ && e->b) globo(ICO_PEZ, "¡UN PEZ! ÑAM", 2500);
+        const int esp = ((e->b >> 1) & 31) - 1; /* (1.0.32) cuál animal de la colección (y si es nuevo) */
+        if (esp >= 0 && esp < PET_PECES) {
+            char g[96];
+            snprintf(g, sizeof g, (e->b >> 6) & 1 ? "¡%s! ¡NUEVO PARA MI COLECCIÓN!" : (e->b & 1 ? "¡%s! ÑAM" : "¡%s! LO DEVUELVO AL AGUA"), pet_fish_species_with_article(esp));
+            mayusculas(g);
+            globo(I[a], g, 3000);
+        }
+        else if (a == PESCA_PEZ && (e->b & 1)) globo(ICO_PEZ, "¡UN PEZ! ÑAM", 2500);
         else if (a == PESCA_PEZ) globo(ICO_PEZ, "¡UN PEZ! LO DEVUELVO AL AGUA", 2500);
         else globo(I[a], T[a], 2500);
         if (a == PESCA_PEZ_DORADO) for (int k = 0; k < 5; k++) flotar(ICO_ESTRELLA, NULL, 0, bx - 40 + k * 20, by - 20, (uint32_t)k * 160);
@@ -17327,7 +17383,7 @@ static void tick_cb_cuerpo(void)
 /* ======================================================================
  * Prueba de los paneles: que nada quede fuera del círculo ni tape la X o la flecha de volver
  * ==================================================================== */
-#define PRUEBA_PANELES 90 /* (1.0.27) +5: el Libro (portada y hoja 2), el Baúl, la enciclopedia por dentro y el diario */
+#define PRUEBA_PANELES 91 /* (1.0.32) +1: los peces del cofre */ /* (1.0.27) +5: el Libro (portada y hoja 2), el Baúl, la enciclopedia por dentro y el diario */
 #ifndef MARGEN_PRUEBA
 #define MARGEN_PRUEBA 12 /* px hacia adentro del vidrio */
 #endif
@@ -17340,7 +17396,7 @@ static const char *const PRUEBA_NOMBRE[PRUEBA_PANELES] = {
     "verso-propuesta", "verso-tilo", "verso-nuestra", "verso-prisma", "verso-todos", "biblioteca", "comida-temporada", "ella-barras", "paleta-0", "paleta-1", "paleta-2", "paleta-3", "paleta-4", "paleta-5", "paleta-6", "paleta-7", "verso-cuchara",
     "verso-nombre", "verso-carta", "prisma", "tilde-chisme", "brizna", "pagina-tilo", "pagina-tilo-leer", "animales", "rito-pantalla", "rito-hoja", "nota-tilde",
     "cristales-menu", "canciones", "canciones-5", "libro-narradores", "verso-fin", "rito-oro", "version",
-    "libro-portada", "libro-hoja2", "baul", "encic-flora", "diario"};
+    "libro-portada", "libro-hoja2", "baul", "encic-flora", "diario", "peces"};
 int ui_panel_actual(void) { return (int)s_panel; }
 int ui_periodo(void) { return s_pet ? (int)periodo_de(s_pet, s_ultimo_t) : -1; } /* (pruebas) */
 int ui_test_count(void) { return PRUEBA_PANELES; }
@@ -17468,6 +17524,7 @@ int ui_test_panel(int k)
     case 87: ui_demo_cofre(0, -1); break;         /* (1.0.27) el Baúl con historias y canciones */
     case 88: ui_demo_cofre(2, 2); break;          /* (1.0.27) la enciclopedia: flora en cuadrícula */
     case 89: s_diario_tab = 0; s_diario_pag = 0; panel_diario(); break; /* (1.0.27) el diario, sin historias ni canciones */
+    case 90: s_cofre_vista = 3; s_cofre_sub = -1; panel_cofre(); break; /* (1.0.32) los peces */
     case 42: { int id = -1; for (int i = 0; i < PET_OBJETOS && id < 0; i++) if (s_pet->bolsa[i]) id = i; if (id < 0) return 0; panel_objeto(id); break; }
     }
     if (s_panel == PANEL_NINGUNO) return 0;

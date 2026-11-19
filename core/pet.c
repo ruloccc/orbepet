@@ -2135,6 +2135,7 @@ bool pet_can_fish(const pet_t *p, uint32_t t)
 }
 
 static void aplicar_pesca(pet_t *p, pesca_t c, uint32_t t, bool vivo);
+#include "peces.inc" /* (1.0.32) la colección de la pesca */
 static void fin_pesca(pet_t *p, uint32_t t, bool vivo)
 {
     float r = rng01(p);
@@ -2245,13 +2246,20 @@ static void aplicar_pesca(pet_t *p, pesca_t c, uint32_t t, bool vivo)
     }
     sumar(p, NEED_DIVERSION, 8);
     sumar(p, NEED_SEGURIDAD, 6); /* pescar la calma */
-    push_event(p, EV_PESCA, c, comio, t);
+    int especie = -1, nueva = 0; /* (1.0.32) cuál animal de la colección */
+    if (c == PESCA_PEZ || c == PESCA_CANGREJO || c == PESCA_PEZ_DORADO) {
+        especie = (unsigned)s_pez_forzado < PET_PECES ? s_pez_forzado : pez_elegir(p, c, t);
+        s_pez_forzado = -1;
+        nueva = pez_marcar(p, especie);
+        if (nueva) { impulsar(p, EMO_CURIOSIDAD, 0.5f, CAUSA_PESCA); sumar(p, NEED_CURIOSIDAD, 10); }
+    }
+    push_event(p, EV_PESCA, c, comio | ((especie + 1) << 1) | (nueva << 6), t);
     if (c == PESCA_NADA || c == PESCA_BOTA || c == PESCA_PIEDRA) quizas_objeto(p, OFU_PESCA, 0.6f, t); /* a veces el anzuelo saca algo mágico */
     vivir(p, VIV_PESCA);
     if (c != PESCA_NADA) {
         bool primera = true;
         for (int k = 0; k < p->diario_n; k++) if (pet_diary_get(p, k)->tipo == DIA_PESCA) { primera = false; break; }
-        anotar(p, DIA_PESCA, c, 0, t);
+        anotar(p, DIA_PESCA, c, especie + 1, t); /* (1.0.32: b = 1 + cuál de la colección) */
         if (primera || c == PESCA_PEZ_DORADO) foto(p, DIA_PESCA, c, t);
     }
     if (vivo) sonar(p, c == PESCA_NADA ? SND_SUSPIRO : (c == PESCA_ALGA || c == PESCA_BOTA ? SND_RISA : SND_PESCO), t);
@@ -7901,7 +7909,7 @@ const char *pet_diary_text(const pet_t *p, const entrada_diario_t *e, char *buf,
         else snprintf(buf, (size_t)n, b >= 3 ? "Trepo hasta la copa más alta" : "¡Aprendí a trepar árboles!");
         break;
     case DIA_VECINO: { static const char *const Z[] = {"Vino %s a jugar", "%s vino a visitarme", "Hoy jugué con %s", "Me visitó %s, ¡qué alegría!", "Estuvimos jugando con %s", "Llegó %s y la pasamos bien", "%s pasó a saludar", "Con %s nos reímos mucho"}; snprintf(buf, (size_t)n, VARIANTE(Z), (int)(uint8_t)e->a < pet_friends_max(p) ? pet_friend_name(p, (uint8_t)e->a) : "un amigo"); break; }
-    case DIA_PESCA: { static const char *const Z[] = {"Pesqué %s", "Hoy pesqué %s", "Algo picó: ¡%s!", "Esperé un buen rato y pesqué %s", "Saqué del agua %s", "Qué buena pesca: %s", "Pesqué %s, ¡qué alegría!", "La caña se movió y salió %s"}; snprintf(buf, (size_t)n, VARIANTE(Z), pet_catch_name((pesca_t)a)); break; }
+    case DIA_PESCA: { static const char *const Z[] = {"Pesqué %s", "Hoy pesqué %s", "Algo picó: ¡%s!", "Esperé un buen rato y pesqué %s", "Saqué del agua %s", "Qué buena pesca: %s", "Pesqué %s, ¡qué alegría!", "La caña se movió y salió %s"}; snprintf(buf, (size_t)n, VARIANTE(Z), b > 0 && b <= PET_PECES ? pet_fish_species_with_article(b - 1) : pet_catch_name((pesca_t)a)); break; }
     case DIA_TESORO: { static const char *const Z[] = {"Encontré un tesoro: %s", "Hoy encontré algo brillante: %s", "¡Mira lo que encontré! %s", "Escarbando apareció un tesoro: %s", "Un hallazgo para mi colección: %s", "Descubrí un tesoro escondido: %s", "Tropecé con algo especial: %s", "Qué suerte la de hoy: %s"}; snprintf(buf, (size_t)n, VARIANTE(Z), pet_piece_name((coleccion_t)a, b)); break; }
     case DIA_COLECCION: snprintf(buf, (size_t)n, "¡Completé mi colección de %s!", pet_collection_name((coleccion_t)a)); break;
     case DIA_RARO: { static const char *const Z[] = {"Vi %s", "Hoy vi %s, ¡qué suerte!", "No lo podía creer: vi %s", "Apareció %s y me quedé quietita", "Vi %s, ¡algo muy raro!", "Qué día especial: vi %s"}; snprintf(buf, (size_t)n, VARIANTE(Z), pet_rare_name((raro_t)a)); break; }

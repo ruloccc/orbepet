@@ -1,4 +1,17 @@
-# PARTE — estado del trabajo (19-nov-2026, 18:40)
+# PARTE — estado del trabajo (19-nov-2026, 19:40)
+
+> **1.0.32 «LA COLECCION DE PECES» (19-nov 19:40).** Pedido 18:45: colección de ~30 animales al pescar. core/peces.inc
+> (incluido en pet.c): tabla PECES[30] (nombre, con artículo, descripción, tipo PZT_PEZ/CANG/RARO, estaciones, horas
+> 6-11/11-18/18-21/21-6, clima, lago congelado sí/no/igual, peso). pez_elegir() en aplicar_pesca para PESCA_PEZ,
+> PESCA_CANGREJO y PESCA_PEZ_DORADO (minijuego y pesca sola), ×1,6 a los que no tiene; el pez arcoíris (28) solo con
+> p->raro == RARO_ARCOIRIS. Guardado en peces_a[2] y peces_b[2] (eran _res38 y _pad40: parten en cero, misma versión 42).
+> EV_PESCA b = comió | (1+cuál)<<1 | nuevo<<6 (ojo: antes b era solo «comió»); DIA_PESCA b = 1+cuál. Dibujos 48 px:
+> herramientas/iconos_nuevos/peces48.py → firmware/main/peces_hd.inc, art_pez(k, escala, gris) con caché que se suelta
+> en cerrar_panel y pez_cerrar (art_peces_soltar). UI: celebración de la pesca con el animal y «¡NUEVO EN TU COLECCIÓN!»;
+> globo de la pesca sola; Cofre: 9.º botón PECES (s_cofre_vista 3, peces_cb → nota_mostrar_src con el dibujo); panel de
+> prueba 90 «peces». Pruebas: test_core 1490 (bloque 1.0.32), pruebas/peces.js nueva (sim_pez_dar, sim_pez_forzar,
+> sim_peces). Todo verde; regresión regrabada (version, mas-ajustes, baul y peces nuevo).
+
 
 > **1.0.31 «EL TOBOGAN DEL ARCOIRIS» (19-nov 18:40).** (a) El usuario aclaró el buceo: se abre con la piedra izquierda Y
 > con el agua de encima hasta la orilla (isla_toque: elipse de la piedra (45,170) 40×21 + agua y 84..160 con x < orilla,
@@ -95,7 +108,7 @@ Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
 Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
-sin publicar): **1.0.31** («EL TOBOGAN DEL ARCOIRIS»), que trae de la 1.0.27 a la 1.0.30. Partida **versión 42** (no cambia desde el 104).
+sin publicar): **1.0.32** («LA COLECCION DE PECES»), que trae de la 1.0.27 a la 1.0.31. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
@@ -648,7 +661,7 @@ curl -sL -o bin.tgz  https://github.com/WebAssembly/binaryen/releases/download/v
 ```
 Pruebas:
 ```
-cd build && cmake .. && make test_core && ./test_core          -> 1227/1227 comprobaciones OK
+cd build && cmake .. && make test_core && ./test_core          -> 1490/1490 comprobaciones OK
 export WASI_SDK=/home/claude/sdk/wasi-sdk-25.0-x86_64-linux LVGL_DIR=/home/claude/lvgl BINARYEN=/home/claude/sdk/binaryen-version_123
 sh sim/web/build.sh
 node sim/web/pruebas/paneles.js          -> 18 problemas (la base de siempre)
@@ -659,6 +672,7 @@ node sim/web/pruebas/inicio.js | libro.js | libro_flujo.js | final.js
 node sim/web/pruebas/dos.js | isla.js | olor.js   -> juegos de a dos / de la isla / el olor: todo bien
 node sim/web/pruebas/pochi_visitas.js            -> visitas de Pochi: todo bien (los 5 tipos de visita)
 node sim/web/pruebas/arcoiris.js                 -> tobogán del arcoíris: todo bien
+node sim/web/pruebas/peces.js                    -> colección de peces: todo bien
 node sim/web/pruebas/redibujo.js [semilla]        -> redibujo: todo bien (juntar áreas no deja restos)
 gcc -fsyntax-only -std=gnu17 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-sign-compare \
   -DLV_CONF_INCLUDE_SIMPLE -Isim/preview -I/home/claude/lvgl -Icore -Ifirmware/main firmware/main/ui.c
@@ -678,7 +692,7 @@ En la placa: `herramientas/prueba_total.py` (fase 29c fondos por franjas; 29d lo
 
 ## 6. Archivos clave
 
-- Motor: `core/pet.h`, `core/pet.c`, `core/v41.inc`, `core/historia.inc`, `core/toques.inc`, `tests/test_core.c`
+- Motor: `core/pet.h`, `core/pet.c`, `core/peces.inc` (1.0.32), `core/v41.inc`, `core/historia.inc`, `core/toques.inc`, `tests/test_core.c`
 - Interfaz: `firmware/main/ui.c` + `ui_pochi.inc`, `ui_zonas.inc`, `ui_zjuegos.inc`, `ui_final.inc`, `ui_magia.inc`,
   `ui_historia.inc`, `ui_escenas.inc`, `ui_ceremonias.inc`
 - Arte: `firmware/main/art.c`, `art.h`, `fondos_data.inc`, `pantallas_data.inc`, `huevos_data.inc`,

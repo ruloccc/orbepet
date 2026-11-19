@@ -22,7 +22,9 @@ static float s_pez_conf_x[16], s_pez_conf_y[16], s_pez_conf_v[16];
 static bool s_pez_mic_ok = true;
 static int s_pez_toques, s_pez_toques_meta; /* v90: tocar = tocar la pantalla VARIAS veces rápido */
 static lv_obj_t *s_pez_punto[8], *s_pez_viento[3]; /* la brisa que cruza la pantalla mientras soplas (como en la niebla y el bote) */
-static int s_pez_res = -1, s_pez_nivel; /* (lo fuerte que suena el micrófono ahora, 0..100) */
+static int s_pez_res = -1, s_pez_nivel;
+static int s_pez_especie = -1, s_pez_nueva; /* (1.0.32) cuál animal de la colección salió y si es nuevo */
+static char s_pez_nom[64]; /* (lo fuerte que suena el micrófono ahora, 0..100) */
 void ui_mic_nivel(int nivel) { s_pez_nivel = nivel < 0 ? 0 : nivel; }
 void ui_set_mic_ok(bool ok) { s_pez_mic_ok = ok; }
 #define PZ_BOTE_X 120 /* dónde flota el bote (esquina de arriba a la izquierda de su imagen) */
@@ -56,6 +58,9 @@ static void pez_cerrar(void)
     lv_image_set_src(s_pez_fondo, NULL);
     lv_image_set_src(s_pez_cri, NULL);
     lv_image_set_src(s_pez_bote, NULL);
+    if (s_pez_item) lv_image_set_src(s_pez_item, NULL);
+    if (s_pez_cel_ico) lv_image_set_src(s_pez_cel_ico, NULL);
+    art_peces_soltar(); /* (1.0.32) */
     art_img_free(&s_pez_fondo_art); /* el paisaje pesa (~430 KB): se suelta al salir */
     for (int f = 0; f < 2; f++) art_img_free(&s_pez_cri_art[f]);
     art_img_free(&s_pez_bote_art);
@@ -253,9 +258,10 @@ static void crear_celebracion(void)
 static void pez_celebrar(art_icono_t ico, const char *nombre)
 {
     if (!s_pez_cel) crear_celebracion();
-    lv_image_set_src(s_pez_cel_ico, art_icono(ico, 9));
+    const lv_image_dsc_t *im = s_pez_especie >= 0 ? art_pez(s_pez_especie, 9, false) : NULL; /* (1.0.32) el animal de la colección */
+    lv_image_set_src(s_pez_cel_ico, im ? im : art_icono(ico, 9));
     lv_obj_set_pos(s_pez_cel_ico, CX - 54, 205 - 54);
-    art_texto(&s_pez_cel_t_art, "¡CONSEGUISTE!", 0xFFE27A, 3, 0);
+    art_texto(&s_pez_cel_t_art, s_pez_especie >= 0 && s_pez_nueva ? "¡NUEVO EN TU COLECCIÓN!" : "¡CONSEGUISTE!", 0xFFE27A, 3, 380);
     poner_src(s_pez_cel_c, &s_pez_cel_t_art.dsc);
     lv_obj_align(s_pez_cel_c, LV_ALIGN_TOP_MID, 0, 56);
     art_texto(&s_pez_cel_n_art, nombre, 0xFFFFFF, 2, 340);
@@ -336,13 +342,19 @@ static bool pez_resultado(int que, int comio)
                                                "¡UNA HOJA DE NENÚFAR! MIRA MI SOMBRERO", "¡UNA BOTELLA CON UN MENSAJE!", "UNA LLAVE OXIDADA... ¿QUÉ ABRIRÁ?",
                                                "¡UN PEZ DORADO! BRILLA... LO DEVUELVO", "¡UN TROCITO DE HIELO! ¡QUÉ FRÍO!"};
     const int a = que >= 0 && que < PESCA_COUNT ? que : 0;
+    const int esp = ((comio >> 1) & 31) - 1; /* (1.0.32) EV_PESCA b: bit0 se lo comió, bits 1-5 = 1 + cuál, bit6 nuevo */
+    s_pez_especie = esp >= 0 && esp < PET_PECES ? esp : -1;
+    s_pez_nueva = (comio >> 6) & 1;
+    comio &= 1;
+    if (s_pez_especie >= 0) { snprintf(s_pez_nom, sizeof s_pez_nom, "¡%s!", pet_fish_species_with_article(s_pez_especie)); mayusculas(s_pez_nom); }
     if (s_pez_fase != PZ_SACA) return true;
     s_pez_res = a; /* (no pescó: ya está el mensaje de que se escapó o no picó) */
     s_pez_fase = PZ_RESULTADO;
     s_pez_t0 = s_ms;
-    lv_image_set_src(s_pez_item, art_icono(I[a], 5));
+    { const lv_image_dsc_t *im = s_pez_especie >= 0 ? art_pez(s_pez_especie, 5, false) : NULL; lv_image_set_src(s_pez_item, im ? im : art_icono(I[a], 5)); }
     ocultar(s_pez_item, a == PESCA_NADA);
-    pez_texto(a == PESCA_PEZ ? (comio ? "¡UN PEZ! ÑAM" : "¡UN PEZ! LO DEVUELVO AL AGUA") : T[a], 200 + a);
+    if (s_pez_especie >= 0) pez_texto(s_pez_nom, 300 + s_pez_especie);
+    else pez_texto(a == PESCA_PEZ ? (comio ? "¡UN PEZ! ÑAM" : "¡UN PEZ! LO DEVUELVO AL AGUA") : T[a], 200 + a);
 #ifdef ESP_PLATFORM
     { extern void hal_log(const char *fmt, ...) __attribute__((format(printf, 1, 2))); hal_log("pesca: sacó %s", pet_catch_name((pesca_t)a)); }
 #endif
@@ -510,7 +522,7 @@ static void animar_pesca_juego(void)
             const int a = s_pez_res >= 0 && s_pez_res < PESCA_COUNT ? s_pez_res : 1;
             static const art_icono_t I2[PESCA_COUNT] = {ICO_PUNTOS, ICO_PEZ, ICO_BOTA, ICO_PIEDRA, ICO_CONCHA, ICO_ALGA, ICO_CANGREJO, ICO_NENUFAR,
                                                         ICO_OBJETO(OBJ_BOTELLA), ICO_OBJETO(OBJ_LLAVE_OXIDADA), ICO_PEZ_DORADO, ICO_HIELO};
-            pez_celebrar(I2[a], N[a]);
+            pez_celebrar(I2[a], s_pez_especie >= 0 ? s_pez_nom : N[a]);
         }
         if (s_pez_cel && !lv_obj_has_flag(s_pez_cel, LV_OBJ_FLAG_HIDDEN)) { /* la celebración: confeti, el premio que late; se cierra sola a los 8 s o tocando */
             const uint32_t tc = s_ms - s_pez_cel_t0;
