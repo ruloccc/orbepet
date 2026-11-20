@@ -8823,6 +8823,7 @@ static void panel_trucos(void);
 
 static void cristales_empezar(void); /* ui_magia.inc */
 static void panel_crismenu(void);    /* (v38) ui_musica.inc */
+static int s_can_origen; /* (1.0.34) de dónde se abrieron las canciones: 0 otro lado, 1 la hoja del Libro, 2 el Baúl (la flecha vuelve ahí) */
 static void panel_canciones(void);
 static void evento_pieza(const pet_event_t *e);
 static void evento_nuestra(const pet_event_t *e);
@@ -10631,7 +10632,7 @@ static void cofre_hub_cb(lv_event_t *e)
     if (q < 8) {
         switch (q) {
         case 6: libro_historias_abrir(); return; /* (1.0.27) */
-        case 7: panel_canciones(); return;       /* (1.0.27) */
+        case 7: s_can_origen = 2; panel_canciones(); return; /* (1.0.27) */
         case 0: s_rincon_tab = 0; panel_rincon(); return;
         case 1: s_cofre_vista = 1; s_cofre_sub = -1; break; /* tesoros: todas las categorías en cuadrícula */
         case 2: s_cofre_vista = 2; s_cofre_sub = -1; break; /* la enciclopedia abre su propio menú */

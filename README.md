@@ -807,6 +807,13 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.34 — el libro ordenado
+
+- **El Libro de historias, sin cosas repetidas.** Se abre como siempre (deslizando a la derecha) y aparece la tapa;
+  al tocarla sale la hoja con dos botones: **HISTORIAS** y **CANCIONES**. Ya no aparece primero el índice de historias
+  ni hay que deslizar a la izquierda para encontrar las canciones. Cada pantalla tiene su flecha para volver: de las
+  historias o las canciones, a la hoja del Libro (o al Cofre, si se abrieron desde ahí); de la hoja, a la tapa.
+
 ## Versión 1.0.33 — memoria limpia
 
 - **Limpieza de rutina de la memoria (idea tuya).** Cada 10 minutos, y 30 segundos después de que se apaga la

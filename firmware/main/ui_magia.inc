@@ -663,25 +663,16 @@ static void lib_vuelve_cb(lv_event_t *e)
     if (s_lib_desde) panel_libro_indice(); else cerrar_panel();
 }
 static int s_lib_narr;
-static void lib_abre_cb(lv_event_t *e) { (void)e; if (s_panel == PANEL_LIBHIST) { s_lib_narr = -1; panel_libro_indice(); } }
-static void libro_historias_abrir(void) { s_lib_narr = -1; panel_libro_indice(); } /* (1.0.27) desde el Baúl y la hoja 2 del Libro */
+static void panel_libro_hoja(void);
+/* (1.0.34, pedido del usuario) tocar el libro abre la hoja con HISTORIAS y CANCIONES (antes abría directo el índice de
+ * historias, y HISTORIAS/CANCIONES quedaban escondidas deslizando: era lo mismo dos veces) */
+static void lib_abre_cb(lv_event_t *e) { (void)e; if (s_panel == PANEL_LIBHIST) panel_libro_hoja(); }
+static int s_lib_origen; /* (1.0.34) de dónde se abrió el índice de historias: 0 el Libro, 1 el Baúl (para volver) */
+static void libro_historias_abrir(void) { s_lib_narr = -1; s_lib_origen = 1; panel_libro_indice(); } /* (1.0.27) desde el Baúl */
 static void lib_ceremonia_cb(lv_event_t *e) { const int i = (int)(intptr_t)lv_event_get_user_data(e); cer_empezar(i == 0 ? 1 : 2, true); }
-/* (1.0.27) el Libro tiene dos hojas: la portada (0) y, deslizando a la izquierda, HISTORIAS y CANCIONES (1). El índice de
- * historias es la vista 2. Los puntitos de arriba dicen en qué hoja estás. */
+/* (1.0.34) el Libro: la tapa (0); al tocarla, la hoja con HISTORIAS y CANCIONES (1, con flecha a la tapa). El índice de
+ * historias es la vista 2 (su flecha vuelve a la hoja, o al Baúl si se abrió desde ahí). Ya no se desliza entre hojas. */
 static int s_lib_vista;
-static void lib_puntos(lv_obj_t *cc, int cual)
-{
-    for (int k = 0; k < 2; k++) {
-        lv_obj_t *d = lv_obj_create(cc);
-        lv_obj_remove_style_all(d);
-        lv_obj_set_size(d, 10, 10);
-        lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
-        lv_obj_set_style_bg_color(d, lv_color_hex(k == cual ? 0xFFE9A0 : 0x6A5AA8), 0);
-        lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
-        lv_obj_remove_flag(d, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_align(d, LV_ALIGN_TOP_MID, k ? 10 : -10, 6);
-    }
-}
 /* 1) la portada: el libro brillando; tocarlo lo abre */
 static void panel_libro_hist(void)
 {
@@ -695,7 +686,6 @@ static void panel_libro_hist(void)
     if (!s_pet) return;
     s_lib_desde = false;
     s_lib_vista = 0;
-    lib_puntos(cc, 0);
     /* el resplandor: tres discos planos y transparentes, sin sombra difuminada ni animación (la sombra de 60 px animada obligaba a repintar el libro grande en cada cuadro y el toque tardaba una eternidad) */
     lv_obj_t *glow = NULL;
     for (int i = 0; i < 3; i++) {
@@ -739,11 +729,13 @@ static void panel_libro_hist(void)
     }
 }
 /* 1b) (1.0.27) la segunda hoja: HISTORIAS y CANCIONES (lo mismo que en el Baúl) */
+static void lib_portada_cb(lv_event_t *e) { (void)e; if (s_panel == PANEL_LIBHIST) panel_libro_hist(); }
+static void lib_indice_volver_cb(lv_event_t *e) { (void)e; if (s_panel != PANEL_LIBHIST) return; if (s_lib_origen) { s_cofre_vista = 0; panel_cofre(); } else panel_libro_hoja(); }
 static void lib_hoja_cb(lv_event_t *e)
 {
     const int q = (int)(intptr_t)lv_event_get_user_data(e);
     if (s_panel != PANEL_LIBHIST) return;
-    if (q == 0) libro_historias_abrir(); else panel_canciones();
+    if (q == 0) { s_lib_narr = -1; s_lib_origen = 0; panel_libro_indice(); } else { s_can_origen = 1; panel_canciones(); }
 }
 static void panel_libro_hoja(void)
 {
@@ -757,7 +749,7 @@ static void panel_libro_hoja(void)
     if (!s_pet) return;
     s_lib_desde = false;
     s_lib_vista = 1;
-    lib_puntos(cc, 1);
+    volver(lib_portada_cb, 0); /* (1.0.34) la flecha: de vuelta a la tapa del libro */
     if (!s_nino) { lv_obj_t *t = texto_c(cc, "EL LIBRO", 0xFFE9A0, 3, 320); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 40); }
     bool nuevo = false;
     for (int c = 0; c < NARR_COUNT && !nuevo; c++) nuevo = pet_book_new(s_pet, c);
@@ -789,8 +781,7 @@ static void libro_desliza_cb(lv_event_t *e)
     if (lv_event_get_code(e) == LV_EVENT_PRESSED) { s_libd_x0 = (int16_t)p.x; s_libd_y0 = (int16_t)p.y; return; }
     const int dx = p.x - s_libd_x0, dy = p.y - s_libd_y0;
     if (abs(dx) < 50 || abs(dx) < abs(dy) * 3 / 2) return;
-    if (s_lib_vista == 0 && dx < 0) lv_async_call(libro_hoja_async, NULL);
-    else if (s_lib_vista == 1 && dx > 0) lv_async_call(libro_portada_async, NULL);
+    (void)libro_hoja_async; (void)libro_portada_async; /* (1.0.34) ya no hay hojas que deslizar: la tapa se toca y la hoja tiene su flecha */
 }
 /* 2) el índice (v39): primero los narradores que ya contaron algo (un círculo con su dibujo y su nombre); al tocar uno, sus historias.
  *    Solo aparece lo ya encontrado: nada de páginas selladas ni de cuántas faltan (no se revela que hay más historias ni más personajes). */
@@ -828,6 +819,7 @@ static void panel_libro_indice(void)
     if (!s_pet) return;
     s_lib_desde = false;
     s_lib_vista = 2;
+    if (s_lib_narr < 0) volver(lib_indice_volver_cb, 0); /* (1.0.34) de los narradores: a la hoja del Libro (o al Baúl) */
     if (s_lib_narr >= 0 && !pet_story_count(s_pet, s_lib_narr)) s_lib_narr = -1;
     const int c0 = s_lib_narr;
     lv_obj_t *t = texto_c(cc, c0 < 0 ? "HISTORIAS" : lib_narr_nombre(c0), 0xFFE9A0, 2, 320);

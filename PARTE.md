@@ -1,4 +1,11 @@
-# PARTE — estado del trabajo (19-nov-2026, 20:10)
+# PARTE — estado del trabajo (19-nov-2026, 21:20)
+
+> **1.0.34 «EL LIBRO ORDENADO» (19-nov 21:20).** Pedido: tocar la tapa del Libro abre la hoja HISTORIAS/CANCIONES (antes
+> abría el índice y la hoja estaba deslizando a la izquierda). ui_magia.inc: lib_abre_cb → panel_libro_hoja (con
+> volver → tapa); libro_desliza_cb ya no cambia de hoja; sin lib_puntos. s_lib_origen (0 Libro, 1 Baúl) y s_can_origen
+> (ui.c; 1 Libro, 2 Baúl, 0 cristales) para la flecha de volver del índice de narradores y de las canciones.
+> Regresión regrabada (libro-narradores, libro-portada, libro-hoja2, version, mas-ajustes).
+
 
 > **1.0.33 «MEMORIA LIMPIA» (19-nov 20:10).** Idea del usuario: liberar cada cierto tiempo. En ui.c, en la vigilancia de
 > memoria (cada 1,5 s, solo ESP_PLATFORM): cada 10 min y 30 s después de apagarse la pantalla, si está en calma (sin
@@ -125,7 +132,7 @@ Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
 Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
-sin publicar): **1.0.33** («MEMORIA LIMPIA»), que trae de la 1.0.27 a la 1.0.32. Partida **versión 42** (no cambia desde el 104).
+sin publicar): **1.0.34** («EL LIBRO ORDENADO»), que trae de la 1.0.27 a la 1.0.33. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.

@@ -671,7 +671,7 @@ static void crismenu_cb(lv_event_t *e)
     const int q = (int)(intptr_t)lv_event_get_user_data(e);
     if (q == 0) cristales_empezar();
     else if (q == 1) cristales_libre(false);
-    else if (q == 2) panel_canciones();
+    else if (q == 2) { s_can_origen = 0; panel_canciones(); }
     else if (q == 3) cristales_libre(true);
 }
 static void panel_crismenu(void)
@@ -715,11 +715,14 @@ static void canciones_cb(lv_event_t *e)
     }
     s_canc_pend = 1; /* se redibuja cuando el motor lo anote */
 }
+static void panel_libro_hoja(void);
+static void can_volver_cb(lv_event_t *e) { (void)e; if (s_panel != PANEL_CANCIONES) return; if (s_can_origen == 1) panel_libro_hoja(); else { s_cofre_vista = 0; panel_cofre(); } }
 static void panel_canciones(void)
 {
     abrir_tarjeta(PANEL_CANCIONES, 400, 400);
     s_canc_pend = 0;
     if (!s_pet) return;
+    if (s_can_origen) volver(can_volver_cb, 0);
     if (!s_nino) { lv_obj_t *t = texto(s_tarjeta, "NUESTRAS CANCIONES", 0xFFE9A0, 2, 0); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 40); }
     const int al = pet_song_for(s_pet, 0), cu = pet_song_for(s_pet, 1);
     int fila = 0;
