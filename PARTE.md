@@ -1,4 +1,10 @@
-# PARTE — estado del trabajo (19-nov-2026, 21:20)
+# PARTE — estado del trabajo (19-nov-2026, 22:45)
+
+> **1.0.35 «ALARMAS EN LA PECERA» (19-nov 22:45).** (a) Dock: el «+» (s_dock[3]) se ve dormida aunque s_interior o
+> s_juego (mas_dormida), y se trae al frente en la casita. (b) Pecera: s_pecera_rit abre panel_alarmas (ICO_DESPERTADOR,
+> pecera_alarmas_cb); alarmas_cb 21 (volver) con s_pecera cierra el panel y la pecera sigue. (c) ritmo_revisar no se
+> abre con s_pecera. Regresión regrabada (version, mas-ajustes, rito-oro).
+
 
 > **1.0.34 «EL LIBRO ORDENADO» (19-nov 21:20).** Pedido: tocar la tapa del Libro abre la hoja HISTORIAS/CANCIONES (antes
 > abría el índice y la hoja estaba deslizando a la izquierda). ui_magia.inc: lib_abre_cb → panel_libro_hoja (con
@@ -136,7 +142,7 @@ Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
 Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
-sin publicar): **1.0.34** («EL LIBRO ORDENADO»), que trae de la 1.0.27 a la 1.0.33. Partida **versión 42** (no cambia desde el 104).
+sin publicar): **1.0.35** («ALARMAS EN LA PECERA»), que trae de la 1.0.27 a la 1.0.34. Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.

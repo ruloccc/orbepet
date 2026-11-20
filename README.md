@@ -807,6 +807,15 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.35 — alarmas en la pecera
+
+- **El botón «+» se ve siempre que ella duerme**, también adentro de la casita (antes, durmiendo en la casita no había
+  ningún botón). Desde ahí se apaga la luz, se la despierta o se cambia algo mientras duerme.
+- **En la pecera, las alarmas:** el botón del ritmo del juego (el reloj) ahora es un despertador que abre las alarmas:
+  ahí se prenden, se apagan, se les cambia la hora o se agrega otra, sin salir de la pecera. La flecha de volver deja la
+  pecera como estaba. (El ritmo se sigue eligiendo en Ajustes → Pantalla.)
+- Al salir de la pecera ya no puede aparecer de golpe la pregunta del ritmo.
+
 ## Versión 1.0.34 — el libro ordenado
 
 - **El Libro de historias, sin cosas repetidas.** Se abre como siempre (deslizando a la derecha) y aparece la tapa;

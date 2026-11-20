@@ -3617,7 +3617,7 @@ static void ritmo_revisar(void)
 {
     if (!s_pet || s_pet->ritmo_visto || !s_pet->edad_dueno || s_panel != PANEL_NINGUNO || s_pet->dormida || s_pet->etapa == STAGE_HUEVO ||
         s_interior || s_cie_activo || s_via_activo || s_cru_activo || s_escena < 0 || s_juego != JG_NADA || s_bienv_activa ||
-        s_inicio_cfg || s_nace_desde || !s_pet->nombre[0])   /* (107) primero el nombre, el color y el modo: esto se colaba antes */
+        s_inicio_cfg || s_nace_desde || !s_pet->nombre[0] || s_pecera)   /* (107) primero el nombre, el color y el modo: esto se colaba antes (1.0.35: ni en la pecera) */
         return;
     panel_ritmo();
 }
@@ -11344,7 +11344,9 @@ static void pecera_cb(lv_event_t *e) { (void)e; salir_pecera(); }
 /* (v101) la pecera cumplió su tiempo: sale, y si está cargando no vuelve sola hasta desenchufar */
 void ui_pecera_vencida(void) { if (!s_pecera) return; salir_pecera(); s_pecera_no_auto = s_cargando; }
 static void pecera_vol_cb(lv_event_t *e) { (void)e; panel_sonido(); } /* el volumen también se ajusta desde la pecera */
-static void pecera_ritmo_cb(lv_event_t *e) { (void)e; panel_ritmo(); } /* el ritmo también se elige desde la pecera */
+/* (1.0.35, pedido del usuario) en la pecera, en lugar del ritmo del juego: las alarmas, para prenderlas, apagarlas o
+ * cambiarles la hora sin salir de la pecera (la flecha de volver cierra y deja la pecera como estaba) */
+static void pecera_alarmas_cb(lv_event_t *e) { (void)e; panel_alarmas(); }
 
 static uint32_t s_pecera_eligio_ms; /* (recién elegido aquí: vale lo elegido mientras main lo guarda) */
 static int pecera_opcion(void)
@@ -11447,8 +11449,8 @@ static void crear_pecera(lv_obj_t *scr)
     lv_obj_set_style_bg_color(s_pecera_rit, lv_color_hex(C_BOTON), 0);
     lv_obj_set_style_bg_opa(s_pecera_rit, LV_OPA_40, 0);
     lv_obj_set_style_shadow_width(s_pecera_rit, 0, 0);
-    lv_obj_add_event_cb(s_pecera_rit, pecera_ritmo_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_center(icono(s_pecera_rit, ICO_RELOJ, 4));
+    lv_obj_add_event_cb(s_pecera_rit, pecera_alarmas_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_center(icono(s_pecera_rit, ICO_DESPERTADOR, 4));
     ocultar(s_pecera_rit, true);
     s_pecera_vol = lv_button_create(scr);
     lv_obj_set_size(s_pecera_vol, 72, 58);
@@ -13104,7 +13106,7 @@ static void alarmas_cb(lv_event_t *e)
                 return;
             }
     }
-    if (q == 21) panel_hora_menu();
+    if (q == 21) { if (s_pecera) cerrar_panel(); else panel_hora_menu(); } /* (1.0.35: abierto desde la pecera, vuelve a la pecera) */
 }
 
 static void panel_alarmas(void)
@@ -14595,8 +14597,13 @@ void ui_update(const pet_t *p, uint32_t utc)
     /* dormida no se le puede dar de comer, jugar ni bañar: solo queda "Más" (luz, despertarla) */
     /* tres botones (comer, jugar, más); el baño aparece solo cuando está sucia */
     bool sucia = pet_need(p, NEED_HIGIENE) < 60 || p->barro;
-    for (int i = 0; i < 4; i++)
-        ocultar(s_dock[i], p->etapa == STAGE_HUEVO || !p->edad_dueno || s_interior || (i < 3 && p->dormida) || s_juego != JG_NADA || (i == 2 && !sucia) || s_esponja_on || s_picnic_on || s_fie_tipo >= 0 || s_portal || s_panel == PANEL_FINAL || s_panel == PANEL_CINE); /* (en una fiesta o con un menú de disco abierto, sin botones) */
+    for (int i = 0; i < 4; i++) {
+        /* (1.0.35, pedido del usuario) dormida, el «+» se ve SIEMPRE, también adentro de la casita: es por donde se apaga la
+         * luz, se la despierta o se cambia algo mientras duerme */
+        const bool mas_dormida = i == 3 && p->dormida;
+        ocultar(s_dock[i], p->etapa == STAGE_HUEVO || !p->edad_dueno || (s_interior && !mas_dormida) || (i < 3 && p->dormida) || (s_juego != JG_NADA && !mas_dormida) || (i == 2 && !sucia) || s_esponja_on || s_picnic_on || s_fie_tipo >= 0 || s_portal || s_panel == PANEL_FINAL || s_panel == PANEL_CINE); /* (en una fiesta o con un menú de disco abierto, sin botones) */
+        if (mas_dormida && s_interior && !lv_obj_has_flag(s_dock[i], LV_OBJ_FLAG_HIDDEN)) lv_obj_move_foreground(s_dock[i]); /* (sobre el dibujo de la casita) */
+    }
     int nb = sucia ? 4 : 3, k = 0;
     for (int i = 0; i < 4; i++) {
         if (i == 2 && !sucia) continue;
