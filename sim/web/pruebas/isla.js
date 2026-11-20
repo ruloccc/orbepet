@@ -68,6 +68,34 @@ const DIR = process.argv[2] || '/tmp/isla';
   for (let k = 0; k <= 30; k++) { x.sim_touch(330 - k * 3, 380 - k * 3, 1); s.frames(1, 33); }
   s.frames(20, 33); s.png(`${DIR}/buceo_deslizar.png`); x.sim_touch(240, 290, 0);
   s.tap(233, 417); s.frames(30); s.tap(233, 417); s.frames(30);
+  // (1.0.34) el faro: quieto mientras están las instrucciones; el barquito que alumbras queda pegado a la luz
+  x.sim_zd_abrir(4); s.frames(20); s.tap(233, 233); s.frames(30); s.png(`${DIR}/faro_instrucciones.png`);
+  {
+    // esperar el primer barquito y llevarle la luz encima; después, arrastrar la luz al muelle (206,330)
+    let bx = -1, by = -1;
+    for (let k = 0; k < 400 && bx < 0; k++) {
+      s.frames(1, 33);
+      for (let i = 0; i < 3; i++) { const v = x.sim_zj_dbg(100 + i); if (Math.floor(v / 1000000) === 1) { bx = Math.floor(v / 1000) % 1000; by = v % 1000; } }
+    }
+    if (bx < 0) mal('faro: no apareció ningún barquito');
+    else {
+      x.sim_touch(bx, by, 1); s.frames(3, 33);
+      for (let k = 0; k < 6; k++) { for (let i = 0; i < 3; i++) { const v = x.sim_zj_dbg(100 + i); if (Math.floor(v / 1000000) === 1) { bx = Math.floor(v / 1000) % 1000; by = v % 1000; } } x.sim_touch(bx, by, 1); s.frames(2, 33); }
+      const pts0 = Math.floor((x.sim_zd_estado() % 1000) / 10);
+      // camino por el agua hasta el muelle (por abajo de la isla)
+      const ruta = [[bx, by], [120, 380], [206, 360], [206, 330]];
+      for (let r = 1; r < ruta.length; r++) {
+        const [x0, y0] = ruta[r - 1], [x1, y1] = ruta[r];
+        for (let k = 1; k <= 25; k++) { x.sim_touch(Math.round(x0 + (x1 - x0) * k / 25), Math.round(y0 + (y1 - y0) * k / 25), 1); s.frames(1, 33); }
+      }
+      for (let k = 0; k < 30; k++) { x.sim_touch(206, 330, 1); s.frames(1, 33); }
+      s.png(`${DIR}/faro_pegado.png`);
+      x.sim_touch(206, 330, 0);
+      const pts1 = Math.floor((x.sim_zd_estado() % 1000) / 10);
+      console.log(`faro con el barquito pegado: ${pts0} -> ${pts1} puntos`);
+    }
+  }
+  s.tap(233, 417); s.frames(30);
   // con el dedo: arrastrar la luz hacia el muelle
   x.sim_zd_abrir(4); s.frames(20); s.tap(233, 233); s.frames(30);
   x.sim_touch(300, 300, 1); for (let k = 0; k < 400; k++) { x.sim_touch(300, 300, 1); s.frames(1, 33); } x.sim_touch(300, 300, 0);

@@ -5,6 +5,10 @@
 > volver → tapa); libro_desliza_cb ya no cambia de hoja; sin lib_puntos. s_lib_origen (0 Libro, 1 Baúl) y s_can_origen
 > (ui.c; 1 Libro, 2 Baúl, 0 cristales) para la flecha de volver del índice de narradores y de las canciones.
 > Regresión regrabada (libro-narradores, libro-portada, libro-hoja2, version, mas-ajustes).
+> Faro (pedido 21:18, «sigue injugable»): ui_isla.inc s_zf_pegado/ox/oy: al tocarlo el haz queda pegado (offset a la
+> punta, ≤ 40 px y se va juntando), va a ax+ox a v = min(7·d, 240 px/s); pegado no encalla (se frena en la orilla, prueba
+> por eje). Sin anillo s_zj_o[29]. s_zf_empieza/s_zf_solto como el buceo; s_zj_juego_t se reinicia al empezar. isla.js
+> nueva parte: lleva la luz al primer barquito y lo arrastra al muelle (sale 1 punto).
 
 
 > **1.0.33 «MEMORIA LIMPIA» (19-nov 20:10).** Idea del usuario: liberar cada cierto tiempo. En ui.c, en la vigilancia de

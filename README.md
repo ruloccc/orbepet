@@ -813,6 +813,10 @@ En el orbe:
   al tocarla sale la hoja con dos botones: **HISTORIAS** y **CANCIONES**. Ya no aparece primero el índice de historias
   ni hay que deslizar a la izquierda para encontrar las canciones. Cada pantalla tiene su flecha para volver: de las
   historias o las canciones, a la hoja del Libro (o al Cofre, si se abrieron desde ahí); de la hoja, a la tapa.
+- **El faro, jugable:** el barquito que tocas con la luz queda **pegado** a ella y se mueve rápido igual que la luz
+  (hacia adentro, hacia afuera o a los lados). Pegado ya no encalla: si lo llevas contra la orilla, se queda ahí. Se
+  quitó el anillo del muelle: hay que llevarlo a la punta del muelle, donde está el salvavidas. Y el juego empieza
+  recién cuando se cierran las instrucciones (o al tocar la pantalla).
 
 ## Versión 1.0.33 — memoria limpia
 

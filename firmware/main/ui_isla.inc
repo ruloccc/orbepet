@@ -80,9 +80,17 @@ static bool zf_iluminado(float x, float y) { return zf_rayo(x, y, s_nino ? 0.32f
  * un poco de lado. Antes, al retraer la luz quedaba fuera del alcance y se quedaba a oscuras: no la seguía. Se suelta solo si
  * pasa 1,2 s fuera de un haz más ancho (sin límite de largo). */
 static uint32_t s_zf_guia[ZF_BOTES];
+/* (1.0.34, pedido del usuario: «sigue siendo injugable») un barquito que tocas con la luz queda PEGADO a ella: guarda
+ * dónde estaba respecto de la punta del haz y, desde ahí, se mueve RÁPIDO igual que la luz (hacia adentro, hacia afuera
+ * o a los lados). Pegado no encalla: si adelante hay tierra, se frena en la orilla. Ya no hay anillo en el muelle: hay que
+ * llevarlo a la punta del muelle (donde está el salvavidas). Y el juego empieza recién cuando se cierran las instrucciones. */
+static bool s_zf_pegado[ZF_BOTES];
+static float s_zf_ox[ZF_BOTES], s_zf_oy[ZF_BOTES];
+static uint32_t s_zf_empieza;
+static bool s_zf_solto;
 static void zf_empezar(void)
 {
-    for (int i = 0; i < ZF_BOTES; i++) { s_zf_est[i] = 0; s_zf_guia[i] = 0; }
+    for (int i = 0; i < ZF_BOTES; i++) { s_zf_est[i] = 0; s_zf_guia[i] = 0; s_zf_pegado[i] = false; }
     s_zf_sale = s_zj_t + 2500u; /* (el primero, cuando ya se leyó cómo se juega) */
     s_zf_ax = 130.0f; s_zf_ay = 220.0f;
     s_zi_vidas = 3; s_zi_perdidos = 0; s_zi_triste = 0;
@@ -92,10 +100,9 @@ static void zf_empezar(void)
     }
     lv_obj_t *l = zj_caja(28, 30, 30, 0xFFE9A0, LV_RADIUS_CIRCLE); lv_obj_set_style_bg_opa(l, LV_OPA_50, 0);
     zj_centro(l, ZF_LX, ZF_LY);
-    lv_obj_t *m = zj_caja(29, 76, 76, 0xFFE27A, LV_RADIUS_CIRCLE); /* la meta: un anillo que late en la punta del muelle */
-    lv_obj_set_style_bg_opa(m, LV_OPA_TRANSP, 0); lv_obj_set_style_border_width(m, 3, 0); lv_obj_set_style_border_color(m, lv_color_hex(0xFFE27A), 0);
-    zj_centro(m, ZF_MX, ZF_MY);
-    zj_texto("ARRASTRA EL DEDO Y ALUMBRA LOS BARQUITOS: TE SIGUEN A DONDE LLEVES LA LUZ. ¡LLÉVALOS AL MUELLE!", 4500);
+    zj_texto("MUEVE LA LUZ CON EL DEDO. EL BARQUITO QUE ALUMBRES QUEDA PEGADO A LA LUZ: LLÉVALO A LA PUNTA DEL MUELLE, DONDE ESTÁ EL SALVAVIDAS.", 5500);
+    s_zf_empieza = s_zj_trampa ? 0 : (s_zj_txt_hasta | 1u); /* (1.0.34) hasta que se cierran las instrucciones, todo quieto */
+    s_zf_solto = false;
     zd_mano(ICO_MANO_DESLIZA, 130.0f, 220.0f, 5000u);
 }
 static void zf_dibujar_haz(void)
@@ -122,6 +129,13 @@ static void zf_perder(int i, bool choque)
 static void zf_animar(float dt)
 {
     if (s_zj_fase != 1) return;
+    if (s_zf_empieza) { /* (1.0.34) las instrucciones: quieto hasta que se cierran o tocas (un toque nuevo) */
+        if (!s_zj_dedo) s_zf_solto = true;
+        if ((int32_t)(s_zj_t - s_zf_empieza) < 0 && !(s_zj_dedo && s_zf_solto)) { zf_dibujar_haz(); zd_poner(0, 1, 2, true, 431.0f, 190.0f); return; }
+        if ((int32_t)(s_zj_t - s_zf_empieza) < 0) zj_texto(NULL, 0);
+        s_zf_empieza = 0;
+        s_zf_sale = s_zj_t + 800u; s_zj_juego_t = s_zj_t; /* (el tiempo del juego cuenta desde aquí) */
+    }
     /* hacia dónde apunta la luz: el dedo (o, en las pruebas, sola) */
     if (s_zj_dedo && !s_zj_trampa) { s_zf_ax = s_zj_dedo_x; s_zf_ay = s_zj_dedo_y; zd_mano_fuera(); }
     /* llega un barquito nuevo por el horizonte */
@@ -129,7 +143,7 @@ static void zf_animar(float dt)
     if (queda_tiempo && (int32_t)(s_zj_t - s_zf_sale) >= 0) {
         for (int i = 0; i < ZF_BOTES; i++)
             if (s_zf_est[i] == 0) {
-                s_zf_est[i] = 1; s_zf_fase[i] = azar01() * 6.28f; s_zf_dir[i] = 0; s_zf_guia[i] = 0;
+                s_zf_est[i] = 1; s_zf_fase[i] = azar01() * 6.28f; s_zf_dir[i] = 0; s_zf_guia[i] = 0; s_zf_pegado[i] = false;
                 for (int k = 0; k < 30; k++) { /* aparece en el mar abierto, lejos del muelle (a la izquierda, arriba o abajo) */
                     const float a = 3.14159f - 1.75f + azar01() * 3.3f; /* (1.0.24: de arriba a abajo pasando por la izquierda) */
                     s_zf_x[i] = CX + cosf(a) * 200.0f; s_zf_y[i] = CX + sinf(a) * 200.0f;
@@ -158,12 +172,16 @@ static void zf_animar(float dt)
         }
         float vx, vy;
         bool guia = false;
-        if (!s_zj_trampa) { /* (1.0.26) alumbrado una vez, sigue a la luz */
-            const bool antes = s_zf_guia[i] != 0;
-            if (zf_iluminado(s_zf_x[i], s_zf_y[i]) || (antes && zf_rayo(s_zf_x[i], s_zf_y[i], s_nino ? 0.60f : 0.48f, false))) s_zf_guia[i] = s_zj_t | 1u;
-            guia = s_zf_guia[i] && s_zj_t - s_zf_guia[i] < 1200u;
-            if (!guia) s_zf_guia[i] = 0;
-            else if (!antes) zj_chispas(s_zf_x[i], s_zf_y[i] - 6.0f, 5, 0xFFF0B0, 90.0f, 260.0f); /* ¡te vio! */
+        if (!s_zj_trampa) { /* (1.0.34) la luz lo toca: queda pegado (para siempre, hasta que llega o se pierde) */
+            if (!s_zf_pegado[i] && zf_iluminado(s_zf_x[i], s_zf_y[i])) {
+                s_zf_pegado[i] = true;
+                s_zf_ox[i] = s_zf_x[i] - s_zf_ax; s_zf_oy[i] = s_zf_y[i] - s_zf_ay; /* dónde está respecto de la punta del haz */
+                const float od = sqrtf(s_zf_ox[i] * s_zf_ox[i] + s_zf_oy[i] * s_zf_oy[i]);
+                if (od > 40.0f) { s_zf_ox[i] *= 40.0f / od; s_zf_oy[i] *= 40.0f / od; } /* (se acerca a la punta, para que se note que la sigue) */
+                zj_chispas(s_zf_x[i], s_zf_y[i] - 6.0f, 6, 0xFFF0B0, 90.0f, 260.0f); /* ¡te vio! */
+                accion(UI_ACCION_SONAR, SND_TOQUE);
+            }
+            guia = s_zf_pegado[i];
         }
         if (s_zj_trampa) { /* (pruebas) va al muelle rodeando la isla: si adelante hay tierra, gira (siempre hacia el mismo lado) */
             const float base = atan2f(ZF_MY - s_zf_y[i], ZF_MX - s_zf_x[i]);
@@ -181,11 +199,19 @@ static void zf_animar(float dt)
             }
             if (k == 28) vel = 0;
             vx = cosf(a) * vel; vy = sinf(a) * vel;
-        } else if (guia) { /* guiado por la luz: navega hacia donde apunta (y frena suave al llegar a la punta) */
-            vx = s_zf_ax - s_zf_x[i]; vy = s_zf_ay - s_zf_y[i];
-            const float d = sqrtf(vx * vx + vy * vy), vmax = s_nino ? 50.0f : 58.0f;
-            const float v = d < 8.0f ? 0.0f : (d * 1.6f + 12.0f < vmax ? d * 1.6f + 12.0f : vmax);
+        } else if (guia) { /* pegado a la luz: va rápido a su lugar junto a la punta del haz (se mueve igual que la luz) */
+            const float tx = s_zf_ax + s_zf_ox[i], ty = s_zf_ay + s_zf_oy[i];
+            if (s_zf_ox[i] * s_zf_ox[i] + s_zf_oy[i] * s_zf_oy[i] > 4.0f) { s_zf_ox[i] *= 1.0f - dt * 0.8f; s_zf_oy[i] *= 1.0f - dt * 0.8f; } /* (se va juntando con la punta) */
+            vx = tx - s_zf_x[i]; vy = ty - s_zf_y[i];
+            const float d = sqrtf(vx * vx + vy * vy), vmax = s_nino ? 200.0f : 240.0f;
+            const float v = d < 1.5f ? 0.0f : (d * 7.0f < vmax ? d * 7.0f : vmax);
             vx = d > 0.1f ? vx / d * v : 0; vy = d > 0.1f ? vy / d * v : 0;
+            /* pegado no encalla: si el paso lo lleva a tierra, se queda en la orilla (prueba a deslizarse por un lado) */
+            if (!zf_agua(s_zf_x[i] + vx * dt, s_zf_y[i] + vy * dt)) {
+                if (zf_agua(s_zf_x[i] + vx * dt, s_zf_y[i])) vy = 0;
+                else if (zf_agua(s_zf_x[i], s_zf_y[i] + vy * dt)) vx = 0;
+                else vx = vy = 0;
+            }
         } else { /* a oscuras: la corriente lo lleva despacito hacia la isla (si nadie lo guía, encalla) */
             const float dx0 = ZF_CX - s_zf_x[i], dy0 = ZF_CY - s_zf_y[i], d0 = sqrtf(dx0 * dx0 + dy0 * dy0) + 0.01f;
             const float v = s_nino ? 4.5f : 6.5f;
@@ -212,8 +238,7 @@ static void zf_animar(float dt)
         if (cx * cx + cy * cy > 226.0f * 226.0f) zf_perder(i, false);
     }
     zf_dibujar_haz();
-    /* ella, en el balcón del faro, mirando el mar */
-    if (s_zj_o[29]) { const int r = 76 + (int)(6.0f * sinf((float)s_zj_t / 250.0f)); lv_obj_set_size(s_zj_o[29], r, r); zj_centro(s_zj_o[29], ZF_MX, ZF_MY); }
+    /* (1.0.34: sin el anillo del muelle) */
     zd_poner(0, s_zi_triste && s_zj_t - s_zi_triste < 1400u ? 5 : 1, 2, true, 431.0f, 190.0f); /* ella, en el balcón del faro */
     bool quedan = false;
     for (int i = 0; i < ZF_BOTES; i++) if (s_zf_est[i] == 1 || s_zf_est[i] == 2 || s_zf_est[i] == 3) quedan = true;
