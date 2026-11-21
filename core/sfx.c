@@ -361,16 +361,12 @@ int sfx_render(sound_t s, int16_t *out, int max_muestras, int fs)
     default:
         if (s >= SND_VOZ_0 && s <= SND_VOZ_23) { voz_frase(&m, (int)(s - SND_VOZ_0), false); break; } /* canta con sílabas inventadas */
         if (s >= SND_LA_0 && s <= SND_LA_5) { voz_la(&m, (int)(s - SND_LA_0)); break; } /* (v38) un «la» cantado en la nota de un cristal */
-        if (s == SND_CRISTAL_CELESTE) { /* (v39) el cristal de la orilla izquierda: un do grave, redondo como un bajo */
-            const float f = 261.63f;
-            tono(&m, f, f, 1.1f, ONDA_SENO, .34f, 0); tono(&m, f * 2.0f, f * 2.0f, .55f, ONDA_SENO, .08f, 0);
-            tono(&m, f * 0.5f, f * 0.5f, .7f, ONDA_TRIANGULO, .10f, 0);
-            break;
-        }
-        if (s == SND_CRISTAL_MORADO) { /* (v39) el de la orilla derecha: un re alto, con brillo de campanita */
-            const float f = 1174.66f;
-            tono(&m, f, f, .8f, ONDA_SENO, .22f, 0); tono(&m, f * 2.76f, f * 2.76f, .35f, ONDA_SENO, .06f, 0);
-            tono(&m, f * 5.4f, f * 5.4f, .15f, ONDA_SENO, .025f, 0);
+        if (s == SND_CRISTAL_CELESTE || s == SND_CRISTAL_MORADO) { /* (1.0.53) los de las orillas, con el mismo sonido de cristal que los
+                                                                     * otros seis: sol grave (izquierda) y re alto (derecha) */
+            const float f = s == SND_CRISTAL_CELESTE ? 392.0f : 1174.66f;
+            tono(&m, f, f, .9f, ONDA_SENO, .30f, 0);
+            tono(&m, f * 2.0f, f * 2.0f, .5f, ONDA_SENO, .10f, 0);
+            tono(&m, f * 3.01f, f * 3.01f, .25f, ONDA_SENO, .05f, 0);
             break;
         }
         if (s == SND_CHUCAO) { /* (v40) «¡chu-cao!»: dos silbidos fuertes y redondos, el segundo más grave, repetidos */

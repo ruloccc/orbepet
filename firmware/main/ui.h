@@ -72,6 +72,9 @@ void ui_set_pet_store(const ui_mascotas_t *m);
 #define UI_ACCION_CAMBIAR 114 /* traer la mascota guardada en el lugar arg (la actual se queda descansando) */
 #define UI_ACCION_SOLTAR 115  /* dejar ir a la mascota guardada en el lugar arg */
 #define UI_ACCION_VOLVER_VIAJE 192 /* (1.0.26) la última que se fue de viaje desde Perfiles vuelve a un lugar libre */
+#define UI_ACCION_BRILLO_PECERA 194
+#define UI_ACCION_AFINAR 195   /* (1.0.53) la nota de un cristal: arg = cristal (0..7) | (semitonos + 64) << 8 */ /* (1.0.41) el brillo de la pecera, deslizando: PET_BRILLO_MIN..100 (en vivo; | UI_SOLTADO al soltar: se guarda) */
+#define UI_ACCION_TRONCO 193       /* (1.0.36) se sentó en el tronco del claro a mirar las luciérnagas: arg 1 de noche (pet_firefly_watch) */
 
 /* cierra la tarjeta abierta (para las pruebas automáticas del simulador) */
 void ui_close_panel(void);
@@ -84,13 +87,15 @@ void ui_demo_trip(const pet_t *m, int tipo);
  * la batería sin tocarlo un minuto. main deja la pantalla encendida (más tenue). */
 bool ui_aquarium(void);
 bool ui_silencio_ambiente(void);
+bool ui_mundo_escondido(void); /* (1.0.42) un juego en pantalla aparte: el mundo está detenido (sus sonidos no suenan) */
 int ui_escena_especial(void);
 /* estilo del mundo: 0 el de siempre, 1 el nuevo */
 void ui_set_style(int estilo);
 /* un globo con texto sobre ella (pruebas) */
 void ui_say(const char *texto);
 void ui_splash(const char *l1, const char *l2, bool fallo, uint32_t ms); /* pantalla de bienvenida (fallo = rojo) */
-void ui_aviso_pasos(uint32_t pasos, uint32_t minutos, uint32_t hoy, uint32_t semana); /* (1.0.25) «¡CAMINAMOS 1.234 PASOS!» al volver de caminar */
+void ui_aviso_pasos(uint32_t pasos, uint32_t minutos, uint32_t hoy, uint32_t semana);
+void ui_set_pasos(const uint32_t *p7, const int32_t *dia); /* (1.0.58) los pasos de la semana (p[0] hoy) para el cuentapasos de Más */ /* (1.0.25) «¡CAMINAMOS 1.234 PASOS!» al volver de caminar */
 
 /* Alarmas (ver pet_alarm_*): */
 #define UI_ACCION_ALARMA 116      /* cambiar una alarma: arg = pet_alarm_pack(...) o i | PET_ALARMA_BORRAR */

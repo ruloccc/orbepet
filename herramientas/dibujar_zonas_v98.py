@@ -461,23 +461,25 @@ def claro(est):
         else:
             col = 0xD8443A if k % 2 == 0 else 0xE8C88A
             L.sello(int(x) - 2, int(y) - 2, [".rr.", "rwrr", "kkkk", ".ee."], {"r": col, "w": 0xFFF4E8, "k": 0x3A1A12, "e": 0xF0E2C8})
-    # ---- el tronco caído (abajo al centro) y piedras
-    for y in range(206, 213):
-        for x in range(116, 150):
-            col = 0x8A5E3A if y < 208 else (0x6A4428 if y < 211 else 0x4A2E1A)
-            if (x - 116) % 7 == 0:
+    # ---- el tronco caído y piedras. (1.0.36) Más arriba y un poco a la derecha (antes: x 116, y 206, abajo al centro):
+    # ahí quedaba encima del botón de jugar y al tocar el tronco se tocaba el botón. TX/TY = esquina de arriba a la izquierda.
+    TX, TY = 126, 178
+    for y in range(TY, TY + 7):
+        for x in range(TX, TX + 34):
+            col = 0x8A5E3A if y < TY + 2 else (0x6A4428 if y < TY + 5 else 0x4A2E1A)
+            if (x - TX) % 7 == 0:
                 col = 0x4A2E1A
-            if inv and y < 208:
+            if inv and y < TY + 2:
                 col = 0xF4FAFF
             L.p(x, y, col)
-    for y in range(205, 214):
-        for x in range(146, 153):
-            d = math.hypot(x - 149, (y - 209.5) * 0.9)
+    for y in range(TY - 1, TY + 8):
+        for x in range(TX + 30, TX + 37):
+            d = math.hypot(x - (TX + 33), (y - (TY + 3.5)) * 0.9)
             if d < 4.2:
                 L.p(x, y, 0x3A2414 if d > 3.2 else (0xC8A070 if int(d) % 2 else 0xA87E50))
     if not inv:
-        for x in (120, 128, 139):
-            L.p(x, 205, 0x6CC050); L.p(x + 1, 205, 0x4A9A3E)
+        for x in (TX + 4, TX + 12, TX + 23):
+            L.p(x, TY - 1, 0x6CC050); L.p(x + 1, TY - 1, 0x4A9A3E)
     # florcitas en manchones y pasto alto
     if not inv:
         for (fx, fy, fc) in ((150, 190, 0xFFE45A), (104, 140, 0xFFFFFF), (176, 160, 0xF59AC0 if not oto else 0xE89A3A), (70, 200, 0xB9A0FF if not oto else 0xC8641E)):

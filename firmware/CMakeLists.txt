@@ -19,7 +19,11 @@ project(mascota)
 foreach(_c mbedtls lwip wpa_supplicant bt esp_netif esp_http_server esp_http_client esp_https_ota tcp_transport esp-tls)
     idf_component_get_property(_lib ${_c} COMPONENT_LIB)
     if(_lib)
-        target_compile_options(${_lib} PRIVATE -Os)
+        # (1.0.55) un componente sin código (el Bluetooth apagado) es una biblioteca INTERFACE: no se le pueden poner opciones
+        get_target_property(_tipo ${_lib} TYPE)
+        if(NOT _tipo STREQUAL "INTERFACE_LIBRARY")
+            target_compile_options(${_lib} PRIVATE -Os)
+        endif()
     endif()
 endforeach()
 # (1.0.10) el juego (core, ui.c, art.c), LVGL y la pantalla siguen con -O2, igual de rápidos que antes: el espacio para el

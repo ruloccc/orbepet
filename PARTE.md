@@ -1,4 +1,338 @@
-# PARTE — estado del trabajo (19-nov-2026, 22:45)
+# PARTE — estado del trabajo (20-nov-2026, 14:30)
+
+> **REGLA DEL USUARIO (21-nov 12:28): cada cambio pedido se suma a todo lo arreglado antes, pida o no el zip.** Antes de
+> entregar CUALQUIER zip: `python3 herramientas/revisar_cambios.py` tiene que decir «todo está» (lista de cada arreglo con
+> su archivo y un texto que lo identifica; agregar ahí cada arreglo nuevo). Trabajar siempre sobre la misma copia
+> (/home/claude/w o el último zip), nunca sobre uno anterior.
+
+> **1.0.65 «LA REGADERA DE VERDAD» (21-nov 12:35).** El usuario: «se supone que arreglaste la regadera pero sigue igual».
+> Causa (error mío en la 1.0.62): art_icono busca primero en iconos_hd2.inc (96 px) e iconos_hd.inc (48 px) (art.c ico_hd) y
+> solo si el ícono no está ahí usa el dibujo de art.c. ICO_REGADERA está en iconos_hd.inc → el case de art.c no se usaba.
+> herramientas/iconos_nuevos/regadera48.py dibuja la regadera nueva en 48×48 con el mismo diseño (y contorno 0x173D39) y
+> reescribe HDI_REGADERA_PAL/IDX (12 colores). Revisado leyendo la tabla con la misma cuenta de ico_muestrear (antes/después
+> en PNG). **OJO SIEMPRE: antes de redibujar un ícono en art.c, mirar si está en iconos_hd.inc / iconos_hd2.inc** (MANTEL,
+> CRIS_*, NOTA, HUELLA también están ahí). Se revisó: en 1.0.46-1.0.64 solo la regadera se redibujó en art.c.
+
+> **1.0.64 «REGISTRO SIN TRABAS» (21-nov 12:30). GRABAR CON CABLE (tabla de particiones nueva).** (a) partitions.csv:
+> `registro, data, 0x40, 0x1000000, 128K` (el hueco libre entre coredump y recursos; nada se mueve). firmware/main/anillo.inc
+> (nuevo): anillo de sectores de 4 KB con cabecera {«RGA1», seq}, texto sin 0xFF (se cambia por '?'), largo = último byte no
+> 0xFF; vale la ventana (seq − n, seq]; vaciar = seq + n. Probado aquí con flash de mentira: tests/test_anillo.c (4000 líneas,
+> reaperturas cada 37, cortes de luz, 0xFF, vaciar): 0 fallas. services.c: an_listo() (esp_partition_find_first DATA 0x40
+> «registro»; eventos sectores 0-5, registro 6-31), an_migrar() una vez (eventos.txt, registro_v.txt, registro.txt → anillo y
+> se borran; evento «registro: ahora en su propia partición…»), ev_volcar/log_volcar/hal_log_read (log_leer_anillo)/hal_log_clear
+> (an_vaciar solo el registro) con el anillo; sin la partición (Wi-Fi sin cable) todo como antes. log_puede_escribir: con anillo
+> siempre (también con la pantalla encendida); la limpieza de SPIFFS en log_tarea una vez por hora. «escritura lenta» del
+> anillo si > 300 ms. CMakeLists: REQUIRES esp_partition. El bloque de services.c se revisó con -fsyntax-only y cabeceras de
+> mentira (/tmp/an/stub.c); services.c entero NO compilado aquí. Lecturas a la PSRAM de a 256 B por la pila (esp_flash
+> pediría un búfer interno de hasta 16 KB). En el próximo informe buscar: el evento de la migración, que NO haya «escritura
+> lenta a flash: el registro», y que el registro tenga lo de antes de apagar la pantalla.
+> (b) Cámara: el usuario preguntó si podía volver, pero prefirió dejarla para después (lo primero: que todo fluya). En el
+> Cofre sigue sin botón (el comentario dice cómo devolverlo). tomar_foto ya quedó mejor: hacer_lugar("la foto", 800), QOI
+> primero en 320 KB y luego foto_qoi_max (849 KB); «NO HAY MEMORIA PARA LA FOTO…» (antes «NO QUEDA LUGAR» aunque fuera la
+> memoria). Explicado al usuario: los 5,6 MB son de la flash; lo que faltaba era RAM seguida.
+
+> **1.0.63 «CRISTALES COMO ANTES» (21-nov 12:10).** ui_magia.inc afin_todas_cb (PRESSED/LONG_PRESSED en s_afin_btn): pone
+> s_afin[k] = 0 y manda UI_ACCION_AFINAR (k | 64 << 8) solo por los que estaban cambiados, enciende los 8, cierra el
+> afinador y apaga el modo. s_afin_largo: LVGL 9.4 manda CLICKED también después de un LONG_PRESSED (lv_indev.c), así que
+> afin_btn_cb lo ignora una vez.
+> **Informe #11 (21-nov 14:59 UTC, v1.0.61, 22 min tras instalar por USB; trae la sesión #75 de 1.0.58 hasta 14278 s).**
+> (a) Memoria #75: 2,4 h+ estable, PSRAM 2,1 MB, bloque mayor 1280 KB. #78: a los 472 s «memoria baja» PSRAM 786 KB
+> (el registro de antes de 618 s se perdió: no se sabe qué estaba abierto); después bloque mayor 768 KB fijo → fondo por
+> franjas (483 s y 720 s). (b) Flash: el registro SIEMPRE tarda 1,6-1,9 s y NO depende del tamaño (185 B = 1650 ms,
+> 12288 B = 1737 ms); «almacenamiento»: recursos 692 KB de 5640 (12 %): NO está lleno. Hipótesis: SPIFFS en 6 MB (1536
+> bloques) recorre todas las tablas de búsqueda al abrir/cerrar/limpiar y con la caché apagada todo se detiene.
+> Propuesto al usuario (sin hacer): registro en su propia partición cruda (hueco libre de 128 KB en 0x1000000-0x1020000,
+> entre coredump y recursos) como anillo con esp_partition_write → pide grabar POR CABLE una vez (tabla nueva). Antes:
+> medir fopen/fwrite/fclose por separado si el usuario prefiere confirmarlo. (c) «cuadro lento 32-196 s entre latidos» y
+> «vuelta prom 240 ms» justo al encender la pantalla = el tiempo del sueño ligero contado como vuelta (medición, no
+> trabazón). (d) Batería 16-17 %/h con uso mezclado; sueño ligero SÍ. (e) Sigue «i2s_channel_disable … not enabled» en
+> cada encendido. (f) Sin datos de la cueva (no se jugó).
+
+> **1.0.62 «LA REGADERA LINDA» (21-nov).** art.c: helper arco(); ICO_REGADERA redibujado (cuerpo cilíndrico verde agua,
+> asas, pico largo (7,2;9,4)→(10,6;4,6), flor dorada en (11;4)). ui_magia.inc: RG_TIPX 30 / RG_TIPY 15; lluvia propia
+> (RG_GOTAS 22 objetos 3×7 creados una vez en s_mundo): salen de la flor girada (rg_punta, vector (25,−10) desde el centro
+> del icono de 60 px) en abanico, gravedad 0,55, al llegar a la tierra (py − 2) se esconden y a veces dejan una partícula
+> «plic». Reemplaza los salpicar() cada 90 ms. Probado solo compilando, no en el aparato.
+
+> **1.0.61 «NOTAS A TIEMPO» (21-nov 11:20).** (a) services.c: tarea_sfx (prio 3, 4 KB, sin núcleo fijo) sintetiza los efectos
+> (sfx_render o el .pcm del editor) en el mismo búfer pcm; la mezcla pone sfx_n = 0, sube s_sfx_gen y la avisa; al terminar,
+> si nadie pidió otro, deja s_sfx_listo_* y manda DESPERTAR; la mezcla lo empieza solo si listo_gen == gen. Si no se pudo
+> crear la tarea, como antes. Causa: «demora máx 3865 ms» (informe #7) = notas esperando detrás de un sfx_render a prio 2.
+> ui_zonas.inc mundo_escondido() incluye s_sim_on (en la cueva no suenan ella ni el mundo). (b) Afinar: botón s_afin_btn
+> (ICO_NOTA, a la izquierda de la X, solo en libre sin componer), s_afin_modo → lib_toque abre afin_abrir(k) y no cuenta
+> para la canción. (c) Mantel de la visita (VEC_COMER): s_vec_mantel_puesto; se pone una vez en (s_juntos_x − 66,
+> s_juntos_y − 114) con art_icono(ICO_MANTEL, 11) sin escalar (antes 72 px ×2,19 en la mitad entre los dos: se movía).
+> (d) Boca de la cueva (ui_zonas s_ze_cueva_br): ICO_CRIS_0/3/5 a escala 2 en el piso de la boca, titilan con opacidad.
+> main.c/services.c NO compilados aquí.
+
+> **1.0.60 «DESPERTAR SUAVE» (21-nov 07:00).** Pedido: al despertar de la noche se prendía la «luz blanca» fuerte.
+> services.c hal_display_init: bsp_display_brightness_set(0) (era 100) y la pantalla activa en negro; hal_display_init_liviano
+> (modo Wi-Fi) sí pone 100. main.c: s_brillo arranca en -1 (el bucle aplica el brillo del juego en la primera vuelta) y
+> encender_pantalla sube de 0 al brillo en 12 pasos de 50 ms la primera vez (static ya_subio). NO compilado aquí.
+
+> **Informe #10 (21-nov 09:40 UTC, v1.0.58, noche).** Batería con la pantalla apagada 7,9-10 %/h (igual que el #9; el panel 2
+> quedó abierto con la pantalla apagada y la UI seguía a ~12 cuadros/s sin dibujar). Sonidos con la pantalla apagada que
+> rompían el sueño ligero: «Algo mágico», «Tesoro», «Bostezo» (por UI_ACCION_SONAR directo, no por EV_SONIDO) aun con
+> efectos 0. El sueño profundo de noche SÍ funcionó (arranques #72 y #73 «salió del sueño»). PSRAM 2,3 MB estable. MALO:
+> boot #71 a los 1551 s: el registro (274 bytes) tardó 16061 ms y el ciclo quedó trabado 48034 ms (pantalla apagada); a los
+> 5809 s «SPIFFS_gc failed, -10001» (SPIFFS_ERR_FULL: con spiffs_limpiar_pasos subiendo de a 8 KB, el último escalón
+> falla siempre; no prueba que esté lleno). Sin paseo todavía.
+> **1.0.59 «SILENCIO CON LA PANTALLA APAGADA» (21-nov 06:55):** main.c on_action y la cola: UI_ACCION_SONAR se descarta con
+> la pantalla apagada salvo pet_sound_group == 2; el SND_ALEGRE de 2807 solo con la pantalla encendida. services.c
+> hal_res_informe() (esp_spiffs_info de recursos y fotos + los 6 más grandes de s_res_lista) → evento «almacenamiento: …»
+> en cada arranque. PRÓXIMO: con ese dato decidir si limpiar (¿guardados numerados viejos? ¿registro_v? ¿sonidos del editor?)
+> o achicar lo que se escribe. main.c/services.c NO compilados aquí.
+
+> **1.0.58 «EL CUENTAPASOS» (21-nov 01:00).** ui.c: PANEL_PASOS (al final del enum, portal), panel_pasos() (hoy en grande,
+> 7 barritas de s_pasos7 con la inicial del día: (dia − i + 4) % 7, 0 = domingo; semana; s_pet->pasos_total), botón
+> bq 17 ICO_HUELLA en Más (si hay pasos), mas_cb 17. ui_set_pasos(p7, &dia) desde main.c al arrancar, después de
+> pasos_semana_sumar(0, ahora()) (lee NVS «pasos7» ya al arrancar). El aviso al volver ya existía (ui_aviso_pasos,
+> 1.0.25). Ítem 4 de «Qué falta» (cuentapasos visible): HECHO.
+
+> **Informe #9 (21-nov 03:27 UTC, v1.0.56, ~2 h).** MEJORÓ: PSRAM estable 1,7-1,9 MB y bloque mayor ~1,66 MB durante 2 h
+> (con la 1.0.48: ~900 KB y 280 KB); dibujos 880-1483 KB; las 4 luces de los hongos ya no quedan. Batería con la
+> pantalla apagada 7,5 %/hora (antes 24): sueño ligero SÍ. Sin paseo en el informe (no salió a caminar). Sigue: escrituras
+> del registro de ~1,7 s (casi todas con la pantalla apagada; una a los 304 s tras arrancar por USB), «candado pantalla»
+> 200-250 ms al abrir un panel (panel 2), un «eventos 321 ms». Imágenes grandes que quedan: 0x3fcc3778 75K, 0x3fcc5ce0
+> 56K, 0x3c7f7694 56K (PSRAM: estática EXT_RAM), 0x3fcc3220 48K… (sin .elf no se sabe cuáles).
+> **1.0.57 «EL FARO DE VERDAD» (21-nov 00:50).** Usuario: «los barcos no pierden cuando chocan con las rocas»: el pegado a
+> la luz nunca encallaba (1.0.34). Ahora si el paso va a tierra con v > 90 px/s (infante 140) y no está a menos de
+> 1,8 × ZF_MR del muelle → zf_perder(i, true) (vida y punto). Despacio sigue frenándose en la orilla.
+
+> **1.0.56 «CUIDADO CON LAS ROCAS» (20-nov 22:20).** Faro (ui_isla.inc zf_perder): con choque, además de la vida,
+> s_zj_pts-- (si > 0) y zj_mas(-1) rojo; texto «¡ENCALLÓ! PIERDES UN PUNTO». Trae la 1.0.55b (arreglo de CMake).
+
+> **Informe #8 (21-nov 00:44 UTC, v1.0.51; el usuario aún NO tenía la 1.0.52-1.0.54).** (a) Batería 22-24 %/hora con la
+> pantalla apagada: actividad 24 (tarareo/canto cada 2 s) sonaba con la pantalla apagada → parlante abierto → «sueño
+> ligero no» hasta 3865 s; vuelta 141 ms. (b) Memoria «detalle»: 0x3fcbfe90 225K = s_pez_cel_luz_art (luz_suave 240),
+> 4 × 87K seguidas (cada 0x24 = sizeof art_img_t) = s_hg_luz_art[4] (luz_suave 150): se hacían una vez y no se soltaban;
+> vidrio 424 KB (s_vidrio_px, se queda: se usa en cada panel); 0x3fcc0ad8 96K, 64K, 60K sin identificar (falta el .elf).
+> dibujos 1338 → 2171 KB en 1 h, objetos 944 → 1102. «+355 KB sin anotar»: la tabla de 192 se llenó (subida a 320).
+> (c) Escritura del registro de 3,5 s a los 306 s con la pantalla encendida (arranque por USB: quizás el probador).
+> **1.0.55 «LUCES QUE SE APAGAN» (21-nov 21:55):** main.c EV_SONIDO: con la pantalla apagada solo suena el grupo alarma
+> (pet_sound_group == 2); el último callado (s_son_callado) suena si un aviso enciende la pantalla en esa vuelta. ui.c
+> sonido(): nada con !s_pantalla_visible. hongos_luces(hacer) en hongos_empezar / terminar_juego (JG_HONGOS); la luz de la
+> celebración de la pesca se hace al mostrarla y se suelta en pez_cerrar. ART_REG_N 320. main.c NO compilado aquí.
+> 1.0.55b: la compilación en el PC falló en CMake (firmware/CMakeLists.txt:22): con CONFIG_BT_ENABLED=n el componente
+> «bt» es INTERFACE_LIBRARY y target_compile_options(PRIVATE -Os) no se puede. Ahora se salta si TYPE es INTERFACE_LIBRARY.
+
+> **1.0.54 «PASEO DORMIDO» (20-nov 21:35).** (a) CORRECCIÓN: en la sesión dije que el Bluetooth escuchaba el 15 % del
+> tiempo: NO era así, MASCOTA_BLUETOOTH ya era 0 (radio.c con funciones vacías, la radio nunca se encendía). Pedido del
+> usuario: Bluetooth apagado permanente → sdkconfig.defaults CONFIG_BT_ENABLED=n (fuera NimBLE y sus recortes; REQUIRES bt
+> se dejó, no molesta). En el PC hay que borrar firmware/sdkconfig. (b) Modo paseo: services.c hal_walk_enter/
+> hal_walk_boot_check/hal_walk_take/hal_walk_wake_reason (como el sueño de noche, RTC_DATA s_pas_*; NO apaga el
+> acelerómetro: el podómetro del QMI8658 sigue contando). Despierta cada BOARD_PASEO_REVISAR_S = 5 s (sin arrancar el
+> juego): lee el contador (0x5A), cada minuto anota caminando (≥ 40) o quieto; arranca con BOOT (ext0), PWR (registro 0x49
+> de la AXP2101), cable, alarma − 60 s, 3 min quieto, o 4 h. hal_imu_init no vuelve a abrir s_imu si ya existe. main.c:
+> s_paseo_pasos/min/pausa/pant ahora RTC_DATA_ATTR (sobreviven al sueño); s_caminando_ahora; proxima_alarma(t) (ella +
+> guardadas + temporizador); entra con puede && caminando && s_paseo_min ≥ 2 && pantalla apagada > 60 s && alarma lejos
+> (> 3 min); al arrancar suma los pasos (pet_steps_add de a 5000, pasos_semana_sumar, s_paseo_*), evento «energia: volví
+> del modo paseo (motivo): N pasos…», y si fue por quieto/alarma/4 h queda a oscuras (s_quieto). pasos_antes parte con
+> hal_steps_read(). NADA de esto compilado aquí (main.c, services.c, sdkconfig): revisar la compilación de GitHub. En el
+> próximo informe buscar «MODO PASEO», «volví del modo paseo» y «bateria: ritmo». OJO por confirmar en la placa: que el
+> podómetro no se reinicie al despertar (si se reinicia, igual se suma lo leído antes de hal_steps_init) y la hora tras
+> varias horas (reloj interno si el RTC no responde).
+
+> **1.0.53 «CRISTALES AFINADOS» (20-nov 21:10).** (a) Cueva: herramientas/mover_cristales.py (YA APLICADO, no volver a
+> grabar) decodifica CJ_FONDO (lzss.py: ida y vuelta idéntica), borra cada cristal de orilla y su halo (relleno armónico
+> de un círculo r26 desde el borde + tramado 2×2 a la paleta), pega los pixeles del cristal (luminancia > 70) en la base
+> (58,290) / (410,290) de pantalla con un halo nuevo, y reescribe CJ_FONDO_LZ (19094 → 20074 bytes). SIM_POS[6..7].
+> (b) sfx.c: CELESTE = sol 392 y MORADO = re 1174,66 con la receta de los otros (f, 2f, 3,01f). (c) Afinar:
+> pet_device_t versión 13 con int8_t afinacion[8] (-12..12; fix y prueba en test_core); UI_ACCION_AFINAR 195 (arg = k |
+> (semi+64) << 8) → main guarda. Sonido: UI_ACCION_SONAR con bit 0x10000 y (semi+32) en bits 17-22 → hal_sound_note
+> (services.c: cola uint16 con bit 15 + semitonos en 9-14); la voz de cristal lee la nota guardada con paso 16.16
+> (2^(semi/12)): sin sintetizar nada al tocar. UI: s_afin[], cris_son(k) en sim_encender y en el reproductor
+> (ui_musica rep); afinador s_afin_caja (▼ nombre ▲, tocar el nombre = 0, se cierra a los 5 s) con LONG_PRESSED en
+> los 8 cristales, solo en modo libre. main.c/services.c NO compilados aquí. test_core 1526/1526, ui.c sin avisos.
+> El simulador (sim/web) quizás necesite UI_ACCION_AFINAR y el bit 0x10000 en su UI_ACCION_SONAR.
+
+> **1.0.52 «CADA ANIMAL CON SU NOMBRE» (20-nov 20:50).** Tocar de más al quique decía «el conejo salió corriendo»:
+> evento_animal ANI_SE_ASUSTA tenía textos fijos del conejo, pero el motor lo manda para cualquier animal
+> (core/toques.inc pet_animal_touch: castigo SE_VA y el resto). Ahora usa pet_animal_name(a) (con artículo; plural si
+> empieza con «los »/«las ») e ICO_ANIMAL[a]; los textos de truenos solo con ANIMAL_CONEJO y CLIMA_TORMENTA. Lo de la
+> 1.0.51 (medir la memoria) sigue igual: esperar el informe.
+
+> **1.0.51 «MEDIR ANTES DE CAMBIAR» (20-nov 20:35). PEDIDO DEL USUARIO: «ya basta de cosas al azar»: usa esta versión unas
+> horas, manda informe y SOLO entonces se decide. NO reservar búferes fijos para pantallas sueltas (lo rechazó).**
+> Informe #7 (1.0.48, 2,5 h): no es una fuga. PSRAM 3257 KB al arrancar → ~2,0 MB a los 10 min → ~900 KB a los 15 min y
+> estable por horas; el bloque mayor cae a 480 y después 280 KB (memoria picada). «dibujos» (g_art_bytes, sin los fondos
+> de zona) 1487 → 1918 KB; fondos 1-2 × 424 KB; objetos LVGL ~1000 estables. Pesca: hacer_lugar soltó 0 KB y el bloque
+> seguía en 280 KB → sin fondo. Paneles 41/48 bajaron la PSRAM a 125 KB y trabaron 370-400 ms (candado). «5c micrófono
+> (espera la pantalla)» 250-435 ms. Escrituras de 1,7 s ya casi siempre con la pantalla apagada. Además se vio en el
+> código: s_vidrio_px (ui.c preparar_vidrio, 434 KB) se pide al primer panel y no se suelta nunca.
+> Cambios: (a) art_cruce_fondo descomprime los índices al final del mismo búfer (un bloque de 428 KB, no 428 + 212;
+> probado con un arnés: igual byte a byte); hacer_lugar("la pesca", 460). (b) main.c 5c: quiere = s_pantalla_on &&
+> s_quiere_mic (sin candado; el paso 4 lo pregunta cada segundo). (c) art.c art_reg/art_mayores: tabla de 192 imágenes
+> vivas (dirección del art_img_t + bytes) en img_preparar, ampliar_565, el A8, art_cruce_fondo, luz_suave y art_img_free;
+> art_pantallas_bytes. La limpieza de rutina (cada 30 min ahora) agrega «memoria: detalle: pantallas N (KB), vidrio KB,
+> N imágenes: 0x… NK, …». Para saber de quién es cada dirección: bajar mascota.elf de `compilados` y
+> `xtensa-esp32s3-elf-nm -n mascota.elf | grep -i <dirección sin los últimos dígitos>` (son estáticas: s_ptxt, s_pez_cri_art…).
+> Opciones propuestas al usuario para DESPUÉS del informe: (1) medir (hecho aquí); (2) un sistema único para las imágenes
+> de pantalla completa (fondos de zona, picnic, pesca, bote, juegos, cuarto, vidrio): ranuras iguales de ~440 KB
+> separadas al arrancar con reemplazo de la que hace más que no se ve — lo grande no se mezcla con lo chico; (3) achicar
+> los dibujos que salgan más pesados (RGB565A8, no guardar los poco usados, un solo fondo de hora); (4) paneles que
+> arman solo lo visible. OJO con (2): explicarlo bien, el usuario no quiere «reservar para un fondo».
+
+> **1.0.50 «SIN MAL OLOR» (20-nov 20:25).** Pedido: hedionda se tiene que poder soplar o bañar. (a) ui.c dock: `sucia`
+> incluye pet_stinky(p) (el olor suelto no baja la higiene: el botón del baño no salía). (b) pet.c pet_air_out: quita
+> todo olor (antes el del zorrillo, hediondo > 6, solo bajaba a la mitad → muchos soplidos); test cambiado + prueba del
+> baño con higiene 100. (c) ui_mic_blow: olor_espantar(4) (8 = se va: dos soplidos). (d) Globo de ayuda también tras
+> PET_TOC_ROCIA. test_core 1523/1523, ui.c sin avisos. Si soplar igual no anda: mirar en el registro «micrófono:
+> soplido» / «esperó un soplido» (ui_wants_mic pide olor_visible: sin panel, sin pausa del mundo, ella a la vista).
+
+> **1.0.49 «LO NUEVO SE ENCUENTRA» (20-nov 18:10).** «Algo nuevo en el baúl» sin nada: EV_NUEVO de ropa de RANURA_CUELLO
+> (pañuelo, bufanda, collar), que ya no se dibuja (art.c pintar_ropa cue = 0) ni sale en el Rincón (panel_rincon salta
+> el cuello). pet.c: desbloqueos y la seda de araña siguen dando la prenda (las pruebas la usan) pero sin EV_NUEVO,
+> diario ni sonido; ACTV_PROBAR y `quedan` no cuentan el cuello. ui.c: EV_NUEVO de cuello se ignora (partidas viejas);
+> s_acc_nuevo (1 juguetes, 2 ropa) + s_acc_nuevo_id: estrella en s_bolsa_aviso (dock), botón Cofre de Más (bq 15),
+> ACCESORIOS del Cofre, pestaña y ficha del Rincón; se borra al dibujar esa pestaña. Solo RAM. Texto nuevo «¡ROPA
+> NUEVA! ESTÁ EN COFRE, ACCESORIOS». test_core 1522/1522, ui.c sin avisos.
+
+> **1.0.48 «LLUVIA SIN RAYAS» (20-nov 17:45).** Foto 17:32: colina con lluvia, rayas oscuras horizontales junto al dock
+> (lo mismo que la 1.0.30, cuyo arreglo de rendering_in_progress no bastó). Causa vista en LVGL 9.4 (lv_refr.c,
+> refr_area_part): con CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2 el tile_cnt del display es 2 y cada franja se parte en
+> baldosas; `tile_layers = lv_malloc(...)`; si falla, `refreshed_area = *area_p; return;` SIN dibujar, y la franja se
+> manda con el búfer viejo. Además las baldosas reparten la misma franja entre los dos hilos (en el simulador hay un
+> solo hilo: nunca se vio). services.c hal_display_init: lv_display_set_tile_cnt(d, 1). NO compilado aquí (services.c).
+> Si las rayas siguen: probar CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=1 (dibujo en un solo hilo). Ojo aparte: la caché de
+> sombras de LVGL (LV_DRAW_SW_SHADOW_CACHE_SIZE=64, lv_draw_sw_box_shadow.c) es global y SIN candado con 2 unidades:
+> dos sombras de distinto tamaño a la vez pueden mezclarse (si aparecen brillos raros de noche, ponerla en 0).
+> Medir en el próximo informe que «dibujar X ms» no suba.
+
+> **1.0.47 «SE LEE LO QUE FALTA» (20-nov 14:10).** Foto: en el Rincón, al tocar algo sin materiales los textos se
+> encimaban. decor_cb tenía dos `static aviso` distintos (casita y el resto) en (0, 294) de una tarjeta de 316 de alto:
+> se cortaban y quedaban uno sobre otro; además cada toque gastaba un texto del montón s_ptxt. Ahora decor_aviso(t):
+> un cartel s_dec_av (cartel_de, borde 0xFFB0A0, art_texto_centrado 260 px, propio s_dec_av_art) en (0, 150) sobre las
+> fichas; se esconde a los 4,5 s (lv_timer de una vez) o al tocarlo; cerrar_panel_dentro lo olvida y borra el timer.
+> temp_cb (comida de temporada) usa el mismo. Singular/plural en los textos. ui.c sin avisos (con y sin ESP_PLATFORM).
+
+> **1.0.46 «CADA UNA EN SU MUNDO» (20-nov 13:50).** ui.c: cambio_aviso_mostrar ahora es una tapa a pantalla completa
+> (s_cambio_av_tapa, 0x120E22 opaca, clickeable para tragarse los toques) con el texto al centro. cambio_aviso_animar:
+> al llegar la otra (nacimiento) espera 1 s y funde 0,5 s; a los 25 s sin llegar, se destapa igual. ui_update: detecta
+> otra mascota por nacimiento (static nac_visto) → s_zona_pend = -1, s_po_tele/s_lw_directo = false, sale de la casita,
+> s_fondo_periodo = -1 y s_escena = -2 (directo: refrescar_fondo, jardín, fauna escondida, en p->lugar, flechas); si duerme
+> con casita, entra. Antes, con la zona distinta y «mirando», caminaba desde la zona de la anterior. Tests 1522/1522.
+
+> **1.0.45 «CAMBIO SIN TRABAS» (20-nov 14:30).** main.c: UI_ACCION_CAMBIAR prepara s_cambio y lanza cambio_tarea
+> (prioridad 1, 6 KB de pila): hal_res_save_seguro(CAMBIO_ARCHIVO) + guardada_escribir; s_cambio_fase 1→2/3/4. El ciclo
+> principal, antes de las acciones, con fase ≥ 2 hace lo chico (s_pet = otra, pet_resume, guardar_partida_doble, borrar
+> la nota) o cambio_reparar. Con fase ≠ 0 se ignoran FAMILIA, VISITA_PERFIL, PERFIL_VIVE, CAMBIAR, VOLVER_VIAJE, SOLTAR y
+> NUEVA. Sin memoria para la tarea: como antes, en línea. ui.c: cambio_aviso_mostrar/animar («LLAMANDO A …» en la capa de
+> arriba hasta que s_pet->nacimiento es el de la otra, o 25 s). NO compilado aquí (main.c necesita ESP-IDF). Ojo: durante
+> el cambio la pantalla igual tiene tirones cortos (la flash detiene todo mientras borra/escribe), pero ya no 8 s seguidos.
+
+
+> **1.0.44 «SIN CONGELONES» (20-nov 14:10).** (a) Micrófono: pet_device_fix fuerza musica = 0; UI_ACCION_MUSICA no la
+> enciende; fuera el botón de Sonido (lo de abajo sube 102 px) y el del menú rápido (3 botones, Q3 = 0, 1, 3).
+> (b) services.c: log_puede_escribir() (pantalla apagada, o 30 min desde la última escritura); log_tarea y log_casi_lleno
+> dejan s_log_pendiente y hal_log_flush_pantalla lo manda al apagarse; la limpieza de SPIFFS solo con la pantalla apagada.
+> NO compilado aquí (services.c necesita ESP-IDF): revisar la compilación. (c) art_fondos_soltar_otros devuelve bytes y se
+> llama en la limpieza de rutina; art_fondos_bytes; el evento de la limpieza dice «quedan: fondos N (KB), dibujos KB
+> (g_art_bytes), objetos (objetos_contar)». ui.c revisado con -DESP_PLATFORM y cabeceras de mentira (/tmp/espstub).
+> Próximo informe tras 3-4 h: mirar si «objetos» o «dibujos» crecen (una fuga) o si la PSRAM baja con todo igual
+> (fragmentación). Lo que traba al cambiar de perfil (7,8 s) son las escrituras de las mascotas: pendiente.
+
+
+> **Informe #6 (20-nov 16:16 UTC, v1.0.42, leído con `gh api repos/ruloccc/orbepet-informes/issues/6`; add_repo con
+> access «read» funcionó, «push» no).** Con la 1.0.42 recién puesta (15 min): bien (vuelta 51 ms, dibujar 11-15 ms, ~28
+> cuadros/s, PSRAM ~1,85 MB estable). Lo malo: (1) sesión anterior (#52, 1.0.35, ~3,5 h encendida): PSRAM pegada en
+> ~700 KB con «memoria baja» CADA MINUTO soltando la caché (y la limpieza de rutina soltaba 0 KB): sigue la PSRAM que
+> se pierde con las horas; (2) escritura lenta a flash 1,6-2,2 s cada ~5-7 min (congela; punto 3b-B1); (3) cambio de
+> perfil (llegó Tova) trabó 7,8 s; (4) al despertar del sueño, candado de pantalla 1,9 s; (5) siguen «TP: Sleep mode
+> not supported!» e «i2s_channel_disable» (3b-B2); (6) micrófono de la música escuchando todo el rato (batería).
+> En la pecera (desde ~741 s) animar sube de 2 a 13-18 ms por cuadro.
+
+
+> **1.0.43 «PRIMERO LAS REGLAS» (20-nov 13:40).** (a) ui_zjuegos.inc: s_zj_espera/s_zj_espera_hasta (lv_tick): si al
+> terminar zj_empezar_juego hay texto a la vista (y no es trampa, ni faro/buceo/arcoíris, que esperan solos), el timer no
+> avanza s_zj_t ni anima el juego hasta que el texto se esconde o vence; un toque (PRESSED) lo cierra y no pasa al juego.
+> s_zj_port_ms (zj_portada_leer: 3500 + 60·letras) para que la portada no empiece sola antes de leer las reglas
+> (zj_texto_c_ultimo). (b) Memorice (ui_dos.inc): REGLA y texto nuevos; s_zm_vista 0→1 (todas boca arriba 2 s; 3,2 s
+> infante, 2,6 suave) →2 (boca abajo, la visita «sabe» 30 % / 15 %); con par también cambia s_zm_turno. (c) Honguitos:
+> s_hg_fase −1 (instrucciones, T[4], 5 s) con toque en s_hg_pant (hg_instr_cb) o en un hongo. (d) Frutas: s_fr_txt
+> (cartel en el padre de s_juego_capa), s_fr_inst_hasta; fr_inst_fin rebasa s_juego_desde; el globo se quitó (con el
+> mundo en pausa quedaba en la fila). (e) Cristales: s_sim_inst (5 s o toque), sim_inst_fin; el modo libre lo apaga.
+> Pescar: no cambia («espera que pique» es parte de jugar). ui.c sin avisos; test_core 1522. Probar en el simulador:
+> dos.js, isla.js, arcoiris.js y la regresión (las portadas y el memorice cambian).
+
+
+> **1.0.42 «EL MUNDO EN PAUSA» (20-nov 12:50).** Foto del usuario: jugando al arcoíris se la oía chapotear. mundo_en_pausa
+> no detenía a la mascota. Nuevo mundo_escondido() (ui_zonas.inc: zj_activo() && !s_zo) y ui_mundo_escondido() (ui.h):
+> en el tick no corren animar_mascota, animar_moscas ni animar_enferma; sonido() (los sonidos del mundo; los juegos usan
+> accion(UI_ACCION_SONAR) directo) no suena; main.c no toca los EV_SONIDO del motor. Los resultados de los juegos
+> (pet_place_game_result, pet_island_game, pet_duo_game) no piden sonidos al motor: no se pierde nada. NO cambia en
+> frutas/hongos (usan a la mascota), picnic, menús ni la casita. El motor sigue vivo (necesidades, hora).
+
+
+> **1.0.41 «LA PECERA CON LUZ» (20-nov 11:00).** pet_device_t versión 12: brillo_pecera al final (0 = el brillo de
+> siempre); pet_device_brightness en la pecera usa brillo_pecera o brillo (ya no ×0,55); de noche ×0,3 como antes.
+> UI_ACCION_BRILLO_PECERA 194 (main.c: como UI_ACCION_BRILLO, guarda al soltar). ui.c: pecera_brillo_cb en
+> s_pecera_bloqueo (LV_EVENT_ALL: PRESSED/PRESSING/RELEASED; 14 px antes de empezar; 240 px = 100 %), barrita s_pec_br
+> (412,135, 18×196) + s_pec_br_sol; se ve 2,5 s al entrar y 1,5 s después de soltar (lv_timer de una vez). test_core
+> 1522/1522. El simulador web quizás necesite el case 194 (no está en el zip).
+
+
+> **1.0.40 «SHH, ESTA DURMIENDO» (20-nov 10:30).** ui.c: ui_durmiendo() (dormida o actividad == ACTV_SIESTA) y
+> durmiendo_aviso() (zeta donde tocaste + globo de cómo despertarla cada 30 s; true = no seguir). Puesto en fondo_cb (doble
+> toque, arco_toque, isla_toque), parcela_cb, charco_cb, hojas_cb, bote_cb, casita_toque_cb, cama_cb, palo_cb, hielo_hoyo_cb,
+> raro_cb, animal_cb, fauna_cb (menos el zorro), juguete_mundo_cb (menos mantener = guardar), ui_magia (anillo, reflejo,
+> cristal, criatura), ui_objx (cofre, nido), ui_zonas (lw_cosa, lw_esc, lw_vec, ze_toque, ze_cueva, zo_cosa). Sin tocar:
+> caca, burbujas, carta, Pochi, Tilde/Brizna. gesto(): GESTO_MUCHOS despierta también de la siesta. Dock: en la siesta
+> solo «+». pet.c ACT_DESPERTAR con ACTV_SIESTA → ACTV_ESPERAR 120 s (EV_ACTIVIDAD + EV_REACCION). test_core 1519/1519
+> (test_1040_siesta), ui.c sin avisos.
+
+
+> **1.0.39 «CADA BICHITO A SU TURNO» (20-nov 10:00).** El usuario confirmó lo de las mariposas. pet.c paso_mundo: `otro`
+> (algún pet_animal_here o pet_fauna_here) y `turno` = 0,4 si hay otro. Mariposa min((0,4 cálido | 0,15) + 0,06·flores)·casa,
+> 0,65)·turno; abeja min(0,2 + 0,1·flores, 0,6)·turno; pájaro 0,45·casa·turno (era 0,6·casa); rana 0,6 | 0,15 con otro.
+> Ninguna tasa pasa de 1 (prob_paso con ≥ 1 = siempre). Pruebas: test_p0_salto con N = 60 mascotas (con 30 el promedio
+> rozaba el margen por azar: 24 h 4,7 y 3 días 5,4; con 60, 3,1 y 3,1) y el baño del zorrillo insiste si ella dice que no
+> (no_quiere → -2, lo normal del juego). test_core 1518/1518 (el total de comprobaciones varía con el azar).
+
+
+> **1.0.38 «LA RANA DESCANSA» (20-nov 09:30).** (a) pet.c paso_mundo: FAUNA_RANA con prob_paso(1.2) = siempre (el
+> mismo error de prob_paso ≥ 1 del 1.0.12); ahora 0,6/h, o 0,15/h si hay otro animal (pet_animal_here) presente. Ojo:
+> mariposa (0,75 + 0,12·flores)·1,3 también puede pasar de 1: revisar si el usuario dice lo mismo de las mariposas.
+> (b) plan_sesgo: la siesta «libre» de un plan pide energía < 60 (era < 85: PLAN_JUEGO terminaba siempre en siesta).
+> UI EV_ACTIVIDAD: bostezo al empezar ACTV_SIESTA y saltito con sol al terminarla. Por qué «se duerme y sigue jugando»:
+> ACTV_SIESTA es una siesta despierta (20-40 min de juego) que elige el motor con poca energía, humor perezoso o como
+> último paso de un plan; un toque o jugar la corta. Con EMO_CANSANCIO además cierra los ojos 1,5 s de cada 4,5 s.
+> (c) seguir_globos: al terminar mundo_en_pausa se botan los globos en fila pedidos hace más de 1,5 s (000c, la comida:
+> «LLÉVASELA A LA BOCA» de comida_dar salía al cerrar el picnic). (d) test_core: la prueba frágil del susto en las rocas
+> pasa a la semilla 36 (con el azar nuevo, 33 la volvía a asustar). test_core 1497/1497, ui.c sin avisos.
+
+
+> **1.0.37 «CADA FLECHA A SU LUGAR» (20-nov 09:00).** (a) BUG de fondo en ui.c: abrir_tarjeta ponía s_volver_fn = NULL
+> sin quitar el evento, y volver() solo quitaba el último → los CLICKED de la flecha se acumulaban entre paneles y corrían
+> todos (enciclopedia → Configuración). Ahora volver_soltar() quita todos los eventos de s_volver menos abajo_hit_cb (en
+> volver, abrir_tarjeta y cerrar_panel_dentro). (b) Orígenes nuevos: s_diario_desde (0 Cofre, 1 enciclopedia, 2 Más),
+> s_al_de_rapido (alarmas desde panel_rapido), sonido_volver_cb (pecera → cerrar), s_ritmo_de_pantalla (ritmo_revisar →
+> cerrar), s_hora_pide_menu/s_hora_de_menu (hora paso 0 → hora_cb 9 → menú de la hora), s_rincon_de_cofre,
+> s_cartas_de_cofre, s_masc_de_ajustes (mascotas_cb 19), s_resp_de_ajustes, evo_cb 9, cofre_hub_cb 50 (Cofre → Más),
+> mas_volver_cb (mapa, amigos). (c) Botones de abajo: BOTON_ABAJO 46, VOLVER_DX 64, abajo_toque_grande() (ext 14 +
+> LV_OBJ_FLAG_ADV_HITTEST, abajo_hit_cb: nada sobre el borde de arriba del botón; entre X, flecha y s_abajo_der gana el
+> centro más cercano). abajo_derecha centra X y corre la flecha (antes el botón de borrar alarma pisaba la X). Incluye
+> src/core/lv_obj_event_private.h. (d) Cofre sin CÁMARA (8 botones, Q[] = 0,1,2,3,5,6,7,9); la pestaña y tomar_foto
+> quedan en el código sin entrada. (e) periodo_de: luz_apagada da NOCHE solo de 18 a 7; EV_SE_DURMIO de día: zetas sin
+> globo; main.c: brillo bajo por dormida solo de 18 a 7. Revisado: ui.c -fsyntax-only sin avisos, test_core 1496.
+> Falta en el repo: paneles/regresión (cambian los paneles con flecha nueva y el Cofre) y probar en el orbe.
+
+
+> **1.0.36 «LUCIERNAGAS EN EL TRONCO» (20-nov 07:40).** (a) Claro: el tronco caído se dibujó más arriba
+> (dibujar_zonas_v98.py claro(): TX, TY = 126, 178 en el dibujo de 256; antes 116, 206 → en pantalla ~(262, 330), antes
+> (242, 380), encima del botón de jugar). Se regeneraron fondos_zonas/claro_*.png y FD_6_0..3 con hacer_fondos.py
+> (antes de tocarlo se comprobó que el generador da los mismos bytes que había). LW_CLARO[3] = {262, 328, 32, 258, 332},
+> LW_ESCONDITE claro[1] = (310, 344), TI_PERCHAS claro[2] = (250, 324). (b) ui.c: modos nuevos M_SENTADA y M_POZA (al
+> final del enum; s_poza_desde/x0/y0/x1/y1 para el saltito). ui_zonas.inc: tronco → M_SENTADA 9 s, luciérnagas en
+> ronda (mezcla «junto»), UI_ACCION_TRONCO 193 → pet_firefly_watch (pet.c, junto a pet_air_out; estático de 10 min).
+> Poza → lw_bano_paso: salta, s_lw_agua (como s_agua), ACT_BANAR a los 2,6 s, sale a (300, 252) a los 6,2 s. Letreros
+> una vez al día (lw_hoy, s_lw_dia[3]). (c) Pochi: PET_POCHI_F_CONOCE = 40 + k solo anota el cachorro como conocido;
+> po_saludo_cachorro lo manda al presentarlo; HOY[k][3] con frases de a qué vino; c->cosa_k de Rony se elige en
+> pc_empezar/pc_solo_uno. Pruebas: test_core 1496/1496 (test_1036_tronco_y_cachorros), ui.c -fsyntax-only sin avisos
+> (con un lv_conf.h de la plantilla de LVGL: el zip no trae sim/). **Falta:** el simulador (sim/web/web_main.c) quizás
+> necesite `case UI_ACCION_TRONCO` si no usa el despacho de main.c; correr paneles/regresión/pochi_visitas.js en el
+> repo (la regresión del claro cambia por el tronco: regrabar con --base si solo cambia eso).
+
 
 > **1.0.35 «ALARMAS EN LA PECERA» (19-nov 22:45).** (a) Dock: el «+» (s_dock[3]) se ve dormida aunque s_interior o
 > s_juego (mas_dormida), y se trae al frente en la casita. (b) Pecera: s_pecera_rit abre panel_alarmas (ICO_DESPERTADOR,
@@ -142,7 +476,7 @@ Proyecto: mascota virtual en un orbe ESP32-S3 (AMOLED redonda 466×466, LVGL 9.4
 español.** El usuario casi no puede usar el PC: todo se publica para actualizar por Wi-Fi desde el orbe. «Deja de romper
 cosas»: tras cada cambio, las pruebas de la sección 5. Nada puede quedar más lento.
 Versión publicada por Wi-Fi: **1.0.24** (falló por Wi-Fi, ver 0a). En el orbe, por cable: 1.0.26. En GitHub (compilada,
-sin publicar): **1.0.35** («ALARMAS EN LA PECERA»), que trae de la 1.0.27 a la 1.0.34. Partida **versión 42** (no cambia desde el 104).
+sin publicar): **1.0.35** («ALARMAS EN LA PECERA»), que trae de la 1.0.27 a la 1.0.34. En zip (sin subir): **1.0.61** (trae de la 1.0.36 a la 1.0.60). Partida **versión 42** (no cambia desde el 104).
 
 **El proyecto vive en GitHub** (cuenta `ruloccc`, conectada a Claude):
 - `ruloccc/orbepet` (PRIVADO): el código. Clonar con add_repo + `git clone`, commit y push a `main`.
@@ -341,6 +675,10 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
 
 ## 3. Qué falta (en orden)
 
+0000a. **HECHO (20-nov 22:30) en herramientas/mascota_gui.py:** instalar() usa grabar_en_algun_puerto (el elegido, luego
+   los Espressif VID 303A; los demás solo si no hay ninguno del orbe), pedir_descarga a cada candidato, y tras «Aceptar» del
+   modo BOOT vuelve a mirar TODOS durante 15 s; después de grabar, puerto_que_responde busca dónde arrancó. Probado con
+   puertos de mentira (arnés en /tmp). El usuario tiene que copiar el mascota_gui.py nuevo a su PC.
 000. **PRÓXIMA REVISIÓN — pedido del usuario 19-nov 10:16: crear mascota nueva entra en un bucle.** Perfiles → huevo
    nuevo → elige huevo → pone la fecha y su cumpleaños → vuelve a la pantalla inicial y a elegir huevo otra vez. Mirar el
    camino de UI_ACCION_NUEVA (main.c: pet_new_fresh + `edad_dueno = 0`, `dueno_dia/mes = 0`) y en ui.c la secuencia del
@@ -503,7 +841,7 @@ OJO aparte (no es del Wi-Fi): en el juego normal la RAM interna queda en 2-7 KB 
    con las escrituras a flash (3b-B1).
 2. (hecho el 18-nov) Respaldo de las pruebas en Documentos (3a) y medir despierta (3b-A).
 3. **Rendimiento** (sección 3b, rehecha con los informes del 18-nov).
-4. **Cuentapasos visible (pedido del usuario 18-nov, 22:19):** cuando sale a caminar con el orbe, tiene que poder VER
+4. **(HECHO en la 1.0.58) Cuentapasos visible (pedido del usuario 18-nov, 22:19):** cuando sale a caminar con el orbe, tiene que poder VER
    los pasos que caminó. Hoy el acelerómetro ya cuenta (`pasos_total`/`pasos_premio` en pet.h; el paseo de verdad en
    main.c, «(fw 104) paseo de verdad»: ≥ 40 pasos/min, 8 min y 800 pasos = excursión juntos, EV_PASEO_JUNTOS /
    DIA_PASEO_JUNTOS) pero no se muestra en ninguna parte. Preguntarle al usuario dónde lo quiere ver (¿al encender la
@@ -672,6 +1010,7 @@ Propuesto (en este orden; esperar la tabla de velocidad del orbe antes de decidi
 - **Pochi no va a la isla** (no sabe nadar) y **no llega con una visita** (espera que se vaya + 6 min).
 - **Durante una actividad el mundo se apaga** (juegos, bote, comer, paneles, diario): ni Pochi ni globos; el baño no.
 - **El micrófono viene apagado** y se abre solo mientras algo espera un soplido (niebla, olor, bote, velas, pesca).
+- **Bluetooth apagado permanente** (20-nov): el orbe no tendrá otras conexiones por ahora.
 - **Una mascota de Perfiles nunca se pierde** (19-nov): guardado seguro, cambio anotado, «DE VIAJE» con vuelta atrás.
   Ojo: el respaldo de las PRUEBAS (Documentos\Respaldos mascota\Antes de las pruebas) sigue siendo solo nvs: las que
   descansan (recursos/m*.bin) no entran. El «Respaldar mascota» del programa sí (1.0.26).
@@ -695,7 +1034,7 @@ curl -sL -o bin.tgz  https://github.com/WebAssembly/binaryen/releases/download/v
 ```
 Pruebas:
 ```
-cd build && cmake .. && make test_core && ./test_core          -> 1490/1490 comprobaciones OK
+cd build && cmake .. && make test_core && ./test_core          -> 1526/1526 comprobaciones OK
 export WASI_SDK=/home/claude/sdk/wasi-sdk-25.0-x86_64-linux LVGL_DIR=/home/claude/lvgl BINARYEN=/home/claude/sdk/binaryen-version_123
 sh sim/web/build.sh
 node sim/web/pruebas/paneles.js          -> 18 problemas (la base de siempre)

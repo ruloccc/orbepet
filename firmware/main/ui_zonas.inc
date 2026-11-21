@@ -184,6 +184,7 @@ static void zo_cosa_cb(lv_event_t *e)
 {
     const int c = (int)(intptr_t)lv_event_get_user_data(e);
     if (!s_zo || zj_activo()) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     s_zo_cosa = c;
     zo_ir(ZO_COSAS[c][0], ZO_COSAS[c][1] + 30);
 }
@@ -395,6 +396,9 @@ static bool mundo_en_pausa(void)
     if (zj_activo() && !s_zo) return true;
     return s_cru_activo || s_via_activo /* (1.0.24) la despedida tapa todo */ || s_picnic_on || s_juego == JG_FRUTAS || s_juego == JG_HONGOS || s_panel != PANEL_NINGUNO;
 }
+/* (1.0.42) el mundo no se ve ni se mueve: un juego en pantalla aparte (no los de la casita, que pasan en ella) */
+static bool mundo_escondido(void) { return (zj_activo() && !s_zo) || s_sim_on; } /* (1.0.61) también la cueva de los cristales: sus sonidos de afuera se metían entre las notas */
+bool ui_mundo_escondido(void) { return mundo_escondido(); }
 static void zj_mundo_ver(bool si)
 {
     if (s_zo) {
@@ -466,12 +470,13 @@ static void animar_zona(void)
  * ==================================================================== */
 #define LW_COSAS 6
 typedef struct { int16_t x, y, r, ix, iy; } lw_cosa_t; /* dónde se toca (x, y, radio) y adónde camina ella (ix, iy) */
-/* claro: 0 la casa del rey, 1 la poza, 2 el anillo de hongos, 3 el tronco caído, 4 el huerto */
-static const lw_cosa_t LW_CLARO[LW_COSAS] = {{205, 120, 62, 207, 194}, {339, 204, 42, 300, 250}, {157, 318, 32, 170, 340}, {242, 376, 34, 242, 360}, {118, 196, 28, 130, 214}, {0}};
+/* claro: 0 la casa del rey, 1 la poza, 2 el anillo de hongos, 3 el tronco caído, 4 el huerto
+ * (1.0.36) el tronco va más arriba (262, 330 en pantalla; antes 242, 376): ahí abajo tocarlo apretaba el botón de jugar */
+static const lw_cosa_t LW_CLARO[LW_COSAS] = {{205, 120, 62, 207, 194}, {339, 204, 42, 300, 250}, {157, 318, 32, 170, 340}, {262, 328, 32, 258, 332}, {118, 196, 28, 130, 214}, {0}};
 /* mirador: 0 la piedra tibia, 1 el arbusto de la corona, 2 la nube, 3 el cóndor, 4 la apacheta, 5 la grieta de la cueva */
 static const lw_cosa_t LW_MIRADOR[LW_COSAS] = {{164, 222, 34, 176, 252}, {311, 268, 32, 296, 294}, {356, 186, 40, 330, 232}, {222, 100, 34, 224, 180}, {295, 136, 28, 286, 180}, {140, 278, 22, 156, 296}};
 static const int16_t LW_ESCONDITE[2][3][2] = {
-    {{157, 322}, {255, 362}, {290, 246}},   /* claro: entre los hongos, junto al tronco, al lado de la poza */
+    {{157, 322}, {310, 344}, {290, 246}},   /* claro: entre los hongos, junto al tronco (1.0.36: se movió), al lado de la poza */
     {{200, 300}, {285, 190}, {250, 318}},   /* mirador: entre las llaretas, junto a la apacheta, en el pasto */
 };
 static lv_obj_t *s_lw_toque[LW_COSAS], *s_lw_marca[3], *s_lw_brillo, *s_lw_luci[8], *s_lw_vec, *s_lw_esc, *s_lw_nube;
@@ -480,6 +485,25 @@ static int s_lw_esc_en = -1, s_lw_vec_ico = -1, s_lw_vec_cuadro = -1, s_lw_pend 
 static bool s_lw_esc_hay;
 static uint32_t s_lw_pend_t, s_lw_vec_canta, s_lw_vuela_t, s_lw_aviso, s_lw_zd_ult, s_lw_llego;
 static float s_lw_vec_x, s_lw_vec_y;
+/* (1.0.36) el tronco y la poza del claro hacen algo: en el tronco se sienta a mirar las luciérnagas (vienen a bailarle
+ * alrededor); en la poza se mete al agua y se baña. Lo que dicen al llegar sale una vez al día (s_lw_dia). */
+static uint32_t s_lw_sienta_t, s_lw_bano_t;
+static int s_lw_bano_paso;
+static lv_obj_t *s_lw_agua;
+static int s_lw_dia[3] = {-1, -1, -1}; /* 0 la poza congelada, 1 la poza, 2 el tronco */
+static bool lw_hoy(int k) /* true la primera vez de hoy */
+{
+    const int dia = (int)(s_ultimo_t / 86400u);
+    if ((unsigned)k >= 3u || s_lw_dia[k] == dia) return false;
+    s_lw_dia[k] = dia;
+    return true;
+}
+static void lw_bano_fin(void)
+{
+    s_lw_bano_t = 0; s_lw_bano_paso = 0;
+    if (s_lw_agua) ocultar(s_lw_agua, true);
+}
+static void lw_sienta_fin(void) { s_lw_sienta_t = 0; }
 static int lw_aqui(void) { return !s_pet || s_interior || s_zo || s_escena < 0 ? -1 : (s_escena == ESC_CLARO ? 0 : (s_escena == ESC_MIRADOR ? 1 : -1)); }
 static const lw_cosa_t *lw_cosas(int z) { return z == 0 ? LW_CLARO : LW_MIRADOR; }
 static void lw_cosa_cb(lv_event_t *e);
@@ -539,6 +563,7 @@ static void lw_esconder(void)
     if (s_lw_vec_cuadro >= 0) { poner_src(s_lw_vec, NULL); for (int k = 0; k < 2; k++) art_img_free(&s_lw_vec_art[k]); s_lw_vec_cuadro = -1; }
     s_lw_esc_en = -1;
     s_lw_aviso = 0; s_lw_pend = -1;
+    lw_bano_fin(); lw_sienta_fin();
 }
 static void lw_vec_cuadro(int k)
 {
@@ -601,11 +626,28 @@ static void lw_hacer(int c) /* ella llegó a la cosa c */
     if (z == 0) {
         switch (c) {
         case 0: zona_entrar(ZO_CASITA); return; /* la casa del rey: entran */
-        case 1: accion(UI_ACCION_SONAR, SND_CHAPOTEO); salpicar(320, 236, 0x9ED8FF); salpicar(334, 226, 0x9ED8FF);
-            globo(ICO_RANA, s_nino ? NULL : (s_pet && lago_congelado(s_pet) ? "¡LA POZA ESTÁ CONGELADITA!" : "LA POZA DEL REY: EL AGUA ESTÁ FRESQUITA"), 2200); break;
+        case 1: /* (1.0.36) la poza: se mete y se baña (congelada no: solo la mira). El letrero, una vez al día */
+            if (s_pet && lago_congelado(s_pet)) {
+                accion(UI_ACCION_SONAR, SND_CHAPOTEO); flotar(ICO_COPO, NULL, 0, 330, 196, 0);
+                if (lw_hoy(0)) globo(ICO_RANA, s_nino ? NULL : "¡LA POZA ESTÁ CONGELADITA!", 2200);
+                break;
+            }
+            if (lw_hoy(1)) globo(ICO_RANA, s_nino ? NULL : "LA POZA DEL REY: EL AGUA ESTÁ FRESQUITA", 2200);
+            lw_sienta_fin();
+            s_poza_x0 = s_mascota.x; s_poza_y0 = s_mascota.y; s_poza_x1 = 334.0f; s_poza_y1 = 214.0f; s_poza_desde = s_ms;
+            mascota_modo(M_POZA, 7000);
+            s_lw_bano_t = s_ms; s_lw_bano_paso = 0;
+            break;
         case 2: accion(UI_ACCION_SONAR, SND_REBOTE); flotar(ICO_HONGO, NULL, 0, 157, 296, 0);
             globo(ICO_HONGO, s_nino ? NULL : (zo_noche() ? "EN EL ANILLO DE HONGOS BAILAN LAS LUCIÉRNAGAS" : "UN ANILLO DE HONGOS. DE NOCHE BAILAN AQUÍ LAS LUCIÉRNAGAS"), 2600); break;
-        case 3: mascota_modo(M_QUIETA, 3000); globo(ICO_RAMITA, s_nino ? NULL : "UN TRONCO PARA SENTARSE A MIRAR LAS LUCIÉRNAGAS", 2600); break;
+        case 3: /* (1.0.36) el tronco: se sienta encima y las luciérnagas vienen a bailarle alrededor. El letrero, una vez al día */
+            if (lw_hoy(2)) globo(ICO_RAMITA, s_nino ? NULL : "UN TRONCO PARA SENTARSE A MIRAR LAS LUCIÉRNAGAS", 2600);
+            lw_bano_fin();
+            s_mascota.x = s_mascota.tx = 258.0f; s_mascota.y = s_mascota.ty = 332.0f;
+            mascota_modo(M_SENTADA, 9000);
+            s_lw_sienta_t = s_ms;
+            accion(UI_ACCION_TRONCO, s_fondo_periodo == PERIODO_NOCHE || s_fondo_periodo == PERIODO_ATARDECER);
+            break;
         case 4: accion(UI_ACCION_SONAR, SND_HUELE); globo(ICO_BROTE, s_nino ? NULL : "EL HUERTO DEL REY: PEUMO PLANTABA AQUÍ SUS FRUTILLAS", 2600); break;
         default: break;
         }
@@ -629,7 +671,8 @@ static void lw_cosa_cb(lv_event_t *e)
     const int z = lw_aqui();
     s_lw_toques++;
     s_lw_rechazo = z < 0 ? 1 : (!s_pet ? 2 : (s_pet->dormida ? 3 : (s_panel != PANEL_NINGUNO ? 4 : (s_juego != JG_NADA ? 5 : (zj_activo() ? 6 : 0)))));
-    if (z < 0 || !s_pet || s_pet->dormida || s_panel != PANEL_NINGUNO || s_juego != JG_NADA || zj_activo()) return;
+    if (z < 0 || !s_pet || s_panel != PANEL_NINGUNO || s_juego != JG_NADA || zj_activo()) return;
+    if (durmiendo_aviso()) return; /* (1.0.40: también en la siesta, y con la zeta y cómo despertarla) */
     if (z == 1 && c == 3) { lw_vec_cb(NULL); return; } /* (el cóndor) */
     const lw_cosa_t *C = lw_cosas(z);
     s_lw_pend = c; s_lw_pend_t = s_ms;
@@ -641,6 +684,7 @@ static void lw_vec_cb(lv_event_t *e)
     (void)e;
     const int z = lw_aqui();
     if (z < 0 || s_lw_vec_ico < 0) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     s_lw_vec_canta = s_ms;
     if (z == 0) {
         accion(UI_ACCION_SONAR, SND_CHUCAO);
@@ -655,7 +699,8 @@ static void lw_esc_cb(lv_event_t *e)
 {
     (void)e;
     const int z = lw_aqui();
-    if (z < 0 || !s_lw_esc_hay || s_panel != PANEL_NINGUNO || s_pet->dormida) return;
+    if (z < 0 || !s_lw_esc_hay || s_panel != PANEL_NINGUNO) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     s_lw_pend = 9; s_lw_pend_t = s_ms;
     s_mascota.tx = LW_ESCONDITE[z][s_lw_esc_k][0]; s_mascota.ty = LW_ESCONDITE[z][s_lw_esc_k][1] + 6;
     mascota_modo(M_VA, 5000);
@@ -699,6 +744,56 @@ static void esc_anunciar(int zz)
     snprintf(cuerpo, sizeof cuerpo, "%s Queda ahí todo el día... salvo que ella lo encuentre primero en uno de sus paseos.", T[zz]);
     panel_lectura(ICO_ESTRELLA, "Lo escondido de hoy", "¡Hay un secreto aquí!", cuerpo);
 }
+/* (1.0.36) el baño en la poza: salta adentro, chapotea, se baña (el motor la deja limpia: ACT_BANAR) y sale de un salto */
+static void lw_bano_paso(bool tapa)
+{
+    criatura_t *c = &s_mascota;
+    const uint32_t k = s_ms - s_lw_bano_t;
+    if (!s_pet || s_pet->dormida) { lw_bano_fin(); return; }
+    if (s_lw_bano_paso < 3) { /* adentro: si la mandaste a otra parte (o algo la sacó), sale caminando y se acaba */
+        if (c->modo == M_LIBRE) mascota_modo(M_POZA, 7000); /* (terminó la animación del baño: sigue en el agua) */
+        else if (c->modo != M_POZA && c->modo != M_BANO && c->modo != M_NIEGA && c->modo != M_SALTA) { lw_bano_fin(); return; }
+    }
+    if (s_lw_bano_paso == 0 && k >= 450u) { /* ¡al agua! */
+        s_lw_bano_paso = 1;
+        accion(UI_ACCION_SONAR, SND_CHAPUZON);
+        for (int q = 0; q < 6; q++) salpicar((int)c->x - 22 + q * 9, (int)c->y - 6, q & 1 ? 0x9ED8FF : 0x6FA8E0);
+    }
+    if (s_lw_bano_paso == 1 && k >= 2600u) { s_lw_bano_paso = 2; accion(ACT_BANAR, 0); }
+    if (s_lw_bano_paso == 2 && k >= 6200u) { /* sale de un salto a la orilla */
+        s_lw_bano_paso = 3;
+        s_poza_x0 = c->x; s_poza_y0 = c->y; s_poza_x1 = 300.0f; s_poza_y1 = 252.0f; s_poza_desde = s_ms;
+        mascota_modo(M_POZA, 450);
+        accion(UI_ACCION_SONAR, SND_SALPICON);
+        salpicar((int)c->x, (int)c->y - 6, 0x9ED8FF);
+    }
+    if (s_lw_bano_paso == 3 && k >= 6700u) { /* se sacude */
+        for (int q = 0; q < 5; q++) salpicar((int)c->x - 18 + q * 9, (int)c->y - 30, 0xCFF0FF);
+        mascota_modo(M_SALTA, 700);
+        lw_bano_fin();
+        return;
+    }
+    /* el agua le tapa las patitas mientras está adentro */
+    const bool adentro = (s_lw_bano_paso == 1 || s_lw_bano_paso == 2) && !tapa;
+    if (adentro && !s_lw_agua) {
+        s_lw_agua = caja(s_mundo);
+        lv_obj_set_style_bg_color(s_lw_agua, lv_color_hex(0x4DA6FF), 0);
+        lv_obj_set_style_bg_opa(s_lw_agua, LV_OPA_80, 0);
+        lv_obj_set_style_radius(s_lw_agua, 14, 0);
+        lv_obj_set_style_border_width(s_lw_agua, 2, 0);
+        lv_obj_set_style_border_color(s_lw_agua, lv_color_hex(0xCFF0FF), 0);
+        lv_obj_set_style_border_side(s_lw_agua, LV_BORDER_SIDE_TOP, 0);
+        lv_obj_remove_flag(s_lw_agua, LV_OBJ_FLAG_CLICKABLE);
+    }
+    if (!s_lw_agua) return;
+    ocultar(s_lw_agua, !adentro);
+    if (!adentro) return;
+    const int l = lado(c), alto = l * 30 / 100;
+    lv_obj_set_size(s_lw_agua, l * 7 / 10, alto);
+    lv_obj_set_pos(s_lw_agua, (int)c->x - l * 7 / 20, (int)c->y - alto + 6);
+    lv_obj_move_foreground(s_lw_agua);
+    if (s_ms % 900u < TICK_MS) salpicar((int)c->x + (c->pose.espejo ? 26 : -26), (int)c->y - 8, 0xCFF0FF);
+}
 /* cada cuadro, en el claro o el mirador */
 static void animar_lugar_mundo(void)
 {
@@ -730,6 +825,7 @@ static void animar_lugar_mundo(void)
             if (lw_aqui() != z) return;
         }
     }
+    if (z == 0 && s_lw_bano_t) lw_bano_paso(tapa);
     const bool noche = s_fondo_periodo == PERIODO_NOCHE || s_fondo_periodo == PERIODO_ATARDECER;
     if (z == 0) {
         /* la luz de la puerta */
@@ -738,14 +834,30 @@ static void animar_lugar_mundo(void)
         lv_obj_set_pos(s_lw_brillo, 207 - d / 2, 166 - d / 2);
         lv_obj_set_style_bg_opa(s_lw_brillo, (lv_opa_t)(noche ? 130 : 70), 0);
         ocultar(s_lw_brillo, false);
-        /* las luciérnagas (de día unas pocas; de noche, todas) */
+        /* (1.0.36) sentada en el tronco: se termina si se paró (la llamaste, un juego...) o a los 9 s */
+        float junto = 0.0f; /* 0..1: cuánto se acercan las luciérnagas a ella */
+        if (s_lw_sienta_t) {
+            const uint32_t k = s_ms - s_lw_sienta_t;
+            if (s_mascota.modo != M_SENTADA || k > 9000u || !s_pet || s_pet->dormida) lw_sienta_fin();
+            else {
+                junto = fminf(1.0f, (float)k / 1500.0f) * fminf(1.0f, (float)(9000u - k) / 1500.0f);
+                static uint32_t ult_corazon;
+                if (k > 3500u && s_lw_sienta_t != ult_corazon) { ult_corazon = s_lw_sienta_t; flotar(ICO_CORAZON, NULL, 0, (int)s_mascota.x, cabeza_y(&s_mascota) - 10, 0); }
+            }
+        }
+        /* las luciérnagas (de día unas pocas; de noche, todas; si está sentada en el tronco, de día vienen cinco) */
         for (int i = 0; i < 8; i++) {
-            const bool ver = i < 3 || noche;
+            const bool ver = i < 3 || noche || (junto > 0.0f && i < 5);
             ocultar(s_lw_luci[i], !ver || tapa);
             if (!ver) continue;
             const float a = (float)s_ms / (1500.0f + (float)i * 230.0f) + (float)i * 1.7f;
-            const int x = i < 4 ? 157 + (int)(cosf(a) * 34.0f) : 120 + (i * 41) % 240 + (int)(sinf(a) * 30.0f);
-            const int y = i < 4 ? 300 + (int)(sinf(a * 1.3f) * 18.0f) : 200 + (i * 53) % 150 + (int)(cosf(a * 1.3f) * 20.0f);
+            int x = i < 4 ? 157 + (int)(cosf(a) * 34.0f) : 120 + (i * 41) % 240 + (int)(sinf(a) * 30.0f);
+            int y = i < 4 ? 300 + (int)(sinf(a * 1.3f) * 18.0f) : 200 + (i * 53) % 150 + (int)(cosf(a * 1.3f) * 20.0f);
+            if (junto > 0.0f) { /* bailan en ronda alrededor de su cabeza */
+                const float b = (float)s_ms / (900.0f + (float)i * 170.0f) + (float)i * 0.785f, rx = 30.0f + (float)(i % 4) * 9.0f;
+                const float ox = s_mascota.x + cosf(b) * rx, oy = s_mascota.y - 62.0f + sinf(b) * rx * 0.55f;
+                x = (int)((float)x + (ox - (float)x) * junto); y = (int)((float)y + (oy - (float)y) * junto);
+            }
             lv_obj_set_pos(s_lw_luci[i], x, y);
             lv_obj_set_style_bg_opa(s_lw_luci[i], (lv_opa_t)((noche ? 190 : 110) + 60 * sinf(a * 3.0f)), 0);
             lv_obj_move_foreground(s_lw_luci[i]);
@@ -824,6 +936,7 @@ static void ze_cueva_cb(lv_event_t *e)
 {
     (void)e;
     if (!s_pet || s_panel != PANEL_NINGUNO || s_pet->dormida || s_juego != JG_NADA || s_ze_viaje || s_escena != ESC_COLINA || !pet_scene_open(s_pet, ESC_CUEVA)) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     accion(UI_ACCION_SONAR, SND_HADAS);
     accion(ACT_IR, ESC_CUEVA);
 }
@@ -831,6 +944,7 @@ static void ze_toque_cb(lv_event_t *e)
 {
     (void)e;
     if (!s_pet || s_panel != PANEL_NINGUNO || s_pet->dormida || s_juego != JG_NADA) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     if (s_exc_fase == EXC_FUERA) { /* ahí estaba: aparecen allá, juntas */
         s_exc_fase = EXC_NADA;
         s_exc_oculta = false;
@@ -919,7 +1033,8 @@ static void animar_entradas_zonas(void)
         lv_obj_set_style_blend_mode(s_ze_cueva_luz, LV_BLEND_MODE_ADDITIVE, 0);
         for (int i = 0; i < 3; i++) {
             s_ze_cueva_br[i] = lv_image_create(s_mundo);
-            lv_image_set_src(s_ze_cueva_br[i], art_icono(ICO_ESTRELLA, 3));
+            static const art_icono_t CR[3] = {ICO_CRIS_0, ICO_CRIS_3, ICO_CRIS_5}; /* (1.0.61) cristalitos adentro, no estrellas */
+            lv_image_set_src(s_ze_cueva_br[i], art_icono(CR[i], 2));
             lv_obj_remove_flag(s_ze_cueva_br[i], LV_OBJ_FLAG_CLICKABLE);
         }
         s_ze_cueva_toque = caja(s_mundo);
@@ -938,14 +1053,13 @@ static void animar_entradas_zonas(void)
             lv_obj_set_size(s_ze_cueva_luz, d + 10, d);
             lv_obj_set_pos(s_ze_cueva_luz, ZE_CUEVA_X - (d + 10) / 2, ZE_CUEVA_Y + 4 - d / 2);
             lv_obj_set_style_bg_opa(s_ze_cueva_luz, (lv_opa_t)((nueva ? 110 : 70) + 40 * sinf(a)), 0);
-            static const int8_t BR[3][2] = {{-22, -8}, {20, -16}, {4, 14}};
-            for (int i = 0; i < 3; i++) { /* tres destellos que titilan por turnos */
+            static const int8_t BR[3][2] = {{-17, 9}, {1, 13}, {17, 8}}; /* (1.0.61) en el piso de la boca, por dentro */
+            for (int i = 0; i < 3; i++) { /* tres cristalitos que brillan por turnos (sin crecer: brillan, no saltan) */
                 const float b = sinf(a * 1.3f + (float)i * 2.1f);
-                lv_obj_set_pos(s_ze_cueva_br[i], ZE_CUEVA_X + BR[i][0] - 18, ZE_CUEVA_Y + BR[i][1] - 18);
-                lv_obj_set_style_image_opa(s_ze_cueva_br[i], (lv_opa_t)(b > 0 ? 80 + 175 * b : 0), 0);
-                lv_image_set_scale(s_ze_cueva_br[i], (uint32_t)(150 + 90 * (b > 0 ? b : 0)));
+                lv_obj_set_pos(s_ze_cueva_br[i], ZE_CUEVA_X + BR[i][0] - 12, ZE_CUEVA_Y + BR[i][1] - 12);
+                lv_obj_set_style_image_opa(s_ze_cueva_br[i], (lv_opa_t)(150 + 105 * (b > 0 ? b : 0)), 0);
             }
-            if (nueva && !s_ze_cueva_pista && s_panel == PANEL_NINGUNO && !s_ze_viaje) { s_ze_cueva_pista = true; globo(ICO_ESTRELLA, s_nino ? NULL : "¡ALGO BRILLA EN LA CUEVA! TÓCALA", 3500); }
+            if (nueva && !s_ze_cueva_pista && s_panel == PANEL_NINGUNO && !s_ze_viaje) { s_ze_cueva_pista = true; globo(ICO_CRISTAL, s_nino ? NULL : "¡ALGO BRILLA EN LA CUEVA! TÓCALA", 3500); }
         }
     }
     if (!s_ze_toque && (claro || mira)) {

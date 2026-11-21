@@ -11,8 +11,8 @@
  */
 #pragma once
 
-#define FW_VERSION "1.0.35"
-#define FW_NOMBRE "ALARMAS EN LA PECERA"
+#define FW_VERSION "1.0.65"
+#define FW_NOMBRE "LA REGADERA DE VERDAD"
 
 /* «1.0.09» → 10009, para comparar cuál es más nueva (−1 si el texto no es una versión) */
 static inline int fw_codigo(const char *v)

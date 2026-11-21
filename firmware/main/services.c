@@ -23,6 +23,7 @@
 #include "esp_check.h"
 #include "esp_codec_dev.h"
 #include "esp_spiffs.h"
+#include "esp_partition.h"
 #include "esp_attr.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -254,12 +255,30 @@ static void refr_evento(lv_event_t *e)
     }
 }
 
-lv_display_t *hal_display_init_liviano(void) { bsp_display_modo_liviano(true); return hal_display_init(); } /* (1.0.13) */
+lv_display_t *hal_display_init_liviano(void) /* (1.0.13) el modo Wi-Fi */
+{
+    bsp_display_modo_liviano(true);
+    lv_display_t *d = hal_display_init();
+    if (d) bsp_display_brightness_set(100); /* (1.0.60) el modo Wi-Fi no pasa por el brillo del juego: a la vista de inmediato */
+    return d;
+}
 lv_display_t *hal_display_init(void)
 {
     lv_display_t *d = bsp_display_start(); /* también inicia I2C, táctil y LVGL */
     if (d) {
-        bsp_display_brightness_set(100);
+        /* (1.0.60) arranca APAGADA (brillo 0) y en negro: antes se encendía al 100 % con el fondo blanco de LVGL mientras
+         * se armaba el juego (unos 3 s), también al despertar del sueño de noche. El juego pone su brillo al estar listo. */
+        bsp_display_brightness_set(0);
+        if (bsp_display_lock(0) == ESP_OK) {
+            lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
+            lv_obj_set_style_bg_opa(lv_screen_active(), LV_OPA_COVER, 0);
+            bsp_display_unlock();
+        }
+        /* (1.0.48) sin «baldosas»: con 2 unidades de dibujo, LVGL 9.4 parte cada franja en 2 baldosas que dibujan los dos
+         * núcleos a la vez (lv_refr.c refr_area_part). Si el lv_malloc de las baldosas falla (memoria justa), esa franja NO
+         * se dibuja y se manda igual con lo que quedó en el búfer: las rayas oscuras horizontales junto a los botones con
+         * lluvia (muchas áreas chicas por cuadro). Con 1 baldosa la franja se dibuja entera, como en el simulador. */
+        lv_display_set_tile_cnt(d, 1);
         lv_display_add_event_cb(d, refr_evento, LV_EVENT_REFR_START, NULL);
         lv_display_add_event_cb(d, refr_evento, LV_EVENT_REFR_READY, NULL);
         { extern void ui_inv_fusionar(lv_event_t *e); lv_display_add_event_cb(d, ui_inv_fusionar, LV_EVENT_INVALIDATE_AREA, NULL); } /* (1.0.22) después del redondeo del BSP */
@@ -507,7 +526,7 @@ static int64_t s_primer_pico, s_ultima_sacudida;
 
 esp_err_t hal_imu_init(void)
 {
-    ESP_RETURN_ON_ERROR(i2c_dev(BOARD_IMU_ADDR, &s_imu), TAG, "QMI8658 no responde");
+    if (!s_imu) ESP_RETURN_ON_ERROR(i2c_dev(BOARD_IMU_ADDR, &s_imu), TAG, "QMI8658 no responde"); /* (1.0.54) el modo paseo ya pudo abrirlo */
     uint8_t id = 0;
     leer(s_imu, 0x00, &id, 1);
     if (id != 0x05) ESP_LOGW(TAG, "QMI8658: identificador inesperado 0x%02X", id);
@@ -669,6 +688,47 @@ static volatile int64_t s_snd_pedido_us; /* v89: cuándo se pidió la última no
 
 /* Una sola tarea mezcla el ambiente (un bucle que se repite) y los efectos (uno a la vez).
  * Cuando no suena nada, duerme en la cola y el parlante queda en silencio. */
+/* (1.0.61) los sonidos que no son notas se sintetizan en OTRA tarea: antes la tarea del sonido se quedaba sintetizando (a
+ * prioridad 2, hasta segundos con la cueva dibujando) y las notas de los cristales que tocabas esperaban en la cola (informe:
+ * «demora máx 3865 ms»). Ahora la mezcla sigue y el efecto empieza cuando está listo. Un pedido nuevo deja atrás al anterior
+ * (s_sfx_gen): el búfer solo lo escribe esta tarea mientras la mezcla no lo está tocando (sfx_n = 0). */
+static int16_t *s_sfx_pcm;
+static int s_sfx_max;
+static TaskHandle_t s_sfx_tarea;
+static volatile uint16_t s_sfx_pide;
+static volatile uint32_t s_sfx_gen, s_sfx_listo_gen;
+static volatile int s_sfx_listo_n = -1;
+static volatile uint16_t s_sfx_listo_q;
+static int sfx_sintetizar(uint16_t q)
+{
+    const uint8_t s = (uint8_t)(q & 0xFF);
+    int n = 0;
+    if (s < 64 && ((s_snd_propio >> s) & 1u)) { /* el que grabaste o elegiste en el editor */
+        char r[24];
+        snprintf(r, sizeof r, "s%u.pcm", s);
+        n = hal_res_read(r, s_sfx_pcm, s_sfx_max * 2) / 2;
+    }
+    if (n <= 0) n = sfx_render((sound_t)s, s_sfx_pcm, s_sfx_max, BOARD_AUDIO_HZ);
+    return n;
+}
+static void tarea_sfx(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        for (;;) {
+            const uint32_t gen = s_sfx_gen;
+            const uint16_t q = s_sfx_pide;
+            const int n = sfx_sintetizar(q);
+            if (gen != s_sfx_gen) continue; /* mientras tanto pidieron otro: ese */
+            s_sfx_listo_q = q;
+            s_sfx_listo_n = n;
+            s_sfx_listo_gen = gen;
+            { const uint16_t d = DESPERTAR; xQueueSend(s_cola_sonidos, &d, 0); } /* que la mezcla lo vea ya (si estaba esperando) */
+            break;
+        }
+    }
+}
 static void tarea_sonido(void *arg)
 {
     (void)arg;
@@ -678,6 +738,9 @@ static void tarea_sonido(void *arg)
     int16_t *pcm = heap_caps_malloc((size_t)max * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     int16_t *amb = heap_caps_malloc((size_t)amb_max * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!pcm || !amb) { ESP_LOGE(TAG, "sin memoria para audio"); vTaskDelete(NULL); }
+    s_sfx_pcm = pcm;
+    s_sfx_max = max;
+    if (xTaskCreate(tarea_sfx, "sfx", 4096, NULL, 3, &s_sfx_tarea) != pdPASS) s_sfx_tarea = NULL; /* (1.0.61; si no hay lugar, como antes) */
     s_snd_vivo = true;
     /* las seis notas de los cristales se preparan de antemano: tocar uno suena AL INSTANTE (sintetizarlo en el momento tardaba, sobre todo con la cueva a todo trapo) */
     /* v89: también los cuatro sonidos de los hongos de luz (antes se sintetizaban al tocar: tardaban y cortaban el anterior) */
@@ -703,7 +766,7 @@ static void tarea_sonido(void *arg)
     float g = 0; /* volumen actual del ambiente: sube y baja suave (sin chasquidos) */
     float sfx_gain = 1.0f; /* el volumen del tipo de sonido que suena (ella, efectos o alarma) */
     /* las notas de los cristales suenan juntas (varias a la vez, una sobre otra) y arrancan al instante: sin copiar nada ni esperar a las anteriores */
-    struct { const int16_t *d; int n, pos; float g; } voz[VOCES] = {{0}};
+    struct { const int16_t *d; int n, pos; float g; uint32_t frac, paso; } voz[VOCES] = {{0}}; /* (1.0.53) paso 16.16: la nota afinada (otra altura) */
     while (true) {
         bool voces = false;
         for (int v = 0; v < VOCES; v++) voces |= voz[v].d && voz[v].pos < voz[v].n;
@@ -729,6 +792,9 @@ static void tarea_sonido(void *arg)
                 voz[v].d = nota_cris[ki];
                 voz[v].n = nota_cris_n[ki];
                 voz[v].pos = 0;
+                voz[v].frac = 0;
+                /* (1.0.53) afinada: bits 9-14 = semitonos + 32 (bit 15 marca): la misma nota guardada, leída más rápido o más lento */
+                voz[v].paso = (q & 0x8000) ? (uint32_t)(65536.0f * powf(2.0f, (float)((int)((q >> 9) & 0x3F) - 32) / 12.0f)) : 65536u;
                 voz[v].g = (float)s_vol_tipo[(q & SND_SUAVE) ? 1 : pet_sound_group((sound_t)s)] / 100.0f;
                 { /* v89: la demora desde el toque hasta que la nota entra a la mezcla (más ~30 ms de reserva del I2S) */
                     static int dmax, n; static uint32_t ult_ms;
@@ -741,6 +807,14 @@ static void tarea_sonido(void *arg)
                 continue;
             }
             sfx_n = 0;
+            if (s_sfx_tarea) { /* (1.0.61) se sintetiza aparte: la mezcla (y las notas) siguen */
+                sfx_pos = 0;
+                s_sfx_pide = q;
+                s_sfx_gen++;
+                xTaskNotifyGive(s_sfx_tarea);
+                llego = xQueueReceive(s_cola_sonidos, &q, 0);
+                continue;
+            }
             if (s < 64 && ((s_snd_propio >> s) & 1u)) { /* el que grabaste o elegiste en el editor */
                 char r[24];
                 snprintf(r, sizeof r, "s%u.pcm", s);
@@ -756,6 +830,15 @@ static void tarea_sonido(void *arg)
             sfx_gain = (float)s_vol_tipo[(q & SND_SUAVE) ? 1 : pet_sound_group((sound_t)s)] / 100.0f; /* SND_SUAVE: va con el volumen de efectos, no con el de las alarmas */
           }
           llego = xQueueReceive(s_cola_sonidos, &q, 0);
+        }
+        if (s_sfx_tarea && s_sfx_listo_gen == s_sfx_gen && s_sfx_listo_n >= 0) { /* (1.0.61) el efecto quedó listo: suena */
+            sfx_n = s_sfx_listo_n;
+            sfx_pos = 0;
+            s_sfx_listo_n = -1;
+            const uint16_t lq = s_sfx_listo_q;
+            sfx_gain = (float)s_vol_tipo[(lq & SND_SUAVE) ? 1 : pet_sound_group((sound_t)(lq & 0xFF))] / 100.0f;
+            parlante_abrir();
+            ultimo_son_ms = (uint32_t)(esp_timer_get_time() / 1000);
         }
         uint8_t pedido = s_amb_vol ? s_amb_pedido : AMB_NADA;
         float meta = pedido == amb_actual && amb_n ? (float)s_amb_vol / 100.0f : 0.0f;
@@ -794,7 +877,11 @@ static void tarea_sonido(void *arg)
             float v = 0;
             if (amb_n) { v = (float)amb[amb_pos] * g; if (++amb_pos >= amb_n) amb_pos = 0; }
             if (sfx_pos < sfx_n) v += (float)pcm[sfx_pos++] * sfx_gain;
-            for (int k = 0; k < VOCES; k++) if (voz[k].d && voz[k].pos < voz[k].n) v += (float)voz[k].d[voz[k].pos++] * voz[k].g * g_voces;
+            for (int k = 0; k < VOCES; k++)
+                if (voz[k].d && voz[k].pos < voz[k].n) {
+                    v += (float)voz[k].d[voz[k].pos] * voz[k].g * g_voces;
+                    voz[k].frac += voz[k].paso; voz[k].pos += (int)(voz[k].frac >> 16); voz[k].frac &= 0xFFFFu;
+                }
             /* limitador suave: si la suma de ambiente y efectos pasa de ~20000 se redondea en vez de recortarse (el recorte «revienta» el parlante) */
             const float av = v < 0 ? -v : v;
             if (av > 20000.0f) v = (v < 0 ? -1.0f : 1.0f) * (20000.0f + 11000.0f * tanhf((av - 20000.0f) / 11000.0f));
@@ -980,6 +1067,16 @@ void hal_sound_stop(void)
     uint16_t v = CALLAR;
     xQueueSend(s_cola_sonidos, &v, 0);
 }
+/* (1.0.53) una nota de cristal afinada: «semi» semitonos más alta (o más baja, negativo; -24..+24) */
+void hal_sound_note(sound_t s, int semi, bool suave)
+{
+    if (s == SND_NINGUNO || !s_cola_sonidos) return;
+    if (semi < -24) semi = -24;
+    if (semi > 24) semi = 24;
+    s_snd_pedido_us = esp_timer_get_time();
+    uint16_t v = (uint16_t)((uint16_t)s | (suave ? SND_SUAVE : 0) | (semi ? (0x8000u | (uint16_t)(((semi + 32) & 0x3F) << 9)) : 0));
+    xQueueSend(s_cola_sonidos, &v, 0);
+}
 void hal_sound_play_soft(sound_t s)
 {
     if (s == SND_NINGUNO || !s_cola_sonidos) return;
@@ -1081,6 +1178,25 @@ esp_err_t hal_res_init(void)
 }
 
 static void ruta_res(const char *nombre, char *r, size_t n) { snprintf(r, n, RES_DIR "/%s", nombre); }
+/* (1.0.59) cuánto ocupan las dos memorias de archivos (recursos y fotos) y los 6 archivos más grandes de recursos: SPIFFS
+ * casi lleno escribe lentísimo (informe #10: el registro tardó 16 s y la placa quedó trabada 48 s con la pantalla apagada) */
+int hal_res_informe(char *b, int cap)
+{
+    size_t tr = 0, ur = 0, tf = 0, uf = 0;
+    if (esp_spiffs_mounted("recursos")) esp_spiffs_info("recursos", &tr, &ur);
+    if (esp_spiffs_mounted("fotos")) esp_spiffs_info("fotos", &tf, &uf);
+    int k = snprintf(b, (size_t)cap, "recursos %u de %u KB (%d archivos), fotos %u de %u KB; más grandes:",
+                     (unsigned)(ur / 1024), (unsigned)(tr / 1024), s_res_cuenta, (unsigned)(uf / 1024), (unsigned)(tf / 1024));
+    bool usado[RES_MAX] = {0};
+    for (int q = 0; q < 6 && k < cap - 32; q++) {
+        int m = -1;
+        for (int i = 0; i < s_res_cuenta; i++) if (!usado[i] && (m < 0 || s_res_lista[i].t > s_res_lista[m].t)) m = i;
+        if (m < 0) break;
+        usado[m] = true;
+        k += snprintf(b + k, (size_t)(cap - k), " %s %dK", s_res_lista[m].n, s_res_lista[m].t / 1024);
+    }
+    return k;
+}
 
 bool hal_res_save(const char *nombre, const void *datos, int n)
 {
@@ -1181,6 +1297,49 @@ bool hal_res_delete(const char *nombre)
 /* El registro se ESCRIBE AL FINAL del archivo (solo lo nuevo) y cada minuto: antes se reescribía entero (24 KB) cada 20 s en la flash
  * y la placa se congelaba 5 o 6 segundos cada vez. Al llenarse, el archivo se renombra (instantáneo) y se empieza otro. */
 static SemaphoreHandle_t s_log_io; /* que dos volcados no escriban a la vez */
+/* (1.0.64) el registro y los eventos raros van a la partición cruda «registro» (anillo.inc), ya no a SPIFFS. Si la
+ * placa todavía tiene la tabla vieja (se cambia solo grabando con cable), todo sigue como antes, en registro.txt. */
+static const esp_partition_t *s_reg_part;
+#define AN_LEER(d, b, n) esp_partition_read(s_reg_part, (d), (b), (n))
+#define AN_ESCRIBIR(d, b, n) esp_partition_write(s_reg_part, (d), (b), (n))
+#define AN_BORRAR(d) esp_partition_erase_range(s_reg_part, (d), AN_SECTOR)
+#include "anillo.inc"
+#define REG_SUBTIPO 0x40
+#define REG_EV_SECTORES 6 /* 24 KB de eventos raros; el resto (104 KB) para el registro */
+static anillo_t s_an_ev, s_an_log;
+static int8_t s_an_estado; /* 0 sin mirar, 1 listo, -1 no está la partición */
+static bool an_listo(void) /* (con s_log_io tomado) */
+{
+    if (s_an_estado == 0) {
+        s_an_estado = -1;
+        s_reg_part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, (esp_partition_subtype_t)REG_SUBTIPO, "registro");
+        if (s_reg_part && s_reg_part->size >= 16 * AN_SECTOR) {
+            const uint32_t n = (uint32_t)(s_reg_part->size / AN_SECTOR);
+            if (an_abrir(&s_an_ev, 0, REG_EV_SECTORES) && an_abrir(&s_an_log, REG_EV_SECTORES * AN_SECTOR, n - REG_EV_SECTORES))
+                s_an_estado = 1;
+        }
+    }
+    return s_an_estado == 1;
+}
+/* (con s_log_io tomado) una sola vez: lo que quedó en los archivos viejos pasa al anillo y los archivos se borran */
+static void an_migrar(void)
+{
+    static bool hecho;
+    if (hecho || !s_res_ok || s_an_estado != 1) return;
+    hecho = true;
+    static const char *const VIEJOS[3] = {"eventos.txt", "registro_v.txt", "registro.txt"};
+    bool habia = false;
+    for (int i = 0; i < 3; i++) {
+        if (hal_res_size(VIEJOS[i]) < 0) continue;
+        habia = true;
+        static EXT_RAM_BSS_ATTR char m[12288];
+        const int k = hal_res_read(VIEJOS[i], m, sizeof m);
+        if (k > 0) an_agregar(i ? &s_an_log : &s_an_ev, m, (uint32_t)k);
+        hal_res_delete(VIEJOS[i]);
+    }
+    if (habia) hal_evento("registro: ahora en su propia partición (%u KB, sin SPIFFS); se pasaron los archivos viejos",
+                          (unsigned)(s_reg_part->size / 1024));
+}
 static void ev_volcar(void) /* (con s_log_io tomado) lo pendiente del resumen de eventos pasa a eventos.txt */
 {
     static EXT_RAM_BSS_ATTR char pend[EV_RTC];
@@ -1189,6 +1348,7 @@ static void ev_volcar(void) /* (con s_log_io tomado) lo pendiente del resumen de
     memcpy(pend, s_ev_rtc, n);
     s_ev_n = 0;
     portEXIT_CRITICAL(&s_log_mux);
+    if (n && an_listo()) { an_agregar(&s_an_ev, pend, n); return; } /* (1.0.64) */
     if (!n || !s_res_ok) return;
     char r[48];
     ruta_res(EV_ARCHIVO, r, sizeof r);
@@ -1232,6 +1392,7 @@ static void log_volcar(void)
 {
     if (!s_log_io) return;
     xSemaphoreTake(s_log_io, portMAX_DELAY);
+    if (an_listo()) an_migrar(); /* (1.0.64) antes de los eventos nuevos, así quedan en orden */
     ev_volcar();
     hora_guardar();
     static EXT_RAM_BSS_ATTR char nuevo[LOG_RAM];
@@ -1240,6 +1401,14 @@ static void log_volcar(void)
     memcpy(nuevo, s_log_ram, (size_t)n);
     s_log_n = 0;
     portEXIT_CRITICAL(&s_log_mux);
+    if (an_listo()) { /* (1.0.64) al anillo: unos ms, más ~45 ms cada 4 KB al borrar el sector siguiente */
+        const int64_t t1 = esp_timer_get_time();
+        if (n > 0) an_agregar(&s_an_log, nuevo, (uint32_t)n);
+        xSemaphoreGive(s_log_io);
+        const int ms1 = (int)((esp_timer_get_time() - t1) / 1000);
+        if (ms1 > 300) hal_evento("escritura lenta a flash: el registro (partición propia) tardó %d ms (%d bytes)", ms1, n);
+        return;
+    }
     if (n <= 0 || !s_res_ok) { xSemaphoreGive(s_log_io); return; }
     char r[48], rv[48];
     ruta_res(LOG_ARCHIVO, r, sizeof r);
@@ -1266,20 +1435,51 @@ static void log_volcar(void)
 }
 /* En la flash (SPIFFS), escribir el registro se pegaba entre 1 y 4 segundos de vez en cuando (limpieza interna) y congelaba el ciclo principal:
  * ahora lo hace una tarea aparte; el ciclo principal solo le avisa (y solo cada minuto). Al reiniciar o leerlo, se escribe al instante. */
+/* (1.0.44, pedido del usuario: «ataquemos los congelones») escribir en la flash detiene TODO unos 2 s aunque lo haga esta
+ * tarea aparte: mientras la flash borra, el procesador no puede leer el programa ni la PSRAM (el informe #6: «escritura
+ * lenta a flash 1,6-2,2 s» cada 5-7 min, y justo ahí «pantalla/ciclo trabado»). Ahora, con la pantalla encendida, el
+ * registro y los eventos NO se escriben: esperan en la RAM (lo más viejo se pierde si se llena; los eventos raros
+ * sobreviven a un reinicio en la RAM del RTC) y se escriben al apagarse la pantalla. Si la pantalla lleva más de 30 min
+ * encendida (la pecera, cargando), se escribe igual, como mucho una vez cada 30 min. Al reiniciar o mandar un informe se
+ * escribe al instante, como siempre. */
+static bool s_log_pantalla;
+static volatile bool s_log_pendiente;
+static uint32_t s_log_ult_escritura;
+static bool log_puede_escribir(void)
+{
+    if (!s_log_pantalla || s_an_estado == 1) return true; /* (1.0.64) en la partición propia escribir no traba: siempre */
+    const uint32_t ahora = (uint32_t)(esp_timer_get_time() / 1000);
+    return s_log_ult_escritura && ahora - s_log_ult_escritura > 1800000u;
+}
 static void log_tarea(void *arg)
 {
     (void)arg;
+    s_log_ult_escritura = (uint32_t)(esp_timer_get_time() / 1000) | 1u;
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (!log_puede_escribir()) { s_log_pendiente = true; continue; } /* (1.0.44) con la pantalla encendida: espera */
+        s_log_pendiente = false;
+        s_log_ult_escritura = (uint32_t)(esp_timer_get_time() / 1000) | 1u;
         log_volcar();
+        if (s_log_pantalla) continue; /* (1.0.44) la limpieza de la flash, solo con la pantalla apagada */
+        if (s_an_estado == 1) { /* (1.0.64) el registro ya no usa SPIFFS: limpiarlo una vez por hora alcanza */
+            static uint32_t ult_gc;
+            const uint32_t ahora = (uint32_t)(esp_timer_get_time() / 1000000);
+            if (ult_gc && ahora - ult_gc < 3600u) continue;
+            ult_gc = ahora | 1u;
+        }
         /* (v97) y de paso, con calma, se limpia la flash (el recolector de SPIFFS) en pasos chicos con pausas: así la próxima
          * escritura (el registro, una foto, la prueba de la flash) encuentra bloques libres y no se pega 2 a 4 s en medio del juego */
         spiffs_limpiar_pasos("recursos", 48 * 1024);
         spiffs_limpiar_pasos("fotos", 48 * 1024);
     }
 }
-static bool s_log_pantalla;
-void hal_log_flush_pantalla(bool encendida) { s_log_pantalla = encendida; }
+void hal_log_flush_pantalla(bool encendida)
+{
+    const bool se_apago = s_log_pantalla && !encendida;
+    s_log_pantalla = encendida;
+    if (se_apago && s_log_pendiente && s_log_tarea) xTaskNotifyGive(s_log_tarea); /* (1.0.44) lo que esperaba, ahora que nadie mira */
+}
 /* (v101) la RAM del registro está por llenarse: que la tarea lo escriba ya (no más de una vez cada 2 min, para no trabar el juego) */
 static void log_casi_lleno(void)
 {
@@ -1287,6 +1487,7 @@ static void log_casi_lleno(void)
     static uint32_t ult_ms;
     const uint32_t ahora = (uint32_t)(esp_timer_get_time() / 1000);
     if (ult_ms && ahora - ult_ms < 120000u) return; /* (cada escritura traba ~1,7 s: no más de una cada 2 min) */
+    if (!log_puede_escribir()) { s_log_pendiente = true; return; } /* (1.0.44) con la pantalla encendida, mejor perder lo más viejo que trabar */
     ult_ms = ahora;
     s_log_flush_ms = ahora;
     xTaskNotifyGive(s_log_tarea);
@@ -1304,9 +1505,30 @@ void hal_log_flush(bool forzar)
 }
 
 
+static int log_leer_anillo(char *buf, int cap) /* (1.0.64) con s_log_io tomado y an_listo() */
+{
+    static const char T1[] = "=== EVENTOS RAROS (archivo aparte, no se borra con el registro) ===\n", T2[] = "=== REGISTRO ===\n";
+    int v = 0;
+    if (cap > (int)sizeof T1 + (int)sizeof T2 + 64) {
+        memcpy(buf, T1, sizeof T1 - 1); v = (int)sizeof T1 - 1;
+        const int lim = cap / 3; /* hasta un tercio: el resto para el registro */
+        const int e = an_leer_todo(&s_an_ev, buf + v, lim - v);
+        if (e > 0) v += e;
+        else { static const char N[] = "(ninguno)\n"; memcpy(buf + v, N, sizeof N - 1); v += (int)sizeof N - 1; }
+        memcpy(buf + v, T2, sizeof T2 - 1); v += (int)sizeof T2 - 1;
+    }
+    const int r = an_leer_todo(&s_an_log, buf + v, cap - v);
+    if (r > 0) v += r;
+    return v;
+}
 int hal_log_read(char *buf, int cap)
 {
     hal_log_flush(true);
+    if (s_log_io) {
+        xSemaphoreTake(s_log_io, portMAX_DELAY);
+        if (an_listo()) { const int r = log_leer_anillo(buf, cap); xSemaphoreGive(s_log_io); return r; }
+        xSemaphoreGive(s_log_io);
+    }
     int v = 0;
     { /* v88: primero el resumen de eventos raros (no lo borra el desborde del registro) */
         static const char T1[] = "=== EVENTOS RAROS (archivo aparte, no se borra con el registro) ===\n", T2[] = "=== REGISTRO ===\n";
@@ -1338,6 +1560,13 @@ void hal_log_clear(void)
     portENTER_CRITICAL(&s_log_mux);
     s_log_n = 0;
     portEXIT_CRITICAL(&s_log_mux);
+    if (s_log_io) { /* (1.0.64) los eventos raros se quedan, como antes */
+        xSemaphoreTake(s_log_io, portMAX_DELAY);
+        const bool an = an_listo();
+        if (an) an_vaciar(&s_an_log);
+        xSemaphoreGive(s_log_io);
+        if (an) return;
+    }
     hal_res_delete(LOG_ARCHIVO);
     hal_res_delete(LOG_VIEJO);
 }
@@ -1725,6 +1954,99 @@ const char *hal_night_wake_reason(void)
     static const char *const M[] = {NULL, "botón BOOT", "botón PWR", "cable", "terminó la noche o viene una alarma", "por las dudas"};
     const char *r = s_noche_motivo < 6 ? M[s_noche_motivo] : NULL;
     s_noche_motivo = 0; /* se cuenta una sola vez */
+    return r;
+}
+
+/* ---------------------------------------------------------- (1.0.54) modo paseo: el procesador duerme y el chip cuenta los pasos
+ * Caminando con la pantalla apagada, la placa guarda todo y entra en sueño profundo; el contador de pasos del QMI8658 (su
+ * propio motor, casi no gasta) sigue encendido. Cada BOARD_PASEO_REVISAR_S despierta un instante (sin arrancar el juego):
+ * lee los pasos, mira el botón PWR, el cable y la próxima alarma, y cada minuto anota si caminaste. Arranca el juego con
+ * BOOT o PWR (pantalla encendida, «¡VOLVISTE!»), con el cable, 1 min antes de una alarma, a las 4 h, o cuando llevas 3
+ * minutos sin caminar (el paseo terminó: arranca a oscuras y el paseo se cuenta como siempre). */
+#define PASEO_MAGIC 0x50415345u /* "PASE" */
+#define BOARD_PASEO_REVISAR_S 5u
+static RTC_DATA_ATTR uint32_t s_pas, s_pas_alarma, s_pas_ult, s_pas_pend, s_pas_desde, s_pas_min_ini, s_pas_min_pasos,
+    s_pas_min_cam, s_pas_quietos, s_pas_motivo;
+static void dormir_paseo(uint32_t ahora)
+{
+    s_pas = PASEO_MAGIC;
+    uint64_t seg = BOARD_PASEO_REVISAR_S;
+    if (s_pas_alarma > ahora + 60u && s_pas_alarma - ahora - 60u < seg) seg = s_pas_alarma - ahora - 60u;
+    if (seg < 1) seg = 1;
+    /* (el acelerómetro queda encendido: es el que cuenta los pasos) */
+    if (s_parlante) { esp_codec_dev_close(s_parlante); s_par_abierto = false; }
+    esp_sleep_enable_timer_wakeup(seg * 1000000ULL);
+    rtc_gpio_pullup_en((gpio_num_t)BOARD_BTN_BOOT);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BOARD_BTN_BOOT, 0);
+    esp_deep_sleep_start();
+}
+void hal_walk_enter(uint32_t alarma_utc, uint32_t cuenta_chip)
+{
+    const uint32_t ahora = hal_rtc_now();
+    s_pas_alarma = alarma_utc;
+    s_pas_ult = cuenta_chip;
+    s_pas_pend = 0;
+    s_pas_desde = ahora;
+    s_pas_min_ini = ahora;
+    s_pas_min_pasos = 0;
+    s_pas_min_cam = 0;
+    s_pas_quietos = 0;
+    s_pas_motivo = 0;
+    if (s_pmu) escribir(s_pmu, 0x49, 0x08); /* borra un PWR viejo: solo cuenta el que aprieten durmiendo */
+    bsp_display_brightness_set(0);
+    bsp_display_sleep(true);
+    dormir_paseo(ahora);
+}
+static void paseo_leer_pasos(void)
+{
+    if (!s_imu && i2c_dev(BOARD_IMU_ADDR, &s_imu) != ESP_OK) return;
+    uint8_t d[3];
+    if (leer(s_imu, 0x5A, d, 3) != ESP_OK) return;
+    const uint32_t c = (uint32_t)d[0] | (uint32_t)d[1] << 8 | (uint32_t)d[2] << 16;
+    const uint32_t dp = c >= s_pas_ult ? c - s_pas_ult : c; /* (si el chip volvió a cero, cuenta desde ahí) */
+    s_pas_ult = c;
+    if (dp < 2000u) { s_pas_pend += dp; s_pas_min_pasos += dp; } /* (una lectura imposible no cuenta) */
+}
+void hal_walk_boot_check(void)
+{
+    if (s_pas != PASEO_MAGIC) { if (esp_reset_reason() != ESP_RST_DEEPSLEEP) s_pas_motivo = 0; return; }
+    bsp_i2c_init();
+    paseo_leer_pasos(); /* siempre: también si apretaste BOOT (los pasos del último ratito no se pierden) */
+    uint32_t motivo = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0 ? 1u : 0u;
+    if (!motivo) {
+        hal_power_init();
+        hal_rtc_init();
+        const uint32_t ahora = hal_rtc_now();
+        if (ahora >= s_pas_min_ini + 60u) { /* pasó un minuto: ¿caminaste? (40 pasos o más, como el paseo de siempre) */
+            if (s_pas_min_pasos >= 40u) { s_pas_min_cam++; s_pas_quietos = 0; } else s_pas_quietos++;
+            s_pas_min_pasos = 0;
+            s_pas_min_ini = ahora;
+        }
+        if (s_pwr_al_iniciar || hal_pwr_short_press()) motivo = 2;
+        else if (hal_battery_vbus() || hal_battery_charging()) motivo = 3;
+        else if (s_pas_alarma && ahora + 60u >= s_pas_alarma) motivo = 4;
+        else if (s_pas_quietos >= 3u) motivo = 5;
+        else if (ahora < 1767225600u || ahora < s_pas_desde || ahora - s_pas_desde > 4u * 3600u) motivo = 6;
+        if (!motivo) dormir_paseo(ahora); /* no vuelve */
+    }
+    s_pas = 0;
+    s_pas_motivo = motivo;
+}
+uint32_t hal_walk_take(uint32_t *min_caminando, uint32_t *min_quieto, bool *a_oscuras)
+{
+    static const bool OSCURAS[7] = {false, false, false, false, true, true, true};
+    *min_caminando = s_pas_min_cam;
+    *min_quieto = s_pas_quietos;
+    *a_oscuras = s_pas_motivo < 7 && OSCURAS[s_pas_motivo];
+    const uint32_t p = s_pas_pend;
+    s_pas_pend = 0; s_pas_min_cam = 0; s_pas_quietos = 0;
+    return p;
+}
+const char *hal_walk_wake_reason(void)
+{
+    static const char *const M[] = {NULL, "botón BOOT", "botón PWR", "cable", "viene una alarma", "dejaste de caminar", "por las dudas"};
+    const char *r = s_pas_motivo < 7 ? M[s_pas_motivo] : NULL;
+    s_pas_motivo = 0;
     return r;
 }
 

@@ -20,8 +20,10 @@ static art_img_t s_zj_tit_art, s_zj_txt_art, s_zj_hud_art, s_zj_mas_art, s_zj_pe
 /* (1.0.19) los textos de las portadas: propios del juego. Antes usaban los de los paneles (texto_c), y si se abría y
  * cerraba un panel encima de la portada, esos textos se liberaban mientras todavía se veían */
 static art_img_t s_zj_ptxt[4];
+static const char *zj_texto_c_ultimo; /* (1.0.43) el último texto de portada (para saber cuánto toma leerlo) */
 static lv_obj_t *zj_texto_c(lv_obj_t *padre, int k, const char *s, uint32_t color, int escala, int ancho)
 {
+    zj_texto_c_ultimo = s;
     lv_obj_t *img = lv_image_create(padre);
     lv_obj_remove_flag(img, LV_OBJ_FLAG_CLICKABLE);
     if (k < 0 || k >= 4) return img;
@@ -33,6 +35,13 @@ static lv_timer_t *s_zj_timer;
 static int s_zj_jg, s_zj_paso, s_zj_cuenta, s_zj_trampa, s_zj_fase, s_zj_pts, s_zj_pts_vis = -1, s_zj_vidas, s_zj_ronda, s_zj_combo, s_zj_estrellas;
 static uint32_t s_zj_t, s_zj_t0, s_zj_txt_hasta, s_zj_fin_t, s_zj_juego_t, s_zj_dura, s_zj_mas_t;
 static bool s_zj_gano, s_zj_dedo;
+/* (1.0.43, pedido del usuario) las instrucciones del comienzo detienen el juego: empieza recién cuando desaparecen solas
+ * o cuando las tocas (un toque en cualquier parte las cierra y no cuenta como jugada). Mientras, el reloj del juego
+ * (s_zj_t) no avanza: los tiempos de cada juego quedan igual que si empezara en ese momento */
+static bool s_zj_espera;
+static uint32_t s_zj_port_ms = 4500u; /* (1.0.43) cuánto se ve la portada antes de empezar sola: con reglas largas, lo que tome leerlas */
+static void zj_portada_leer(const char *t) { if (t && !s_nino) { const uint32_t ms = 3500u + (uint32_t)strlen(t) * 60u; if (ms > s_zj_port_ms) s_zj_port_ms = ms; } }
+static uint32_t s_zj_espera_hasta; /* (en lv_tick) */
 static float s_zj_dedo_x, s_zj_dedo_y;
 static float s_zj_x_[ZJ_N], s_zj_y_[ZJ_N], s_zj_v[ZJ_N], s_zj_f[ZJ_N], s_zj_g[ZJ_N];
 static int8_t s_zj_tipo[ZJ_N];
@@ -1085,6 +1094,7 @@ static void zj_toque_cb(lv_event_t *e)
     s_zj_toques++;
     s_zj_dedo = true; s_zj_dedo_x = (float)pt.x; s_zj_dedo_y = (float)pt.y;
     if (s_zj_fase == 0) { zj_empezar_juego(); return; }
+    if (s_zj_espera) { s_zj_espera = false; s_zj_dedo = false; if (s_zj_txt) ocultar(s_zj_txt, true); return; } /* (1.0.43) cierra las instrucciones: ahora sí empieza */
     if (s_zj_txt && !lv_obj_has_flag(s_zj_txt, LV_OBJ_FLAG_HIDDEN) && pt.y < 150) { ocultar(s_zj_txt, true); return; } /* tocar las instrucciones las cierra */
     switch (s_zj_jg) {
     case ZJ_NUBE: zs_toque(pt.x, pt.y); break;
@@ -1104,10 +1114,19 @@ static void zj_timer_cb(lv_timer_t *t)
     uint32_t d = s_zj_ult ? ahora - s_zj_ult : ZJ_MS;
     s_zj_ult = ahora;
     if (d > 120u) d = 120u; /* (tras una pausa larga no salta de golpe) */
+    if (s_zj_espera) { /* (1.0.43) las instrucciones del comienzo: el juego espera (su reloj no corre) */
+        if ((s_zj_txt && lv_obj_has_flag(s_zj_txt, LV_OBJ_FLAG_HIDDEN)) || (int32_t)(ahora - s_zj_espera_hasta) >= 0) {
+            s_zj_espera = false;
+            if (s_zj_txt) ocultar(s_zj_txt, true);
+        } else {
+            zj_mas_animar();
+            return;
+        }
+    }
     s_zj_t += d;
     const float dt = (float)d / 1000.0f;
     if (s_zj_txt && !lv_obj_has_flag(s_zj_txt, LV_OBJ_FLAG_HIDDEN) && (int32_t)(s_zj_t - s_zj_txt_hasta) > 0) ocultar(s_zj_txt, true);
-    if (s_zj_fase == 0) { if (s_zj_t > (s_zj_trampa ? 200u : 4500u)) zj_empezar_juego(); }
+    if (s_zj_fase == 0) { if (s_zj_t > (s_zj_trampa ? 200u : s_zj_port_ms)) zj_empezar_juego(); } /* (1.0.43: con reglas largas, más rato) */
     else {
         switch (s_zj_jg) {
         case ZJ_NUBE: zs_animar(dt); break;
@@ -1222,6 +1241,10 @@ static void zj_empezar_juego(void)
     }
     ocultar(s_zj_tit, true);
     lv_obj_move_foreground(s_zj_txt); lv_obj_move_foreground(s_zj_hud); lv_obj_move_foreground(s_zj_mas); lv_obj_move_foreground(s_zj_x);
+    /* (1.0.43) si el juego dejó instrucciones a la vista al empezar, espera a que se vayan (solas o tocándolas) */
+    /* (el faro, el buceo y el arcoíris ya esperan a su manera desde la 1.0.30/1.0.31/1.0.34: quietos hasta que se cierran o tocas) */
+    s_zj_espera = s_zj_txt && !lv_obj_has_flag(s_zj_txt, LV_OBJ_FLAG_HIDDEN) && !s_zj_trampa && !zi_es(s_zj_jg) && s_zj_jg != ZJ_ARCOIRIS;
+    if (s_zj_espera) s_zj_espera_hasta = lv_tick_get() + (s_zj_txt_hasta - s_zj_t);
     if (!zd_es(s_zj_jg)) zj_hud();
     accion(UI_ACCION_SONAR, SND_SILBATO);
 }
@@ -1233,7 +1256,7 @@ static void zj_abrir(int jg)
     if (s_zj_jg) zj_cerrar(false);
     static const int8_t PANT[6] = {-1, 11, 12, 8, 9, 10};
     s_zj_jg = jg;
-    s_zj_gano = false; s_zj_t = 1; s_zj_t0 = 0; s_zj_ult = 0; s_zj_paso = 0; s_zj_cuenta = 0; s_zj_fase = 0; s_zj_pts = 0; s_zj_ronda = 0; s_zj_combo = 0;
+    s_zj_gano = false; s_zj_espera = false; s_zj_port_ms = 4500u; s_zj_t = 1; s_zj_t0 = 0; s_zj_ult = 0; s_zj_paso = 0; s_zj_cuenta = 0; s_zj_fase = 0; s_zj_pts = 0; s_zj_ronda = 0; s_zj_combo = 0;
     s_zj_fin = NULL; s_zj_barra = s_zj_barra_f = NULL; s_zj_dedo = false; s_zj_dura = 0; s_zj_vidas = 0;
     memset(s_zj_chv, 0, sizeof s_zj_chv); memset(s_zj_f, 0, sizeof s_zj_f); memset(s_zj_g, 0, sizeof s_zj_g); memset(s_zj_v, 0, sizeof s_zj_v); memset(s_zj_tipo, 0, sizeof s_zj_tipo);
     zj_mundo_ver(false); /* el fondo del mundo o de la casita se suelta: hace lugar al del juego */

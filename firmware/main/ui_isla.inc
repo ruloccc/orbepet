@@ -124,7 +124,9 @@ static void zf_perder(int i, bool choque)
     s_zi_vidas--; s_zi_perdidos++; s_zi_triste = s_zj_t | 1u;
     zj_chispas(s_zf_x[i], s_zf_y[i], 10, 0xE8F4FF, 160.0f, 300.0f);
     accion(UI_ACCION_SONAR, choque ? SND_CHAPOTEO : SND_SUSPIRO);
-    zj_texto(choque ? "¡ENCALLÓ! HAY QUE ALUMBRARLO ANTES" : "SE PERDIÓ EN LA OSCURIDAD...", 1400);
+    /* (1.0.56, pedido del usuario) si choca con una roca o la orilla, además se pierde un punto */
+    if (choque && s_zj_pts > 0) { s_zj_pts--; zj_mas(-1, s_zf_x[i], s_zf_y[i] - 24.0f, 0xFF8A8A); }
+    zj_texto(choque ? "¡ENCALLÓ! PIERDES UN PUNTO" : "SE PERDIÓ EN LA OSCURIDAD...", 1400);
 }
 static void zf_animar(float dt)
 {
@@ -206,6 +208,16 @@ static void zf_animar(float dt)
             const float d = sqrtf(vx * vx + vy * vy), vmax = s_nino ? 200.0f : 240.0f;
             const float v = d < 1.5f ? 0.0f : (d * 7.0f < vmax ? d * 7.0f : vmax);
             vx = d > 0.1f ? vx / d * v : 0; vy = d > 0.1f ? vy / d * v : 0;
+            /* (1.0.57, pedido del usuario: «los barcos no pierden cuando chocan con las rocas») llevado RÁPIDO contra una roca
+             * o la orilla, encalla y se pierde (corazón y punto). Despacito se frena en la orilla como antes, y cerca del muelle
+             * nunca encalla (para poder dejarlo en la punta). */
+            const float mux = s_zf_x[i] - ZF_MX, muy = s_zf_y[i] - ZF_MY;
+            const bool junto_muelle = mux * mux + muy * muy < (ZF_MR * 1.8f) * (ZF_MR * 1.8f);
+            if (!zf_agua(s_zf_x[i] + vx * dt, s_zf_y[i] + vy * dt) && !junto_muelle && v > (s_nino ? 140.0f : 90.0f)) {
+                s_zf_pegado[i] = false;
+                zf_perder(i, true);
+                continue;
+            }
             /* pegado no encalla: si el paso lo lleva a tierra, se queda en la orilla (prueba a deslizarse por un lado) */
             if (!zf_agua(s_zf_x[i] + vx * dt, s_zf_y[i] + vy * dt)) {
                 if (zf_agua(s_zf_x[i] + vx * dt, s_zf_y[i])) vy = 0;
@@ -455,6 +467,7 @@ static void zi_portada(void)
         lv_obj_t *t = zj_texto_c(c, 0, s_zj_jg == ZJ_FARO ? "MUEVE LA LUZ CON EL DEDO. LOS BARQUITOS ILUMINADOS LA SIGUEN: LLÉVALOS AL ANILLO DEL MUELLE."
                                                     : "LLÉVALA CON EL DEDO A JUNTAR PERLAS Y CONCHAS. LAS MEDUSAS QUITAN AIRE; LAS BURBUJAS DAN AIRE.", 0xCFE8FF, 2, 296);
         lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 92);
+        { const char *r = zj_texto_c_ultimo; zj_portada_leer(r); } /* (1.0.43) */
         lv_obj_t *t2 = zj_texto_c(c, 1, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 280); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
     }
     s_zj_o[45] = c;

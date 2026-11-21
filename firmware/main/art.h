@@ -600,7 +600,11 @@ void art_lector(int (*leer)(const char *nombre, void *buf, int cap), int (*tam)(
 const lv_image_dsc_t *art_fondo_dos(int n, int *x, int *y);
 bool art_fondo_dos_hay(int n);
 void art_pantalla_en_uso_fn(bool (*fn)(int id)); /* (v97) la que está en pantalla no se suelta al hacer lugar */
-void art_fondos_soltar_otros(void); /* suelta los fondos de las otras horas del día (poca PSRAM) */
+uint32_t art_fondos_soltar_otros(void); /* suelta los fondos de las otras horas del día (poca PSRAM); (1.0.44) devuelve cuánto soltó */
+uint32_t art_fondos_bytes(int *cuantos); /* (1.0.44) cuánto ocupan los fondos guardados (y cuántos son) */
+uint32_t art_pantallas_bytes(int *cuantos); /* (1.0.51) las fotos de pantalla guardadas */
+void art_reg(const void *img, uint32_t bytes); /* (1.0.51) anota una imagen viva (0 = se soltó) */
+int art_mayores(char *b, int cap);            /* (1.0.51) «n imágenes: dir KB, …» las 8 más grandes */
 bool art_fondo_parcial(void); /* (101b) el fondo de ahora quedó sin adornos (sin memoria): devuelve true y lo deja para rehacer */
 void art_fondo_sin_lienzo(int on); /* (105) de prueba: hace como si no hubiera memoria para el lienzo entero (fondos por franjas) */
 int art_fondo_sin_lienzo_ver(void);

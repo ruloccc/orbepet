@@ -135,6 +135,16 @@ static void triangulo(lienzo_t *l, float x0, float y0, float x1, float y1, float
 }
 
 /* trazo grueso de puntos circulares a lo largo de un segmento */
+static void trazo(lienzo_t *l, float x0, float y0, float x1, float y1, float r, uint32_t c);
+/* (1.0.62) un arco de grosor g (grados, 0 = derecha, 90 = abajo) */
+static void arco(lienzo_t *l, float cx, float cy, float r, float a0, float a1, float g, uint32_t c)
+{
+    const int n = 40;
+    for (int i = 0; i <= n; i++) {
+        const float a = (a0 + (a1 - a0) * (float)i / n) * 3.14159265f / 180.0f;
+        circulo(l, cx + cosf(a) * r, cy + sinf(a) * r, g, c);
+    }
+}
 static void trazo(lienzo_t *l, float x0, float y0, float x1, float y1, float r, uint32_t c)
 {
     float d = hypotf(x1 - x0, y1 - y0);
@@ -166,8 +176,43 @@ static void contornear(lienzo_t *l, uint32_t borde)
  * ==================================================================== */
 
 uint32_t g_art_bytes; /* (v97) bytes de imágenes vivas (para medir qué panel se come la memoria) */
+/* (1.0.51) registro de las imágenes vivas: dónde está cada una (la dirección de su art_img_t, que con el .elf y `nm` dice
+ * su nombre: s_pez_cri_art, s_ptxt+…) y cuánto pesa. Solo para el informe: art_mayores() lista las más grandes. */
+#define ART_REG_N 320
+static EXT_RAM_BSS_ATTR struct { const void *img; uint32_t bytes; } s_reg[ART_REG_N];
+static uint32_t s_reg_fuera; /* bytes que no cupieron en la tabla */
+void art_reg(const void *img, uint32_t bytes)
+{
+    int libre = -1;
+    for (int i = 0; i < ART_REG_N; i++) {
+        if (s_reg[i].img == img) { if (bytes) s_reg[i].bytes = bytes; else s_reg[i].img = NULL, s_reg[i].bytes = 0; return; }
+        if (!s_reg[i].img && libre < 0) libre = i;
+    }
+    if (!bytes) return;
+    if (libre >= 0) { s_reg[libre].img = img; s_reg[libre].bytes = bytes; }
+    else s_reg_fuera += bytes;
+}
+/* «n imágenes; 0x3c0a1b20 856K, …» con las 8 más grandes (de mayor a menor) */
+int art_mayores(char *b, int cap)
+{
+    int idx[8], m = 0, n = 0;
+    for (int i = 0; i < ART_REG_N; i++) {
+        if (!s_reg[i].img) continue;
+        n++;
+        int j = m < 8 ? m++ : 8;
+        if (j == 8) { if (s_reg[i].bytes <= s_reg[idx[7]].bytes) continue; j = 7; }
+        while (j > 0 && s_reg[idx[j - 1]].bytes < s_reg[i].bytes) { idx[j] = idx[j - 1]; j--; }
+        idx[j] = i;
+    }
+    int k = snprintf(b, (size_t)cap, "%d imágenes", n);
+    if (s_reg_fuera) k += snprintf(b + k, (size_t)(cap - k > 0 ? cap - k : 0), " (+%u KB sin anotar)", (unsigned)(s_reg_fuera / 1024));
+    for (int q = 0; q < m && k < cap - 24; q++)
+        k += snprintf(b + k, (size_t)(cap - k), "%s%p %uK", q ? ", " : ": ", s_reg[idx[q]].img, (unsigned)(s_reg[idx[q]].bytes / 1024));
+    return k;
+}
 void art_img_free(art_img_t *img)
 {
+    art_reg(img, 0);
     if (img->px) {
         lv_image_cache_drop(&img->dsc);
         free(img->px);
@@ -185,6 +230,7 @@ static void img_preparar(art_img_t *img, int w, int h)
         img->px = malloc(n * 4);
         img->capacidad = img->px ? n : 0;
         g_art_bytes += img->capacidad * 4u;
+        art_reg(img, img->capacidad * 4u);
     }
     if (!img->px) return;
     memset(img->px, 0, n * 4);
@@ -212,6 +258,7 @@ static void ampliar_565(art_img_t *dst, const lienzo_t *src, int escala)
         dst->px = malloc((size_t)unid * 4u);
         dst->capacidad = dst->px ? unid : 0;
         g_art_bytes += dst->capacidad * 4u;
+        art_reg(dst, dst->capacidad * 4u);
     }
     if (!dst->px) { memset(&dst->dsc, 0, sizeof(dst->dsc)); return; }
     lv_image_cache_drop(&dst->dsc);
@@ -2312,12 +2359,30 @@ static void ico_dibujar(lienzo_t *l, art_icono_t i)
             circulo(l, 3.4f, 5.6f, 1.0f, A(0xF0506E)); circulo(l, 8.4f, 3.2f, 1.0f, A(0xF0506E)); circulo(l, 7.8f, 6.6f, 1.0f, A(0xF0506E));
         }
         break;
-    case ICO_REGADERA:
-        rect(l, 3, 5, 6, 5, A(0x6FB7FF)); rect(l, 3, 5, 6, 1, A(0x9ED8FF));
-        trazo(l, 8.5f, 7.5f, 11.0f, 3.5f, 0.6f, A(0x6FB7FF)); rect(l, 10, 2, 2, 2, A(0x3E8AD8));
-        trazo(l, 3.0f, 5.5f, 1.0f, 3.0f, 0.4f, A(0x3E8AD8)); trazo(l, 1.0f, 3.0f, 4.5f, 2.5f, 0.4f, A(0x3E8AD8));
-        lz_set(l, 11, 5, A(0x9ED8FF)); lz_set(l, 11, 7, A(0x9ED8FF));
+    case ICO_REGADERA: { /* (1.0.62) una regadera de verdad: tarro verde agua con asa atrás y arriba, pico largo, florcita y la
+                           * flor dorada con agujeritos en la punta (la boquilla queda en (11, 4)) */
+        const uint32_t O = A(0x2B6E66), B = A(0x4FB3A6), L = A(0x6CCABD);
+        arco(l, 1.55f, 8.0f, 1.55f, 95, 265, 0.42f, O);
+        arco(l, 4.7f, 6.0f, 2.1f, 195, 330, 0.42f, O);
+        trazo(l, 7.2f, 9.4f, 10.6f, 4.6f, 0.70f, O);
+        trazo(l, 7.2f, 9.2f, 10.4f, 4.6f, 0.48f, B);
+        elipse(l, 4.9f, 7.9f, 3.55f, 2.75f, O);
+        { const float k = KL(l); for (int Y = (int)floorf(5.7f * k); Y < (int)floorf(9.7f * k); Y++) for (int X = (int)floorf(1.4f * k); X < (int)floorf(8.4f * k); X++) lz_real(l, X, Y, O); }
+        elipse(l, 4.9f, 7.9f, 3.3f, 2.5f, B);
+        { const float k = KL(l); for (int Y = (int)floorf(5.9f * k); Y < (int)floorf(9.5f * k); Y++) for (int X = (int)floorf(1.7f * k); X < (int)floorf(8.1f * k); X++) lz_real(l, X, Y, X < (int)floorf(3.7f * k) ? L : B); }
+        elipse(l, 4.9f, 5.75f, 3.3f, 0.72f, O);
+        elipse(l, 4.9f, 5.7f, 2.9f, 0.45f, A(0x1C4E49));
+        elipse(l, 4.9f, 10.15f, 3.4f, 0.55f, O);
+        trazo(l, 2.2f, 6.6f, 2.2f, 9.2f, 0.3f, A(0xD2F6EF));
+        circulo(l, 2.2f, 6.4f, 0.3f, A(0xF2FFFC));
+        for (int a = 0; a < 360; a += 72) circulo(l, 5.6f + cosf((float)a * 0.0174533f) * 0.6f, 8.0f + sinf((float)a * 0.0174533f) * 0.6f, 0.4f, A(0xFF8FB8));
+        circulo(l, 5.6f, 8.0f, 0.34f, A(0xFFE27A));
+        elipse(l, 10.9f, 4.1f, 1.0f, 1.2f, A(0x8F6328));
+        elipse(l, 11.0f, 4.0f, 0.78f, 0.98f, A(0xE6B453));
+        static const float H[5][2] = {{0, -0.45f}, {0.32f, 0.05f}, {-0.28f, 0.2f}, {0.05f, 0.5f}, {0, 0}};
+        for (int h = 0; h < 5; h++) circulo(l, 11.0f + H[h][0], 4.0f + H[h][1], 0.11f, A(0x7A5420));
         break;
+    }
     case ICO_HOJAS:
         elipse(l, 6.0f, 8.4f, 5.6f, 3.2f, A(0xC1502E));
         elipse(l, 4.2f, 7.0f, 2.6f, 1.6f, A(0xE86A3A)); elipse(l, 8.0f, 7.4f, 2.6f, 1.6f, A(0xF2A33A));
@@ -3769,6 +3834,7 @@ static void img_preparar_a8(art_img_t *img, int w, int h)
         img->px = malloc((size_t)u32 * 4u);
         img->capacidad = img->px ? u32 : 0;
         g_art_bytes += img->capacidad * 4u;
+        art_reg(img, img->capacidad * 4u);
     }
     if (!img->px) return;
     memset(img->px, 0, n);
@@ -6402,22 +6468,33 @@ static const lv_image_dsc_t *fondo_listo(fondo_t *f, uint32_t decor, art_estacio
 }
 /* sin memoria para el fondo: suelta los fondos de las otras horas (se rehacen cuando haga falta) */
 static int s_fondo_ult, s_fondo_prev = -1; /* los dos últimos fondos pedidos: pueden estar en pantalla y NO se sueltan */
-static void fondo_soltar_otros(art_periodo_t periodo)
+static uint32_t fondo_soltar_otros(art_periodo_t periodo)
 {
+    uint32_t b = 0;
     /* v88: antes se soltaba todo menos el último pedido. Si una imagen de LVGL seguía mostrando otro (el de la escena anterior,
      * una transición), quedaba apuntando a memoria liberada y reusada: así aparecía el huerto nevado en el lago o desaparecía la casita. */
     for (int i = 0; i < PERIODO_COUNT; i++) {
         if (i == (int)periodo || i == s_fondo_ult || i == s_fondo_prev || !s_fondos[i].px) continue;
         lv_image_cache_drop(&s_fondos[i].dsc);
+        b += s_fondos[i].dsc.data_size ? s_fondos[i].dsc.data_size : (uint32_t)ART_PANTALLA * ART_PANTALLA * 2u;
         free(s_fondos[i].px);
         s_fondos[i].px = NULL;
         s_fondos[i].listo = false;
     }
+    return b;
 }
 
 /* (s_fondo_ult: el fondo que se pidió por última vez, el que se está viendo; s_fondo_prev: el anterior distinto) */
 /* poca PSRAM: cada hora del día guarda su fondo de 466×466 (≈ 434 KB cada una); se sueltan las de las otras horas */
-void art_fondos_soltar_otros(void) { fondo_soltar_otros((art_periodo_t)s_fondo_ult); }
+uint32_t art_fondos_soltar_otros(void) { return fondo_soltar_otros((art_periodo_t)s_fondo_ult); }
+/* (1.0.44) cuánto ocupan los fondos de las horas del día guardados (para el registro de la memoria) */
+uint32_t art_fondos_bytes(int *cuantos)
+{
+    uint32_t b = 0; int n = 0;
+    for (int i = 0; i < PERIODO_COUNT; i++) if (s_fondos[i].px) { b += s_fondos[i].dsc.data_size ? s_fondos[i].dsc.data_size : (uint32_t)ART_PANTALLA * ART_PANTALLA * 2u; n++; }
+    if (cuantos) *cuantos = n;
+    return b;
+}
 /* (101b) el fondo que se ve quedó sin adornos por falta de memoria: true una vez, y queda pedido rehacerlo en la próxima llamada a art_fondo */
 bool art_fondo_parcial(void)
 {
@@ -7739,17 +7816,21 @@ void art_cruce_fondo(art_img_t *dst, int periodo)
     if (np == 0 || np > 255) return;
     /* el búfer de la imagen (se reusa el de antes si alcanza: capacidad contada en pixeles de 4 bytes) */
     const uint32_t pix = (uint32_t)(MR * MR), u32 = (pix + 1) / 2;
-    if (u32 > dst->capacidad) {
+    if (dst->px == NULL || u32 > dst->capacidad) {
         if (dst->px) { lv_image_cache_drop(&dst->dsc); g_art_bytes -= dst->capacidad * 4u; }
         free(dst->px);
         dst->px = malloc((size_t)u32 * 4);
         dst->capacidad = dst->px ? u32 : 0;
         g_art_bytes += dst->capacidad * 4u;
+        art_reg(dst, dst->capacidad * 4u);
     }
     if (!dst->px) return;
-    uint8_t *idx = malloc((size_t)FD_LADO * FD_LADO);
-    if (!idx) { art_img_free(dst); return; }
-    if (!fd_lz(d + 1 + np * 3, d + n, idx, (uint32_t)FD_LADO * FD_LADO)) { free(idx); art_img_free(dst); return; }
+    /* (1.0.51) los índices (466×466) se descomprimen al FINAL del mismo búfer y se convierten hacia adelante: la fila que
+     * se escribe nunca alcanza a la que falta leer (comprobado fila por fila). Antes pedía otro bloque de 212 KB aparte:
+     * con la PSRAM partida (bloque mayor 280 KB en el informe #7) la pesca quedaba sin fondo. */
+    uint8_t *const base = (uint8_t *)dst->px;
+    uint8_t *idx = base + (size_t)pix * 2 - (size_t)FD_LADO * FD_LADO;
+    if (!fd_lz(d + 1 + np * 3, d + n, idx, (uint32_t)FD_LADO * FD_LADO)) { art_img_free(dst); return; }
     uint16_t pal[256];
     for (unsigned i = 0; i < np; i++) {
         const uint32_t c = fd_grad_color(A(((uint32_t)d[1 + i * 3] << 16) | ((uint32_t)d[2 + i * 3] << 8) | d[3 + i * 3]), per);
@@ -7764,7 +7845,6 @@ void art_cruce_fondo(art_img_t *dst, int periodo)
             o[Y * MR + X] = pal[fila[sx]];
         }
     }
-    free(idx);
     lv_image_cache_drop(&dst->dsc);
     memset(&dst->dsc, 0, sizeof(dst->dsc));
     dst->dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
@@ -7821,4 +7901,13 @@ void art_ballena(art_img_t *dst, int cuadro)
             if (v) dst->px[i] = A(((uint32_t)d[1 + (v - 1) * 3] << 16) | ((uint32_t)d[2 + (v - 1) * 3] << 8) | d[3 + (v - 1) * 3]);
         }
     free(idx);
+}
+
+/* (1.0.51) las fotos de pantalla guardadas (picnic, cuarto, juegos…): cuántas y cuánto pesan */
+uint32_t art_pantallas_bytes(int *cuantos)
+{
+    uint32_t b = 0; int n = 0;
+    for (int i = 0; i < PANT_MAX; i++) if (s_pant[i].px) { b += s_pant[i].dsc.data_size; n++; }
+    if (cuantos) *cuantos = n;
+    return b;
 }

@@ -590,6 +590,55 @@ class App(tk.Tk):
             pass
         return puerto
 
+    # (1.0.56, pedido del usuario) el orbe puede aparecer en otro puerto (al reiniciar, o al pasar a modo BOOT): si no está
+    # en el elegido, se busca solo en los demás antes de pedir BOOT, y después de BOOT se vuelven a mirar TODOS.
+    def puertos_candidatos(self, primero=None):
+        """El elegido primero, después los del orbe (Espressif, VID 303A); los demás puertos solo si no hay ninguno del orbe."""
+        try:
+            from serial.tools import list_ports
+            ps = list(list_ports.comports())
+        except Exception:
+            ps = []
+        esp = [p.device for p in ps if p.vid == 0x303A]
+        otros = [p.device for p in ps if p.vid != 0x303A]
+        orden = []
+        for d in ([primero] if primero else []) + esp + ([] if esp else otros):
+            if d and d not in orden:
+                orden.append(d)
+        return orden
+
+    def grabar_en_algun_puerto(self, preferido, esperar=0):
+        """Graba en el puerto preferido y, si no responde, en los otros. Con esperar > 0 sigue mirando la lista de puertos esos
+        segundos (el orbe puede tardar en aparecer). Devuelve el puerto donde grabó, o None."""
+        fin = time.time() + esperar
+        probados = set()
+        while True:
+            nuevos = [d for d in self.puertos_candidatos(preferido) if d not in probados]
+            for d in nuevos:
+                probados.add(d)
+                if d != preferido:
+                    print(f"\nNo estaba en {preferido}: probando en {d}…")
+                self.flash_grande = False
+                if probar.idf(["-p", d, "flash"], probar.FW):
+                    if d != preferido:
+                        print(f"El orbe estaba en {d}: queda elegido ese puerto.")
+                        self.cola.put(lambda d=d: self.puerto.set(d))
+                    return d
+            if time.time() >= fin:
+                return None
+            time.sleep(1.5)
+
+    def puerto_que_responde(self, preferido):
+        """Después de grabar, el orbe arranca y a veces cambia de puerto: el primero que contesta."""
+        if probar.placa_responde(preferido):
+            return preferido
+        for d in self.puertos_candidatos(preferido):
+            if d != preferido and probar.placa_responde(d, seg=5):
+                print(f"El orbe arrancó en {d}.")
+                self.cola.put(lambda d=d: self.puerto.set(d))
+                return d
+        return None
+
     def buscar_puertos(self):
         try:
             from serial.tools import list_ports
@@ -1145,6 +1194,7 @@ class App(tk.Tk):
             return
         self.escribir(f"Firmware elegido: {z}  ({time.strftime('%d-%m %H:%M', time.localtime(os.path.getmtime(z)))})\n")
         def f():
+            nonlocal puerto  # (1.0.56) puede cambiar: el orbe apareció en otro puerto
             probar.idf = lambda args, cwd: self.idf(args, cwd)
             probar.buscar_zip = lambda: z
             print("=== INSTALAR FIRMWARE NUEVO ===")
@@ -1166,38 +1216,44 @@ class App(tk.Tk):
             self.poner_etapa("Instalando en el dispositivo")
             self.poner_modo("Modo: INSTALANDO (la placa pasa sola a BOOT / CARGA)", "#b35900")
             print("\nInstalando (la placa se pone sola en modo descarga si el firmware está en marcha)…")
-            ok = probar.idf(["-p", puerto, "flash"], probar.FW)
-            if not ok:
-                # 2) se le pide por el puerto que se reinicie en modo descarga
+            usado = self.grabar_en_algun_puerto(puerto)  # (1.0.56) si no está en el elegido, se busca en los otros puertos
+            if not usado:
+                # 2) se le pide por el puerto que se reinicie en modo descarga (a cada puerto del orbe)
                 print("\nNo entró sola. Probando pedírselo por el puerto…")
-                if probar.pedir_descarga(puerto):
-                    print("Aceptó: reinicia en modo descarga.")
-                    self.poner_modo("Modo: BOOT / CARGA (instalando)", "#b35900")
-                    self.flash_grande = False
-                    ok = probar.idf(["-p", puerto, "flash"], probar.FW)
-            if not ok:
-                # 3) a mano
+                for d in self.puertos_candidatos(puerto):
+                    if probar.pedir_descarga(d):
+                        print(f"Aceptó ({d}): reinicia en modo descarga.")
+                        self.poner_modo("Modo: BOOT / CARGA (instalando)", "#b35900")
+                        usado = self.grabar_en_algun_puerto(d, esperar=10)  # (al reiniciar puede aparecer con otro número)
+                        break
+            if not usado:
+                # 3) a mano; después se vuelven a mirar TODOS los puertos (en BOOT suele cambiar de número)
                 print("\nNo se pudo automático.")
                 self.poner_etapa("Esperando que pongas la placa en modo descarga")
                 self.poner_modo("Modo: esperando que la pongas en BOOT a mano", "#b35900")
                 self.preguntar("Modo descarga", "Ahora pon la placa en modo descarga:\n\n1. Desconecta el USB.\n2. Mantén apretado el botón BOOT.\n"
                                "3. Conecta el USB sin soltar BOOT y suéltalo a los 2 segundos.\n\nLuego aprieta Aceptar.")
-                self.flash_grande = False
-                ok = probar.idf(["-p", puerto, "flash"], probar.FW)
-            if not ok:
-                print("\nNo se pudo grabar. Revisa el puerto (botón Buscar) y vuelve a intentar.")
+                print("Buscando el orbe en todos los puertos…")
+                usado = self.grabar_en_algun_puerto(puerto, esperar=15)
+            if not usado:
+                print("\nNo se pudo grabar: el orbe no apareció en ningún puerto. Revisa el cable y vuelve a intentar.")
                 return False
+            puerto = usado
             t_graba = time.time()
             self.poner_etapa("Esperando que la placa arranque")
             self.poner_modo("Modo: grabado; esperando que arranque", "gray")
-            if not probar.placa_responde(puerto):
+            p_ok = self.puerto_que_responde(puerto)
+            if not p_ok:
                 print("La placa no arrancó sola: se le ordena reiniciar (sin desconectar el cable)…")
                 self.poner_etapa("Reiniciando la placa")
                 self.reiniciar_normal(puerto)
-            if not probar.placa_responde(puerto):
+                p_ok = self.puerto_que_responde(puerto)
+            if not p_ok:
                 self.poner_etapa("Esperando que reconectes la placa")
                 self.preguntar("Casi listo", "Grabado, pero la placa no arrancó sola.\n\nDesconecta el USB, espera 5 segundos y vuélvelo a conectar SIN tocar botones.\n"
                                "Cuando aparezca el juego en la pantalla, aprieta Aceptar.")
+                p_ok = self.puerto_que_responde(puerto)
+            puerto = p_ok or puerto
             self.poner_etapa("Poniendo la hora y la fecha en la placa")
             probar.poner_hora(puerto)
             self.poner_etapa("Copiando los fondos de los juegos de a dos")

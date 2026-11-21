@@ -807,7 +807,7 @@ static void test_personalidad_y_memoria(void)
 
     /* un susto en las rocas: lo recuerda, y con el tiempo lo olvida */
     static pet_t q;
-    nueva(&q, 33, t); /* (v39: otra semilla: con otras, el azar nuevo la vuelve a asustar en las rocas) */
+    nueva(&q, 36, t); /* (v39: otra semilla: con otras, el azar nuevo la vuelve a asustar en las rocas; 1.0.38: la rana ya no está siempre en el lago y el azar cambió: de 33 a 36) */
     q.rasgo[TRAIT_TIMIDA] = 0.8f;
     q.lugar = LUGAR_ROCAS;
     pet_action(&q, ACT_SACUDIR, 0, t);
@@ -1928,7 +1928,19 @@ static void test_alarmas(void)
     CHECK(dv.brillo == PET_BRILLO_MIN, "el brillo nunca queda en negro");
     CHECK(pet_device_alarm_volume(&dv) == PET_ALARMA_VOLUMEN_MIN, "la alarma suena aunque el volumen esté en 0");
     dv.brillo = 100;
-    CHECK(pet_device_brightness(&dv, true, false) == 55 && pet_device_brightness(&dv, true, true) < 20, "la pecera y la noche bajan el brillo elegido");
+    CHECK(pet_device_brightness(&dv, true, false) == 100 && pet_device_brightness(&dv, true, true) < 35, "(1.0.41) la pecera de día con el brillo de siempre; de noche, bajo");
+    dv.brillo_pecera = 40;
+    CHECK(pet_device_brightness(&dv, true, false) == 40 && pet_device_brightness(&dv, false, false) == 100, "(1.0.41) la pecera con su propio brillo (lo de afuera no cambia)");
+    dv.brillo_pecera = 3; pet_device_fix(&dv);
+    CHECK(dv.brillo_pecera == PET_BRILLO_MIN, "(1.0.41) el de la pecera tampoco queda en negro");
+    { pet_device_t af; pet_device_defaults(&af); /* (1.0.53) la afinación de los cristales */
+      CHECK(af.version == 13 && af.afinacion[0] == 0 && af.afinacion[7] == 0, "(1.0.53) los cristales vienen con su nota de siempre");
+      af.afinacion[2] = 5; af.afinacion[3] = 40; pet_device_fix(&af);
+      CHECK(af.afinacion[2] == 5 && af.afinacion[3] == 0, "(1.0.53) la afinación se guarda y lo fuera de rango vuelve a 0");
+      af.version = 12; af.afinacion[2] = 7; pet_device_fix(&af);
+      CHECK(af.version == 13 && af.afinacion[2] == 0, "(1.0.53) del orbe de antes se pasa sin afinar"); }
+    { pet_device_t v11; pet_device_defaults(&v11); v11.version = 11; v11.brillo_pecera = 77; pet_device_fix(&v11);
+      CHECK(v11.version == PET_DEVICE_VERSION && v11.brillo_pecera == 0, "(1.0.41) un ajuste de la versión 11 queda con la pecera al brillo de siempre"); }
     memset(&dv, 0, sizeof dv);
     dv.version = 1; dv.volumen = 30; dv.brillo = 60; dv.apagado = 2;
     pet_device_fix(&dv);
@@ -3711,6 +3723,44 @@ static void test_historias_dia(void)
 }
 
 
+/* (1.0.36) el tronco del claro y los cachorros que Pochi ya presentó */
+static void test_1036_tronco_y_cachorros(void)
+{
+    printf("1.0.36: el tronco de las luciérnagas y los cachorros conocidos\n");
+    pet_t p;
+    nueva(&p, 36, T0);
+    uint32_t t = T0 + 20u * H;
+    pet_update(&p, t);
+    p.necesidad[NEED_SEGURIDAD] = 40; p.necesidad[NEED_ENERGIA] = 40;
+    CHECK(pet_firefly_watch(&p, true, t) == 2 && pet_need(&p, NEED_SEGURIDAD) > 50 && pet_need(&p, NEED_ENERGIA) > 42,
+          "(1.0.36) sentarse a mirar las luciérnagas la tranquiliza y la descansa");
+    const float seg = pet_need(&p, NEED_SEGURIDAD);
+    CHECK(pet_firefly_watch(&p, true, t + 60) == 1 && pet_need(&p, NEED_SEGURIDAD) == seg, "(1.0.36) otra vez enseguida no suma de nuevo");
+    CHECK(pet_firefly_watch(&p, false, t + 700) == 2, "(1.0.36) pasados 10 minutos, sí");
+    p.dormida = 1;
+    CHECK(pet_firefly_watch(&p, true, t + 2000) == 0, "(1.0.36) dormida no se sienta");
+    p.dormida = 0;
+    const float hig = pet_need(&p, NEED_HIGIENE), car = pet_need(&p, NEED_CARINO);
+    pet_pochi(&p, PET_POCHI_F_CONOCE + POCHI_RONY, t + 3000);
+    CHECK(pet_pochi_pup_met(&p, POCHI_RONY) && !pet_pochi_pup_met(&p, POCHI_CHAPI) && pet_need(&p, NEED_HIGIENE) == hig &&
+          pet_need(&p, NEED_CARINO) == car, "(1.0.36) al presentarlo queda conocido (sin cambiar nada más)");
+    pet_pochi(&p, PET_POCHI_F_FIN + PET_POCHI_ULT_NADA, t + 3100);
+    CHECK(pet_pochi_pup_met(&p, POCHI_RONY), "(1.0.36) y no se le olvida al terminar la visita");
+}
+
+/* (1.0.40) despertarla de la siesta (cinco toques): se levanta */
+static void test_1040_siesta(void)
+{
+    printf("1.0.40: despertarla de la siesta\n");
+    pet_t p;
+    nueva(&p, 40, T0);
+    uint32_t t = T0 + 14u * H;
+    pet_update(&p, t);
+    p.actividad = ACTV_SIESTA; p.actividad_hasta = t + 1800u;
+    pet_action(&p, ACT_DESPERTAR, 0, t + 10);
+    CHECK(!p.dormida && p.actividad != ACTV_SIESTA, "(1.0.40) cinco toques la sacan de la siesta");
+}
+
 static void test_caracter_planes(void)
 {
     /* manías: fijas por mascota, distintas entre mascotas */
@@ -4394,7 +4444,7 @@ static void test_p0_salto(void)
     for (unsigned c = 0; c < sizeof C / sizeof C[0]; c++) {
         double dif[NEED_COUNT] = {0};
         int bajo_sola = 0;
-        const int N = 30;
+        const int N = 60; /* (1.0.39: eran 30; sin la mariposa «siempre» hay más azar y con 30 el promedio rozaba el margen) */
         for (int s = 1; s <= N; s++) {
             uint32_t t = T0 + C[c].desde_h * H;
             nueva(&a, (uint32_t)s * 77u, t);
@@ -4555,7 +4605,7 @@ static void test_fw103_toques(void)
     pet_animal_call(&p, ANIMAL_ZORRILLO, t + 6u * H);
     pet_animal_touch(&p, ANIMAL_ZORRILLO, 4, t + 6u * H);
     CHECK(pet_stinky(&p), "la rociaron de nuevo");
-    pet_action(&p, ACT_BANAR, 0, t + 6u * H + 60);
+    if (pet_action(&p, ACT_BANAR, 0, t + 6u * H + 60) == -2) pet_action(&p, ACT_BANAR, 0, t + 6u * H + 90); /* (1.0.39) terca: se insiste y se baña */
     CHECK(!pet_stinky(&p) && pet_need(&p, NEED_HIGIENE) > 90, "el baño le quita el olor");
     /* la abeja pica, y le queda miedo */
     const float miedo0 = p.miedo_abejas;
@@ -4938,7 +4988,10 @@ static void test_fw104(void)
         }
         CHECK(veces >= 6 && veces <= 30, "(1.0.18) queda hedionda sola de vez en cuando (%d veces en %d días)", veces, dias);
         p.hediondo = 18;
-        CHECK(pet_air_out(&p, t) == 2 && p.hediondo == 9, "(1.0.18) el olor del zorrillo solo baja a la mitad");
+        CHECK(pet_air_out(&p, t) == 1 && !p.hediondo && !pet_stinky(&p), "(1.0.50) soplarle quita también el olor del zorrillo");
+        p.hediondo = 6;
+        { pet_t q = p; q.necesidad[NEED_HIGIENE] = 100; pet_action(&q, ACT_BANAR, 0, t + 5);
+          CHECK(!q.hediondo && !pet_stinky(&q), "(1.0.50) un baño le quita el olor aunque esté limpia"); }
         p.hediondo = 0;
         CHECK(pet_air_out(&p, t) == 0, "(1.0.18) sin olor no hay nada que espantar");
     }
@@ -5062,6 +5115,8 @@ int main(void)
     test_aspecto_y_ambiente();
     test_fotos_y_ambiente();
     test_caracter_planes();
+    test_1036_tronco_y_cachorros();
+    test_1040_siesta();
     printf("%d/%d comprobaciones OK\n", total - fallos, total);
     return fallos ? 1 : 0;
 }

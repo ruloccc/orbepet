@@ -60,17 +60,10 @@ CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
 CONFIG_LV_USE_SNAPSHOT=y
 CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 
-# Bluetooth LE solo para encontrar amigos cercanos (anunciar + escuchar, sin conexiones)
-CONFIG_BT_ENABLED=y
-CONFIG_BT_NIMBLE_ENABLED=y
-CONFIG_BT_CONTROLLER_ONLY=n
-CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y
-CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
-CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
-CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
-CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
-CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
-CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
+# (1.0.54, pedido del usuario) Bluetooth APAGADO del todo: el orbe no lo usa (MASCOTA_BLUETOOTH 0 en core/pet.h; radio.c
+# queda con funciones vacías). Así no se reserva su memoria ni ocupa espacio en el programa. Para volver a usarlo: poner aquí
+# CONFIG_BT_ENABLED=y, CONFIG_BT_NIMBLE_ENABLED=y, los roles BROADCASTER y OBSERVER, y MASCOTA_BLUETOOTH 1.
+CONFIG_BT_ENABLED=n
 
 # La tarea principal (la lógica del juego) en el núcleo 1: LVGL (siempre ocupada) está en el núcleo 0 y no la dejaba correr
 CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1=y
@@ -128,10 +121,7 @@ CONFIG_MBEDTLS_ECP_DP_BP256R1_ENABLED=n
 CONFIG_MBEDTLS_ECP_DP_BP384R1_ENABLED=n
 CONFIG_MBEDTLS_ECP_DP_BP512R1_ENABLED=n
 CONFIG_MBEDTLS_ECP_DP_CURVE25519_ENABLED=y
-# (1.0.09) más recortes para caber: el Bluetooth solo anuncia y escucha (sin conexiones ni seguridad ni BLE 5),
-# y la conexión segura solo como cliente con intercambio de claves moderno (ECDHE)
-CONFIG_BT_NIMBLE_SECURITY_ENABLE=n
-CONFIG_BT_NIMBLE_50_FEATURE_SUPPORT=n
+# (1.0.09) más recortes para caber: la conexión segura solo como cliente con intercambio de claves moderno (ECDHE)
 CONFIG_ESP_ERR_TO_NAME_LOOKUP=n
 CONFIG_MBEDTLS_KEY_EXCHANGE_RSA=n
 CONFIG_MBEDTLS_KEY_EXCHANGE_DHE_RSA=n

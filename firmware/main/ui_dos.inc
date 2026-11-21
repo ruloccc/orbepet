@@ -336,6 +336,10 @@ static int8_t s_zm_par[ZM_MAX], s_zm_est[ZM_MAX]; /* est: 0 boca abajo, 1 dada v
 static uint8_t s_zm_sabe[ZM_MAX];                /* la visita se acuerda de esta carta */
 static int s_zm_n, s_zm_filas, s_zm_turno, s_zm_a, s_zm_b2;
 static uint32_t s_zm_hasta, s_zm_pensar;
+/* (1.0.43, pedido del usuario) al empezar se muestran todas las cartas un momento (0 = falta mostrarlas, 1 = se están
+ * viendo hasta s_zm_vista_hasta, 2 = ya se jugó) */
+static int s_zm_vista;
+static uint32_t s_zm_vista_hasta;
 static void zm_pos(int i, float *x, float *y)
 {
     const int f = i / 4, c = i % 4;
@@ -382,8 +386,9 @@ static void zm_empezar(void)
         zm_pintar(i);
     }
     s_zm_turno = (int)(azar() % 2); s_zm_a = s_zm_b2 = -1; s_zm_hasta = 0; s_zm_pensar = s_zj_t + 1200u;
-    zj_texto(s_zm_turno ? "EMPIEZA LA VISITA. CUANDO TE TOQUE, DA VUELTA DOS CARTAS" : "¡EMPIEZAS TÚ! TOCA DOS CARTAS: SI SON IGUALES, SON TUYAS", 3000);
-    if (!s_zm_turno) { float x, y; zm_pos(5, &x, &y); zd_mano(ICO_MANO, x, y, 4500u); }
+    s_zm_vista = 0; s_zm_vista_hasta = 0;
+    /* (1.0.43) las instrucciones detienen el juego hasta que se van o las tocas; después se ven todas las cartas */
+    zj_texto("FÍJATE BIEN: PRIMERO SE VEN TODAS LAS CARTAS UN MOMENTO. DESPUÉS, POR TURNOS, CADA UNA DA VUELTA DOS", 4500);
 }
 static void zm_dar_vuelta(int i)
 {
@@ -401,7 +406,7 @@ static int zm_bajo(int x, int y)
 }
 static void zm_toque(int x, int y)
 {
-    if (s_zj_fase != 1 || s_zm_turno != 0 || s_zm_hasta) return;
+    if (s_zj_fase != 1 || s_zm_turno != 0 || s_zm_hasta || s_zm_vista < 2) return; /* (1.0.43: no mientras se ven todas) */
     zd_mano_fuera();
     zm_dar_vuelta(zm_bajo(x, y));
 }
@@ -432,6 +437,26 @@ static void zm_animar(float dt)
         const float salto = juega ? fabsf(sinf((float)s_zj_t / 180.0f)) * 6.0f : 0.0f;
         zd_poner(q, juega ? 1 : 0, 2, q == 1, CX + (q ? 118.0f : -118.0f), 82.0f - salto);
     }
+    if (s_zm_vista < 2) { /* (1.0.43) todas las cartas a la vista un momento y después boca abajo */
+        if (s_zm_vista == 0) {
+            s_zm_vista = 1;
+            s_zm_vista_hasta = s_zj_t + (s_nino ? 3200u : (s_suave ? 2600u : 2000u));
+            for (int i = 0; i < s_zm_n; i++) { s_zm_est[i] = 1; zm_pintar(i); }
+            accion(UI_ACCION_SONAR, SND_PLOP);
+            return;
+        }
+        if ((int32_t)(s_zj_t - s_zm_vista_hasta) < 0) return;
+        s_zm_vista = 2;
+        for (int i = 0; i < s_zm_n; i++) {
+            s_zm_est[i] = 0; zm_pintar(i);
+            if (azar01() < (s_nino ? 0.15f : 0.3f)) s_zm_sabe[i] = 1; /* la visita también miró (y se acuerda de algunas) */
+        }
+        accion(UI_ACCION_SONAR, SND_PLOP);
+        s_zm_pensar = s_zj_t + 900u;
+        zj_texto(s_zm_turno ? "EMPIEZA LA VISITA" : "¡EMPIEZAS TÚ! DA VUELTA DOS CARTAS", 1500);
+        if (!s_zm_turno) { float x, y; zm_pos(5, &x, &y); zd_mano(ICO_MANO, x, y, 4500u); }
+        return;
+    }
     if (s_zm_hasta) {
         if ((int32_t)(s_zj_t - s_zm_hasta) < 0) return;
         s_zm_hasta = 0;
@@ -439,10 +464,13 @@ static void zm_animar(float dt)
         s_zm_a = s_zm_b2 = -1;
         if (a < 0 || b < 0) return;
         float x, y; zm_pos(b, &x, &y);
-        if (s_zm_par[a] == s_zm_par[b]) {
+        const bool par = s_zm_par[a] == s_zm_par[b];
+        if (par) {
             s_zm_est[a] = s_zm_est[b] = (int8_t)(2 + s_zm_turno);
             zd_punto(s_zm_turno, x, y);
             if (s_zm_turno == 0) zj_chispas(x, y, 6, 0xFFE27A, 160.0f, 260.0f);
+            s_zm_turno = 1 - s_zm_turno; /* (1.0.43, pedido del usuario) siempre por turnos: con par también le toca al otro */
+            zj_texto(s_zm_turno ? "¡PAR! AHORA LE TOCA A LA VISITA" : "LA VISITA HIZO PAR. ¡TE TOCA!", 1500);
         } else {
             s_zm_est[a] = s_zm_est[b] = 0;
             if (azar01() < (s_nino ? 0.5f : 0.85f)) s_zm_sabe[a] = 1; /* la visita mira y (casi siempre) se acuerda */
@@ -745,9 +773,10 @@ static void zd_portada(void)
         static const char *const REGLA[4] = {
             "ARRASTRA EL DEDO A LOS LADOS PARA MOVER SU PALETA (ABAJO). NO DEJES PASAR LA PELOTA. GANA EL PRIMERO EN LLEGAR A 5.",
             "TOCA MUY RÁPIDO PARA TIRAR. CUANDO LA VISITA SE CANSE (GOTITA), ¡CON TODO! LLEVA LA CINTA A TU BANDERA AMARILLA.",
-            "TOCA DOS CARTAS. SI SON IGUALES SON TUYAS Y SIGUES; SI NO, LE TOCA A LA VISITA. GANA QUIEN JUNTE MÁS PARES.",
+            "PRIMERO SE VEN TODAS LAS CARTAS UN MOMENTO: ¡MÍRALAS BIEN! DESPUÉS, POR TURNOS, DA VUELTA DOS. GANA QUIEN JUNTE MÁS PARES.",
             "POR TURNOS: TOCA EL ANILLO DONDE CREES QUE SE ESCONDIÓ LA VISITA. DESPUÉS ELIGES DÓNDE SE ESCONDE ELLA."};
         lv_obj_t *t = zj_texto_c(c, 0, REGLA[zd_n() & 3], 0xCFE8FF, 2, 296); lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 92);
+        zj_portada_leer(REGLA[zd_n() & 3]); /* (1.0.43) */
         lv_obj_t *t2 = zj_texto_c(c, 1, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 280); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
     }
     s_zj_o[45] = c;

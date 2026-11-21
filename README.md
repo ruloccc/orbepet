@@ -807,6 +807,327 @@ En el orbe:
 ## 5. Estado
 
 
+## Versión 1.0.65 — la regadera de verdad (GRABAR CON CABLE, como la 1.0.64)
+
+- **Ahora sí se ve la regadera nueva.** En la 1.0.62 cambié el dibujo de art.c, pero el orbe usa la versión en alta
+  definición de iconos_hd.inc, que tiene prioridad: seguía saliendo la azul de antes. La nueva (verde agua, asas, pico largo,
+  florcita y la flor dorada) quedó en esa tabla (herramientas/iconos_nuevos/regadera48.py la genera). La lluvia de gotitas
+  de la 1.0.62 ya estaba y ahora sale justo de esa flor.
+- Trae todo lo de la 1.0.62 a la 1.0.64 (registro en su partición, botón de las notas en la cueva).
+
+## Versión 1.0.64 — registro sin trabas (GRABAR CON CABLE)
+
+- **Hay que instalarla con el cable** (el botón Instalar del programa): trae una tabla de particiones nueva. Nada de lo
+  que ya está se mueve: la partida, los perfiles, los recursos y las fotos quedan donde estaban. Por Wi-Fi también
+  funciona, pero sigue guardando el registro como antes (con las trabas) hasta que se grabe una vez con cable.
+- El registro y los eventos raros se guardan en su propia partición de 128 KB (en un hueco que estaba libre), escritos
+  en crudo como un anillo, sin SPIFFS. En el informe #11 cada escritura del registro trababa todo entre 1,6 y 1,9 s cada
+  6-7 minutos, fuera del tamaño que fuera, con la memoria de recursos usada solo al 12 %. Ahora cada escritura son unos
+  milisegundos, más ~45 ms cada 4 KB de registro. Al primer arranque pasa lo que había en los archivos viejos y los
+  borra. Como ya no traba, el registro se guarda también con la pantalla encendida (antes se perdía lo más viejo).
+- La cámara sigue fuera del Cofre (queda para más adelante), pero ya pide menos memoria para cuando vuelva: antes pedía
+  849 KB seguidos solo para comprimir la foto y fallaba diciendo «NO QUEDA LUGAR», aunque la memoria de fotos estaba vacía.
+
+## Versión 1.0.63 — cristales como antes
+
+- En la cueva (modo libre), mantener apretado el botón de las notas musicales devuelve los ocho cristales a su nota de
+  siempre: se encienden todos juntos y suena el primero. Un toque corto sigue prendiendo y apagando el modo afinar.
+
+## Versión 1.0.62 — la regadera linda
+
+- La regadera tiene dibujo nuevo: una regadera verde agua de verdad, con su cuerpo redondo, el asa de atrás y la de arriba,
+  el pico largo y la flor dorada con agujeritos (y una florcita pintada en el costado).
+- Al regar, el agua sale de la flor como una lluvia fina: gotitas alargadas en abanico que caen con gravedad sobre la planta
+  y hacen «plic» al tocar la tierra (antes eran salpicones sueltos que saltaban hacia arriba).
+
+## Versión 1.0.61 — notas a tiempo
+
+- **Las notas de los cristales ya no se atrasan en el juego de la cueva.** Cuando sonaba otra cosa que no era una nota (un
+  efecto, o un sonido de ella desde afuera), la tarea del sonido se quedaba fabricándolo —a veces segundos— y las notas que
+  tocabas esperaban en fila (un informe mostró 3,8 s de demora). Ahora los efectos se fabrican aparte y las notas suenan al
+  tiro. Además, mientras estás en la cueva, el mundo de afuera no suena.
+- **Afinar los cristales, fácil de encontrar.** En «Tocar libre» hay un botón con una nota musical a la izquierda de la X:
+  lo prendes, tocas un cristal y con las flechas le cambias la nota (medio tono cada vez; tocar el nombre la deja como
+  siempre). Se apaga tocándolo otra vez. Mantener apretado un cristal sigue funcionando.
+- **El mantel del picnic con visita queda quieto** donde se juntan (antes se corría siguiendo a tu mascota), es un poco más
+  chico y se ve nítido (antes era un dibujo chico agrandado, borroso).
+- **En la boca de la cueva brillan cristalitos** (tres, adentro, en el piso) en vez de estrellas.
+
+## Versión 1.0.60 — despertar suave
+
+- **Al encender o despertar ya no hay golpe de luz blanca.** La pantalla arranca apagada y en negro mientras se arma el
+  juego (antes se veía blanca al 100 % unos 3 segundos), y cuando el mundo está listo el brillo sube suave desde negro en
+  medio segundo, hasta el que corresponde a la hora (de noche, bajito). Si el orbe despierta para seguir dormido (fin de un
+  paseo, una alarma que viene), la pantalla ni se enciende. Los avisos de error siguen apareciendo, ya con el juego listo.
+- El modo Wi-Fi (actualizar, enviar informe) se ve de inmediato como siempre.
+
+## Versión 1.0.59 — silencio con la pantalla apagada
+
+- **Con la pantalla apagada ya no suena nada (salvo las alarmas).** El informe #10 mostró sonidos que se escapaban igual
+  («Algo mágico», «Tesoro», «Bostezo», «Alegre»): venían por otros caminos (la interfaz, un aviso del motor). Cada uno abría
+  el parlante y la placa no podía dormir por 15 segundos, aunque el volumen estuviera en cero. Ahora se cortan todos en un
+  solo lugar.
+- **El informe dice cuánto ocupa la memoria de archivos.** En cada arranque queda un evento «almacenamiento» con lo usado
+  de recursos y fotos, y los 6 archivos más grandes. En el informe #10 una escritura del registro tardó 16 segundos y la
+  placa quedó trabada 48 segundos (con la pantalla apagada): eso pasa cuando esa memoria está casi llena. Con este dato se
+  decide qué limpiar.
+
+## Versión 1.0.58 — el cuentapasos
+
+- **Nuevo en Más: el cuentapasos** (botón con la huellita, aparece cuando ya hay pasos). Muestra los pasos de hoy en grande,
+  una barrita por cada día de la semana (de hace 6 días a hoy, con la inicial del día; hoy en amarillo), los de la semana
+  y los que han caminado juntos desde siempre. En modo infante, solo la huellita y las barritas.
+- Al volver de caminar sigue saliendo el aviso «¡CAMINAMOS 2.340 PASOS!» con los de hoy y la semana (desde la 1.0.25), y
+  ahora también cuando el paseo fue en el modo paseo (procesador dormido).
+- Los pasos de la semana se leen ya al arrancar (antes recién al primer minuto).
+
+## Versión 1.0.57 — el faro de verdad
+
+- **El faro: el barquito que llevas con la luz también puede chocar.** Antes, el que iba pegado a la luz se frenaba solo
+  en las rocas y la orilla, así que nunca se perdía. Ahora, si lo llevas rápido contra una roca o la orilla, encalla: se
+  pierde un corazón y un punto. Despacito se frena como antes (para poder rodear la isla con cuidado), y cerca del muelle
+  nunca encalla (para dejarlo en la punta).
+
+## Versión 1.0.56 — cuidado con las rocas
+
+- **El faro: si un barquito choca con una roca (o con la orilla), se pierde un punto.** Además del corazón, se resta un
+  punto (sale un «-1» rojo donde encalló y dice «¡ENCALLÓ! PIERDES UN PUNTO»). Los puntos no bajan de cero. Los barquitos
+  pegados a la luz siguen sin poder encallar: chocan los que quedan a oscuras.
+- **Instalador del PC (`herramientas/mascota_gui.py`): busca el orbe en todos los puertos.** Si no está en el puerto
+  elegido, prueba solo en los otros (primero los del orbe) antes de pedir el modo BOOT; cuando le dices que ya está en
+  BOOT, vuelve a mirar todos los puertos (en BOOT suele cambiar de número), y después de grabar busca en qué puerto
+  arrancó. Hay que copiar este archivo nuevo al PC.
+
+## Versión 1.0.55 — luces que se apagan
+
+Arreglos sacados del informe #8 (con la 1.0.51):
+- **Batería con la pantalla apagada (24 % por hora).** Con la pantalla apagada ella seguía tarareando y cantando cada 2
+  segundos: el parlante nunca se cerraba y la placa no podía entrar en sueño ligero. Ahora, con la pantalla apagada, ella
+  y el mundo no suenan (las alarmas sí). Si un aviso enciende la pantalla, suena su sonido.
+- **Memoria: las luces que nunca se soltaban.** Lo más grande que quedaba guardado eran luces: las 4 de los hongos del
+  juego de la memoria (88 KB cada una) y la de la celebración de la pesca (225 KB): casi 600 KB que se pedían una vez y
+  no se soltaban nunca. Ahora se hacen al empezar y se sueltan al terminar.
+- La tabla que mide las imágenes ahora alcanza para más (320).
+- (1.0.55b) Arreglo de la compilación: con el Bluetooth apagado, `firmware/CMakeLists.txt` le ponía opciones a un
+  componente vacío y CMake se detenía. Ahora salta los componentes sin código.
+
+## Versión 1.0.54 — paseo dormido
+
+- **Bluetooth apagado del todo.** El orbe ya no lo usaba (la radio nunca se encendía), pero el programa lo traía igual y
+  le reservaba memoria. Ahora no se compila: más memoria libre y más espacio en el programa.
+- **Modo paseo: el procesador duerme mientras caminas.** Si llevas 2 minutos caminando con la pantalla apagada (hace más
+  de 1 minuto, sin cable, sin sonido, sin alarma ni menú abierto), el orbe guarda todo y se duerme profundo. El contador de
+  pasos del sensor de movimiento sigue encendido (casi no gasta), así que no se pierde ningún paso.
+  - Cada 5 segundos despierta un instante (sin arrancar el juego) para mirar el botón, el cable y la hora de las alarmas,
+    y anota si seguiste caminando.
+  - Arranca el juego con BOOT o PWR (la pantalla se enciende y te saluda «¡HOLA! ¡VOLVISTE!»; con PWR puede tardar unos
+    segundos), al enchufarlo, 1 minuto antes de una alarma, a las 4 horas, o cuando llevas 3 minutos sin caminar.
+  - Al volver, los pasos que contó el sensor se suman a ella, a la semana y al paseo en curso: el paseo cuenta como
+    excursión igual que antes, y se ve el aviso de los pasos al encender la pantalla.
+  - Si arrancó porque dejaste de caminar o por una alarma, la pantalla sigue apagada (la alarma la enciende al sonar).
+- Al compilar en el PC por primera vez con esta versión, borra `firmware/sdkconfig` (o `idf.py fullclean`) para que tome
+  el Bluetooth apagado.
+
+## Versión 1.0.53 — cristales afinados
+
+- **Los dos cristales de las orillas quedaron junto a los demás.** Estaban pintados en el borde de la cueva, lejos; se
+  movieron en el dibujo (se borraron con su halo, rellenando con la pared de alrededor, y se pintaron de nuevo al lado de
+  los cristales chicos, con un halo nuevo). Su zona para tocarlos y su luz se movieron con ellos.
+- **Suenan como los otros.** Eran un bajo redondo y una campanita; ahora tienen el mismo sonido de cristal: sol grave (el
+  celeste, a la izquierda) y re alto (el morado, a la derecha). Con los seis del centro forman una escala que combina.
+- **Cada cristal se puede afinar.** En «Tocar libre», mantén apretado un cristal: aparece su nota con dos flechas para
+  subirla o bajarla de a medio tono (hasta una octava). Tocar el nombre lo deja con su nota de siempre. Se cierra solo.
+  La afinación queda guardada en el orbe y vale en todo el juego de los cristales (también cuando ella repite lo que
+  tocaste). Ojo: las canciones guardadas en el cuaderno suenan con la afinación que esté puesta.
+
+## Versión 1.0.52 — cada animal con su nombre
+
+- **Al asustar a un animal, ella nombra a ESE animal.** El aviso de «se asustó» era siempre el del conejo con los truenos
+  («¡EL CONEJO SALIÓ CORRIENDO!»), aunque fuera el quique, el zorro o cualquier otro que se cansó de que lo tocaran. Ahora
+  dice, por ejemplo, «¡EL QUIQUE SALIÓ CORRIENDO!» o «¡UPS! LAS HORMIGAS SE ASUSTARON Y SE FUERON», con el dibujo de ese
+  animal. Lo de los truenos queda solo para el conejo cuando hay tormenta.
+
+## Versión 1.0.51 — medir antes de cambiar
+
+- **La pesca (y el viaje en bote) piden la mitad de memoria seguida.** El lago se armaba con dos pedazos de memoria a la
+  vez (428 KB + 212 KB). Ahora los índices se descomprimen dentro del mismo búfer de la imagen y se convierten hacia
+  adelante: un solo pedazo de 428 KB. Comprobado aquí: la imagen sale igual punto por punto.
+- **Sin trabones del micrófono.** El paso del micrófono esperaba en cada vuelta a que la pantalla terminara de dibujar
+  (hasta 435 ms en el informe #7). Ahora usa lo que se preguntó en el último segundo.
+- **El informe dice dónde está la memoria.** Cada media hora, en calma, además de la limpieza de rutina queda un evento
+  «memoria: detalle» con las fotos de pantalla guardadas, el vidrio de los menús y las 8 imágenes más grandes que hay
+  vivas (con su dirección, que con el programa compilado dice cuál es). Con eso se decide qué arreglar, sin adivinar.
+
+## Versión 1.0.50 — sin mal olor
+
+- **Hedionda, siempre se le puede quitar el olor soplando o bañándola.**
+  - El botón del baño ahora aparece también cuando anda hedionda (antes salía solo si estaba sucia, y el olor «suelto»
+    no la ensucia: no había cómo bañarla).
+  - Soplarle quita cualquier olor, también el del zorrillo (antes ese solo bajaba a la mitad y había que soplar muchas
+    veces). Con dos soplidos se le va (cada soplido espanta cuatro vahos; con el dedo siguen siendo ocho).
+  - Al rociarla el zorrillo, y cuando queda hedionda sola, dice «SÓPLAME, ESPANTA LOS VAHOS CON EL DEDO O BÁÑAME».
+
+## Versión 1.0.49 — lo nuevo se encuentra
+
+- **«¡Algo nuevo en el baúl!» sin nada nuevo a la vista.** Pasaba con la ropa del cuello (pañuelo, bufanda de seda,
+  collar de conchas): hace tiempo se dejó de dibujar porque tapaba el cuerpo, y en Accesorios solo salen sombreros,
+  cosas de la cara y de la mano. Pero el juego igual las seguía entregando y anunciando. Ahora lo del cuello ya no se
+  anuncia, y tampoco se lo «prueba» a escondidas.
+- **Cuando sí llega algo nuevo, se sabe dónde está:** dice «¡ROPA NUEVA! ESTÁ EN COFRE, ACCESORIOS» (o «UN JUGUETE
+  NUEVO») y una estrellita marca el camino: el «+» de abajo, el Cofre en Más, el botón ACCESORIOS, la pestaña (ropa o
+  juguetes) y la ficha de lo nuevo. Al abrir esa pestaña queda visto. (Si el orbe se reinicia antes, la marca se pierde.)
+
+## Versión 1.0.48 — lluvia sin rayas
+
+- **Con lluvia ya no deberían quedar rayas oscuras junto a los botones de abajo.** La pantalla se dibuja de a franjas, y
+  cada franja se partía en dos pedazos que dibujaban los dos núcleos a la vez. Para eso LVGL pide un poquito de memoria
+  en cada franja; si en ese momento no había, la franja no se dibujaba y se mandaba a la pantalla igual, con lo que
+  quedaba de antes: esas rayas. La lluvia lo hace más probable porque son muchas zonitas que se redibujan en cada
+  cuadro. Ahora cada franja se dibuja entera, sin partirla (como en el simulador, donde nunca aparecieron). Los dos
+  núcleos siguen dibujando, pero sin partir la misma franja.
+
+## Versión 1.0.47 — se lee lo que falta
+
+- **Rincón (casita, banco, farol…): el aviso de lo que falta se lee entero.** Antes salía bajo las fichas, casi fuera de
+  la tarjeta: se cortaba y, si tocabas la casita y después otra cosa, los dos textos quedaban uno encima del otro. Ahora
+  es un solo cartel oscuro con borde, en medio de las fichas, con el texto centrado en varias líneas (por ejemplo «TE
+  FALTAN 3 RAMITAS Y 3 DE MUSGO. BÚSCALOS EN EL BOSQUE»). Se cierra solo a los 4,5 s o al tocarlo; tocar otra ficha lo
+  cambia. Dice «TE FALTA 1 SEMILLA» en singular cuando es una.
+- Lo mismo en la comida de temporada (dónde se encuentra la que no tienes).
+
+## Versión 1.0.46 — cada una en su mundo
+
+- **La mascota que llamas desde Perfiles aparece en su propio mundo.** Antes, al traer a otra (por ejemplo a Nabota), se
+  quedaba en la zona donde estaba la anterior, o caminaba desde ahí hasta la suya, mostrando zonas que ella quizás no ha
+  descubierto. Ahora, al cambiar, una pantalla oscura con «LLAMANDO A …» tapa todo; detrás se arma su mundo de cero (su
+  zona, su lugar, su jardín, sus adornos y, si duerme con casita, adentro de la casita) y recién entonces se destapa con un
+  fundido. La pantalla de espera no deja pasar toques al mundo de abajo.
+
+## Versión 1.0.45 — cambio sin trabas
+
+- **Cambiar de mascota en Perfiles ya no congela la pantalla ~8 segundos.** El cambio son varias escrituras en la flash
+  (anotar el cambio con las dos mascotas, guardar la de ahora en su lugar de perfiles, la partida dos veces y borrar la
+  nota). Antes se hacían todas seguidas y la pantalla quedaba pegada. Ahora las dos grandes las hace una tarea aparte: la
+  pantalla sigue dibujando entre una escritura y otra, y aparece «LLAMANDO A …» hasta que llega la otra mascota. Lo seguro
+  es igual que antes: el mismo orden y, si se corta a medias, al arrancar se termina o se deshace el cambio. Mientras dura
+  no se puede hacer otro cambio en Perfiles.
+
+## Versión 1.0.44 — sin congelones
+
+- **El micrófono solo se abre para soplar:** se quitó «escuchar música» (estaba en el menú rápido y en Sonido, y si se
+  activaba el micrófono escuchaba todo el rato con la pantalla prendida). Ahora queda apagado siempre y se abre solo
+  mientras algo espera un soplido. En el menú rápido quedan PECERA, ALARMAS y ARRULLO.
+- **Sin congelones al guardar el registro:** escribir en la memoria flash detiene todo el orbe unos 2 segundos (aunque
+  lo haga una tarea aparte). Con la pantalla encendida ya no se escribe el registro: espera y se guarda al apagarse la
+  pantalla (si la pantalla lleva más de 30 minutos encendida, como en la pecera, se guarda como mucho una vez cada 30
+  minutos). Al reiniciar o mandar un informe se guarda al instante, como siempre.
+- **Memoria:** la limpieza de cada 10 minutos ahora suelta también los fondos de otras horas del día (cada uno ocupa
+  ~434 KB y se iban juntando de la mañana a la noche; los dos últimos no se tocan). Y anota qué queda ocupado (fondos,
+  dibujos y cantidad de objetos), para que el próximo informe muestre dónde se va la memoria con las horas.
+
+## Versión 1.0.43 — primero las reglas
+
+- **Los juegos empiezan cuando se van las instrucciones:** mientras están en pantalla el juego espera (no corre el
+  tiempo, no caen cosas, no se mueve nada). Empieza cuando desaparecen solas o cuando las tocas (ese toque cierra las
+  instrucciones y no cuenta como jugada). Vale para los juegos de las zonas (galletas, canción de cuna, salto al cielo,
+  atrapa hojas, piedra tibia), los de a dos (ping pong, tira y afloja, memorice, escondidas), los honguitos, las frutas
+  y los cristales. El faro, el buceo y el arcoíris ya esperaban así.
+- **Las portadas con reglas largas** (los de a dos, la isla, el arcoíris) se quedan lo que toma leerlas antes de empezar
+  solas (antes, 4,5 segundos siempre). Tocarlas empieza al tiro, como antes.
+- **Memorice:**
+  - **Siempre por turnos:** aunque encuentres un par, después le toca a la visita (y al revés).
+  - **Al empezar se ven todas las cartas un momento** (2 segundos; más en modo suave e infante) y después se dan vuelta.
+    La visita también mira y se acuerda de algunas.
+- **Las frutas** ya no avisan con un globo que salía al terminar el juego: las instrucciones van en el juego.
+
+## Versión 1.0.42 — el mundo en pausa
+
+- **Jugando, el mundo se detiene de verdad:** en los juegos de pantalla aparte (los de las zonas, la isla, el arcoíris y
+  los de a dos) ya se paraban el cielo, los animales y las luces, pero ella seguía moviéndose detrás y se la oía (por
+  ejemplo, chapoteando en un charco mientras jugabas al arcoíris). Ahora ella también queda quieta y en silencio hasta
+  que vuelves; al volver da un saltito y sigue. Los sonidos del juego suenan igual.
+
+## Versión 1.0.41 — la pecera con luz
+
+- **El brillo en la pecera se cambia deslizando el dedo:** hacia arriba más brillo, hacia abajo menos. Mientras deslizas
+  aparece a la derecha una barrita con un solcito; al soltar, se guarda. Es el brillo de la pecera: el del juego normal
+  no cambia. Al entrar a la pecera la barrita se ve un momento, para que se sepa que está ahí. Un toque normal no cambia
+  nada.
+- **De día la pecera ya no se oscurece:** antes usaba solo el 55 % del brillo elegido y al aire libre casi no se veía.
+  Ahora usa el mismo brillo de siempre (o el que le pongas deslizando). De noche (22:00 a 7:00) sigue más bajita.
+
+## Versión 1.0.40 — shh, está durmiendo
+
+- **Dormida no hace nada:** si duerme (de noche o porque le apagaste la luz) o está echada en su siesta, tocar cosas del
+  mundo ya no la pone a hacer nada ni a decir nada: ni plantar («no tenemos esa semilla»), ni chapotear, ni ir a la
+  casita, ni el bote, ni los juguetes, ni los animales, ni los lugares del claro y el mirador, ni el arcoíris o la isla.
+  Donde tocas sale una zeta y, como mucho cada 30 segundos, el aviso de cómo despertarla.
+- **Para despertarla:** tocarla varias veces seguidas (ahora también la saca de la siesta: se levanta y se queda
+  contigo un rato) o el botón de la luz en Más.
+- En la siesta, como dormida, abajo queda solo el botón «+».
+- Lo que es tuyo sigue igual aunque duerma: recoger una caca, guardar un juguete (manteniendo), espantar al zorro,
+  reventar burbujas, leer una carta o una visita de Pochi.
+
+## Versión 1.0.39 — cada bichito a su turno
+
+- **Las mariposas tenían el mismo error que la rana:** en primavera y verano, sobre todo en el prado o con flores,
+  venían «más de una vez por hora» y el cálculo lo convertía en «siempre». Con la abeja pasaba lo mismo con tres flores
+  o más. Ahora:
+  - **Mariposa:** más o menos una vez cada dos o tres horas en primavera y verano (un poco más con flores, con tope).
+  - **Abeja:** con tope, aunque haya muchas flores.
+  - **Pájaro:** algo menos seguido que antes (en el prado estaba casi siempre).
+  - **Se turnan:** si ya hay alguien de visita (un animal del bosque o del lago, u otro bichito), los demás vienen
+    menos, así cada uno tiene su momento. La rana también entra en este turno.
+
+## Versión 1.0.38 — la rana descansa
+
+- **La rana ya no vive en el lago:** venía «1,2 veces por hora», y el cálculo lo convertía en «siempre» (apenas se
+  iba, volvía). Ahora viene más o menos una vez cada hora y media a dos horas, y si hay otro animal de visita en el lago
+  (el pato, la nutria, la garza, el cisne…) viene mucho menos: le deja el protagonismo.
+- **La siesta, menos de golpe:** después de jugar ya no se echa a dormir si no está cansada (antes bastaba con tener
+  la energía bajo 85; ahora bajo 60). Al echarse bosteza, y al levantarse se estira con un saltito.
+- **Nada de textos atrasados al cerrar:** lo que se pide decir mientras está abierto comer, un juego o un menú ya no
+  sale después de cerrarlo (como «LLÉVASELA A LA BOCA» al terminar de comer). Solo se guarda lo que un botón dice justo
+  al cerrar el menú.
+
+## Versión 1.0.37 — cada flecha a su lugar
+
+- **La flecha de volver lleva siempre a la pantalla de donde viniste.** Había un error de fondo: cada panel le agregaba
+  su «volver» a la flecha y, al abrir otro panel, el anterior no se le quitaba; al tocarla corrían todos juntos. Por eso
+  desde la enciclopedia del Cofre se iba a Configuración (la vuelta de un panel de ajustes abierto antes). Ahora cada
+  panel deja la flecha limpia.
+- Se revisaron todas las flechas (35 lugares). Además se arregló adónde vuelven:
+  - **SU DÍA A DÍA** (en la enciclopedia) vuelve a la enciclopedia, no al Cofre.
+  - **Las alarmas** abiertas desde el menú rápido (deslizar hacia abajo) vuelven a ese menú.
+  - **El sonido** abierto desde la pecera vuelve a la pecera.
+  - **El ritmo del juego**, cuando aparece solo la primera vez, se cierra con la flecha (antes llevaba a Pantalla).
+- **Flechas nuevas** donde se entraba desde otro menú y solo había X: el Cofre, el Mapa y Amigos (vuelven a Más);
+  Accesorios y Cartas (vuelven al Cofre); la fecha y hora, Perfiles, Respaldo y Crecer (vuelven a su menú de
+  Configuración). En Perfiles, desde una pregunta («¿un huevo nuevo?», «¿se va de viaje?») la flecha vuelve a la lista.
+- **La X y la flecha se tocan más fácil:** son un poco más grandes y su zona de toque es más ancha y baja hasta el
+  borde, pero nunca sube sobre lo del panel, y entre dos botones vecinos cada toque va al que está más cerca. En el
+  editor de una alarma, el botón de borrar ya no queda encima de la X.
+- **Sin cámara:** se quitó del Cofre (no quedaba lugar para fotos). El álbum de FOTOS sigue.
+- **Dormir de día:** apagarle la luz de día ya no oscurece la pantalla ni baja el brillo, y no dice «BUENAS NOCHES»:
+  se duerme (salen unas zetas). De 18:00 a 7:00 sigue como siempre.
+
+## Versión 1.0.36 — luciérnagas en el tronco
+
+- **El tronco del claro del Rey Peumo, más arriba:** antes estaba justo encima del botón de jugar y al tocarlo se
+  apretaba el botón. Ahora está más arriba y un poco a la derecha (en las cuatro estaciones).
+- **El tronco sirve para lo que dice:** al tocarlo ella va, se sienta encima y las luciérnagas vienen a bailarle en
+  ronda alrededor de la cabeza (de noche todas; de día, cinco). Se queda unos 9 segundos, suelta un corazoncito y la
+  deja más tranquila y descansada (una vez cada 10 minutos). El letrero «UN TRONCO PARA SENTARSE A MIRAR LAS
+  LUCIÉRNAGAS» sale solo la primera vez del día.
+- **En la poza del rey se baña:** al tocar el agua salta adentro, chapotea, se baña (queda limpia, igual que con la
+  ducha) y sale de un salto sacudiéndose. «LA POZA DEL REY: EL AGUA ESTÁ FRESQUITA» sale una vez al día. Congelada no
+  se mete (el aviso, también una vez al día).
+- **Pochi ya no presenta de nuevo a un cachorro que conoces.** Antes el cachorro quedaba «conocido» recién al terminar
+  su momento contigo; si la visita no llegaba hasta ahí, la vez siguiente te lo volvía a presentar. Ahora queda
+  conocido apenas te lo presenta, y cuando vuelve te cuenta a qué vino: «¡RONY TE QUISO TRAER UNA TAPITA!» (y la cosa
+  que trae es la misma que después te regala), «¡PASITA TE QUISO BUSCAR UNA FLORCITA!», «¡CHAPI TE QUISO VENIR A DAR
+  UN ABRAZO!»… La cosita de Rony que antes se llamaba «CHAPITA» ahora es «TAPITA», como la de Pochi.
+
 ## Versión 1.0.35 — alarmas en la pecera
 
 - **El botón «+» se ve siempre que ella duerme**, también adentro de la casita (antes, durmiendo en la casita no había

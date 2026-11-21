@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "main.c" "services.c" "ui.c" "art.c" "radio.c" "ota.c"
     INCLUDE_DIRS "."
-    REQUIRES core waveshare__esp32_s3_touch_amoled_1_75c bt nvs_flash esp_driver_gpio esp_driver_i2c esp_driver_tsens esp_driver_usb_serial_jtag esp_timer spiffs espcoredump esp_pm
+    REQUIRES core waveshare__esp32_s3_touch_amoled_1_75c bt nvs_flash esp_driver_gpio esp_driver_i2c esp_driver_tsens esp_driver_usb_serial_jtag esp_timer spiffs esp_partition espcoredump esp_pm
              esp_wifi esp_netif esp_event esp_http_server esp_http_client esp_https_ota app_update mbedtls
 )
 

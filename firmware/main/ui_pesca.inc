@@ -64,6 +64,8 @@ static void pez_cerrar(void)
     art_img_free(&s_pez_fondo_art); /* el paisaje pesa (~430 KB): se suelta al salir */
     for (int f = 0; f < 2; f++) art_img_free(&s_pez_cri_art[f]);
     art_img_free(&s_pez_bote_art);
+    if (s_pez_cel_luz) lv_image_set_src(s_pez_cel_luz, NULL);
+    art_img_free(&s_pez_cel_luz_art); /* (1.0.55) la luz de la celebración (225 KB): el informe #8 la mostró guardada siempre */
 }
 
 /* lo que pidió hacer ya se hizo (sacudir, soplar o tocar) */
@@ -234,7 +236,7 @@ static void crear_celebracion(void)
     lv_obj_add_event_cb(s_pez_cel, pez_cel_cb, LV_EVENT_CLICKED, NULL);
     s_pez_cel_luz = lv_image_create(s_pez_cel);
     lv_obj_remove_flag(s_pez_cel_luz, LV_OBJ_FLAG_CLICKABLE);
-    { const lv_image_dsc_t *lz = luz_suave(&s_pez_cel_luz_art, 0xFFE27A, 240, 420.0f); if (lz) lv_image_set_src(s_pez_cel_luz, lz); }
+    /* (1.0.55) la luz (225 KB) se hace al mostrar la celebración y se suelta al cerrar la pesca */
     lv_obj_set_pos(s_pez_cel_luz, CX - 120, 205 - 120);
     s_pez_cel_ico = lv_image_create(s_pez_cel);
     lv_obj_remove_flag(s_pez_cel_ico, LV_OBJ_FLAG_CLICKABLE);
@@ -270,6 +272,7 @@ static void pez_celebrar(art_icono_t ico, const char *nombre)
     lv_image_set_src(s_pez_cel_t, art_icono(ICO_MANO, 2));
     lv_obj_align(s_pez_cel_t, LV_ALIGN_TOP_MID, 0, 352);
     for (int i = 0; i < 16; i++) { s_pez_conf_x[i] = (float)(60 + azar() % 346); s_pez_conf_y[i] = -(float)(azar() % 200); s_pez_conf_v[i] = 2.0f + (float)(azar() % 30) / 10.0f; }
+    { const lv_image_dsc_t *lz = luz_suave(&s_pez_cel_luz_art, 0xFFE27A, 240, 420.0f); if (lz) lv_image_set_src(s_pez_cel_luz, lz); } /* (1.0.55) */
     ocultar(s_pez_cel, false);
     lv_obj_move_foreground(s_pez_cel);
     s_pez_cel_t0 = s_ms;
@@ -303,7 +306,7 @@ static void pez_empezar(const pet_t *m)
 #endif
     s_pez_hielo = lago_congelado(m);
     art_cruce_estacion(s_pez_hielo ? 3 : (int)pet_season(m, s_ultimo_t)); /* (3: el lago helado) */
-    hacer_lugar("la pesca", 700u); /* (1.0.31) el lago pide ~428 KB + 212 KB seguidos: sin ellos quedaba todo celeste (foto del 19-nov) */
+    hacer_lugar("la pesca", 460u); /* (1.0.51) ahora pide un solo bloque de ~428 KB (los índices van dentro) */ /* (1.0.31) el lago pide ~428 KB + 212 KB seguidos: sin ellos quedaba todo celeste (foto del 19-nov) */
     art_cruce_fondo(&s_pez_fondo_art, (int)periodo_de(m, s_ultimo_t));
     if (!s_pez_fondo_art.px && hacer_lugar("la pesca (2.º intento)", 0u)) art_cruce_fondo(&s_pez_fondo_art, (int)periodo_de(m, s_ultimo_t));
     ocultar(s_pez_bote, s_pez_hielo); ocultar(s_pez_hoyo, !s_pez_hielo); ocultar(s_pez_banco, !s_pez_hielo);

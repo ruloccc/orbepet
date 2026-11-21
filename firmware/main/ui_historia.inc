@@ -25,7 +25,7 @@ static const int16_t TI_PERCHAS[ESC_COUNT][3][2] = {
     {{132, 128}, {322, 222}, {250, 300}}, /* colina: el árbol rosado, la roca, el sendero */
     {{233, 233}, {233, 233}, {233, 233}}, /* cueva (no entra) */
     {{296, 96}, {392, 214}, {226, 300}},  /* isla: el cerezo, el faro, el pasto */
-    {{204, 50}, {96, 170}, {244, 372}},   /* (v98) claro del rey: el techo de la casa, el cerquito del huerto, el tronco caído */
+    {{204, 50}, {96, 170}, {250, 324}},   /* (v98) claro del rey: el techo de la casa, el cerquito del huerto, el tronco caído (1.0.36: más arriba) */
     {{295, 134}, {222, 104}, {164, 218}}, /* (v98) mirador: la apacheta, la roca del cóndor, la piedra tibia */
 };
 static void ti_toque_cb(lv_event_t *e)

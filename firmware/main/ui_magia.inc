@@ -129,8 +129,15 @@ static int s_rg_fase = 0, s_rg_i;
 static bool s_rg_cita;
 static void cita_riego_aplicar(void); /* más abajo */
 static void cita_riego_fin(void);
-#define RG_TIPX 27   /* la boquilla, ya inclinada, queda a la derecha y un poco abajo del centro */
-#define RG_TIPY 12
+#define RG_TIPX 30   /* (1.0.62) la flor de la regadera, ya inclinada (55°), queda a la derecha y abajo del centro */
+#define RG_TIPY 15
+/* (1.0.62) la lluvia de la regadera: gotitas alargadas que salen de la flor en abanico, caen con gravedad y salpican en la
+ * tierra (antes eran salpicones sueltos que saltaban hacia arriba desde la boquilla) */
+#define RG_GOTAS 22
+static lv_obj_t *s_rg_gt[RG_GOTAS];
+static float s_rg_gx[RG_GOTAS], s_rg_gy[RG_GOTAS], s_rg_gvx[RG_GOTAS], s_rg_gvy[RG_GOTAS];
+static bool s_rg_gviva[RG_GOTAS];
+static void rg_gotas_crear(void);
 #define RG_ROT 550   /* 55° hacia delante: la boquilla apunta abajo */
 static uint32_t s_rg_t0, s_rg_gota;
 static float s_rg_ax, s_rg_ay, s_rg_px, s_rg_py;
@@ -145,6 +152,7 @@ static void regadera_empezar(int i, int px, int py)
         lv_obj_set_style_transform_pivot_x(s_rg_img, lv_pct(50), 0);
         lv_obj_set_style_transform_pivot_y(s_rg_img, lv_pct(50), 0);
     }
+    rg_gotas_crear(); /* (1.0.62) */
     s_rg_fase = 1; s_rg_i = i; s_rg_t0 = s_ms; s_rg_gota = 0;
     s_rg_ax = s_mascota.x + (px < (int)s_mascota.x ? -26.0f : 26.0f); s_rg_ay = s_mascota.y - 26.0f;
     s_rg_px = (float)(px - RG_TIPX); s_rg_py = (float)(py - 46 - RG_TIPY); /* la boquilla queda sobre la planta */
@@ -152,6 +160,63 @@ static void regadera_empezar(int i, int px, int py)
     lv_obj_move_foreground(s_rg_img);
     mascota_modo(M_LIBRE, 100);
 }
+static void rg_gotas_crear(void)
+{
+    if (s_rg_gt[0]) return;
+    for (int i = 0; i < RG_GOTAS; i++) {
+        lv_obj_t *g = lv_obj_create(s_mundo);
+        lv_obj_remove_style_all(g);
+        lv_obj_set_size(g, 3, 7);
+        lv_obj_set_style_radius(g, 2, 0);
+        lv_obj_set_style_bg_color(g, lv_color_hex(i % 3 ? 0x9FDcFF : 0xE4F6FF), 0);
+        lv_obj_set_style_bg_opa(g, LV_OPA_90, 0);
+        lv_obj_remove_flag(g, LV_OBJ_FLAG_CLICKABLE);
+        ocultar(g, true);
+        s_rg_gt[i] = g;
+    }
+}
+/* la flor (boquilla) y hacia dónde apunta el pico, con la regadera girada rot décimas de grado */
+static void rg_punta(int rot, float cx, float cy, float *tx, float *ty, float *dx, float *dy)
+{
+    const float a = (float)rot * 0.1f * 3.14159265f / 180.0f, c = cosf(a), s = sinf(a);
+    const float vx = 25.0f, vy = -10.0f;          /* la flor, desde el centro del dibujo (60 px: escala 5) */
+    const float ux = 0.578f, uy = -0.816f;        /* el pico, sin girar */
+    *tx = cx + vx * c - vy * s; *ty = cy + vx * s + vy * c;
+    *dx = ux * c - uy * s; *dy = ux * s + uy * c;
+}
+static void rg_gotas_animar(bool echar, int rot, float cx, float cy)
+{
+    if (!s_rg_gt[0]) return;
+    const float suelo = s_rg_py + 46.0f + RG_TIPY - 2.0f; /* la tierra de la planta */
+    if (echar) {
+        float tx, ty, dx, dy;
+        rg_punta(rot, cx, cy, &tx, &ty, &dx, &dy);
+        for (int n = 0, i = 0; i < RG_GOTAS && n < 2; i++) {
+            if (s_rg_gviva[i]) continue;
+            const float abre = (azar01() - 0.5f) * 1.1f; /* abanico: cada agujerito tira para un lado */
+            s_rg_gx[i] = tx + (azar01() - 0.5f) * 6.0f; s_rg_gy[i] = ty + (azar01() - 0.5f) * 4.0f;
+            s_rg_gvx[i] = (dx + abre * -dy) * 1.3f; s_rg_gvy[i] = (dy + abre * dx) * 1.3f + 0.6f; /* la flor la deja caer, no la dispara */
+            s_rg_gviva[i] = true;
+            lv_obj_set_style_bg_opa(s_rg_gt[i], LV_OPA_90, 0);
+            ocultar(s_rg_gt[i], false);
+            lv_obj_move_foreground(s_rg_gt[i]);
+            n++;
+        }
+    }
+    for (int i = 0; i < RG_GOTAS; i++) {
+        if (!s_rg_gviva[i]) continue;
+        s_rg_gvy[i] += 0.55f; /* gravedad */
+        s_rg_gx[i] += s_rg_gvx[i]; s_rg_gy[i] += s_rg_gvy[i];
+        if (s_rg_gy[i] >= suelo) {
+            s_rg_gviva[i] = false;
+            ocultar(s_rg_gt[i], true);
+            if (azar() % 3 == 0) particula((int)s_rg_gx[i], (int)suelo - 2, 0xBFE8FF, 0, (azar01() - 0.5f) * 3, -1.5f - azar01() * 1.5f, 2, 0); /* plic */
+            continue;
+        }
+        lv_obj_set_pos(s_rg_gt[i], (int)s_rg_gx[i] - 1, (int)s_rg_gy[i] - 3);
+    }
+}
+static void rg_gotas_fin(void) { for (int i = 0; i < RG_GOTAS; i++) { s_rg_gviva[i] = false; if (s_rg_gt[i]) ocultar(s_rg_gt[i], true); } }
 static void regadera_animar(void)
 {
     if (!s_rg_fase) return;
@@ -166,12 +231,9 @@ static void regadera_animar(void)
         float k = (float)(t - 300) / 400.0f; if (k > 1) k = 1;
         rot = (int)(k * RG_ROT) + (t > 700 ? (int)(sinf((float)t / 70.0f) * 15.0f) : 0);
         if (s_rg_fase == 1 && t >= 500) { s_rg_fase = 2; if (s_rg_cita) cita_riego_aplicar(); else accion(ACT_REGAR, s_rg_i); }
-        if (t >= 500 && t < 1700 && s_ms - s_rg_gota > 90) {
-            s_rg_gota = s_ms;
-            salpicar((int)s_rg_px + RG_TIPX - 4 + (int)(azar() % 9), (int)s_rg_py + RG_TIPY + 6 + (int)(azar() % 30), 0x7CC8FF); /* cae desde la boquilla */
-        }
         if (t >= 1700) { opa = (int)(255.0f * (float)(2000 - t) / 300.0f); rot = RG_ROT; }
-    } else { s_rg_fase = 0; lv_obj_set_style_opa(s_rg_img, 255, 0); ocultar(s_rg_img, true); if (s_rg_cita) cita_riego_fin(); return; }
+        rg_gotas_animar(t >= 520 && t < 1650, rot, x, y); /* (1.0.62) la lluvia de la flor */
+    } else { s_rg_fase = 0; rg_gotas_fin(); lv_obj_set_style_opa(s_rg_img, 255, 0); ocultar(s_rg_img, true); if (s_rg_cita) cita_riego_fin(); return; }
     lv_obj_set_style_opa(s_rg_img, (lv_opa_t)(opa < 0 ? 0 : opa > 255 ? 255 : opa), 0);
     int w = lv_obj_get_width(s_rg_img), h = lv_obj_get_height(s_rg_img);
     lv_obj_set_pos(s_rg_img, (int)x - w / 2, (int)y - h / 2);
@@ -367,6 +429,7 @@ static void criatura_cb(lv_event_t *e)
 {
     (void)e;
     if (!s_pet || s_cita_on) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     if (pet_creature_waiting(s_pet, s_ultimo_t)) { cita_empezar(pet_creature_invite(s_pet)); return; }
     accion(UI_ACCION_CRIATURA, 0);
     for (int k = 0; k < 3; k++) flotar(ICO_CORAZON, NULL, 0, (int)s_cri_x - 20 + k * 20, (int)s_cri_y - 50, (uint32_t)k * 150);
@@ -1398,6 +1461,7 @@ static void anillo_cb(lv_event_t *e)
 {
     (void)e;
     if (!s_pet || s_anillo_baile || s_cita_on) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     if (pet_special_ready(s_pet, ESP_ANILLO, s_ultimo_t)) {
         s_anillo_baile = s_ms;
         s_mascota.tx = ANILLO_X; s_mascota.ty = ANILLO_Y + 6;
@@ -1481,6 +1545,7 @@ static void reflejo_cb(lv_event_t *e)
 {
     int i = (int)(intptr_t)lv_event_get_user_data(e);
     if (!s_pet || s_panel != PANEL_NINGUNO) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     int k = ref_cual(i);
     accion(UI_ACCION_ESPECIAL, ESP_REFLEJO | k << 4);
     accion(UI_ACCION_SONAR, SND_HADAS);
@@ -1711,6 +1776,7 @@ static void cristal_cb(lv_event_t *e)
 {
     int k = (int)(intptr_t)lv_event_get_user_data(e);
     if (!s_pet) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     static uint32_t efecto_ms;
     const bool seguido = s_ms - efecto_ms < 260; /* tocando rápido, los efectos se saltan: cada onda y cada chispa son objetos nuevos y todo se pegaba */
     s_cris_toque[k] = s_ms;
@@ -2148,7 +2214,7 @@ static int s_sim_fase, s_sim_ronda, s_sim_paso, s_sim_largo, s_sim_ganadas, s_si
 static uint8_t s_sim_seq[8];
 static uint32_t s_sim_t0, s_sim_luz_k[CRIS_TOT];
 static const int16_t SIM_POS[CRIS_TOT][3] = { /* x, y (la base) y escala: tres grandes al centro, tres chicos alrededor; (v39) los dos de las orillas, pintados en el fondo */
-    {148, 362, 6}, {233, 376, 7}, {318, 362, 6}, {108, 300, 4}, {233, 298, 4}, {358, 300, 4}, {38, 226, 4}, {430, 216, 4}};
+    {148, 362, 6}, {233, 376, 7}, {318, 362, 6}, {108, 300, 4}, {233, 298, 4}, {358, 300, 4}, {58, 290, 4}, {410, 290, 4}}; /* (1.0.53) las orillas, más cerca de los demás (se movieron en el dibujo de la cueva) */
 static const uint32_t SIM_COLOR[CRIS_TOT] = {0x5AA8FF, 0x6ADC8A, 0xFF8FC0, 0xFFD45C, 0xB48AF0, 0xF4F4FF, 0x8FF0F0, 0xC88AF8};
 static sound_t snd_cristal(int k) { return k >= SIM_CRIS ? (sound_t)(SND_CRISTAL_CELESTE + (k - SIM_CRIS) % 2) : (sound_t)(SND_CRISTAL_AZUL + k % SIM_CRIS); }
 /* tres canciones (propias), una por ronda: qué cristal suena en cada pulso */
@@ -2164,7 +2230,163 @@ static void sim_texto(const char *t)
     lv_obj_align(s_sim_t, LV_ALIGN_TOP_MID, 0, s_sim_fase >= SIM_DRAGON ? 208 : 66); /* con el dragón, justo debajo de él */
     ocultar(s_sim_t, false);
 }
-static void sim_encender(int k) { if ((unsigned)k < CRIS_TOT) { s_sim_luz_k[k] = s_ms; accion(UI_ACCION_SONAR, snd_cristal(k)); } }
+/* (1.0.43) las instrucciones del comienzo: la melodía empieza cuando se van o las tocas */
+static bool s_sim_inst;
+static void sim_inst_fin(void) { if (!s_sim_inst) return; s_sim_inst = false; s_sim_t0 = s_ms + 300; sim_texto("MIRA Y ESCUCHA..."); }
+/* (1.0.53) cada cristal se puede afinar (en el modo libre, manteniéndolo apretado): semitonos sobre su nota de siempre.
+ * Se guarda en el orbe (pet_device_t.afinacion) y vale en todo el juego de los cristales. */
+static int8_t s_afin[CRIS_TOT];
+static bool s_sim_libre; /* (declarada más abajo; aquí para el afinador) */
+static const uint8_t CRIS_MIDI[CRIS_TOT] = {72, 76, 79, 84, 74, 81, 67, 86}; /* do, mi, sol, do alto, re, la; sol grave y re alto (orillas) */
+static int cris_son(int k) /* el argumento de UI_ACCION_SONAR para el cristal k, con su afinación */
+{
+    int a = (int)snd_cristal(k);
+    const int st = (unsigned)k < CRIS_TOT ? s_afin[k] : 0;
+    if (st) a |= 0x10000 | (((st + 32) & 0x3F) << 17);
+    return a;
+}
+static const char *cris_nota_nombre(int k)
+{
+    static const char *const NOM[12] = {"DO", "DO#", "RE", "RE#", "MI", "FA", "FA#", "SOL", "SOL#", "LA", "LA#", "SI"};
+    const int m = (unsigned)k < CRIS_TOT ? CRIS_MIDI[k] + s_afin[k] : 60;
+    return NOM[((m % 12) + 12) % 12];
+}
+static void sim_encender(int k) { if ((unsigned)k < CRIS_TOT) { s_sim_luz_k[k] = s_ms; accion(UI_ACCION_SONAR, cris_son(k)); } }
+/* el afinador: [▼] NOTA [▲] sobre el cristal; tocar el nombre lo deja como siempre; se cierra solo a los 5 s */
+static lv_obj_t *s_afin_caja, *s_afin_txt, *s_afin_b[2];
+static art_img_t s_afin_art;
+static int s_afin_k = -1;
+static uint32_t s_afin_ult;
+static void afin_pintar(void)
+{
+    if (s_afin_k < 0) return;
+    char t[24];
+    const int st = s_afin[s_afin_k];
+    if (st) snprintf(t, sizeof t, "%s %+d", cris_nota_nombre(s_afin_k), st);
+    else snprintf(t, sizeof t, "%s", cris_nota_nombre(s_afin_k));
+    art_texto_centrado(&s_afin_art, t, st ? 0xFFE27A : C_BLANCO, 2, 90);
+    poner_src(s_afin_txt, &s_afin_art.dsc);
+    lv_obj_center(s_afin_txt);
+}
+static void afin_cerrar(void) { s_afin_k = -1; if (s_afin_caja) ocultar(s_afin_caja, true); }
+static void afin_cambiar(int k, int st)
+{
+    if (st < -12) st = -12;
+    if (st > 12) st = 12;
+    s_afin[k] = (int8_t)st;
+    accion(UI_ACCION_AFINAR, k | ((st + 64) & 0xFF) << 8);
+    sim_encender(k);
+    s_afin_ult = s_ms;
+    afin_pintar();
+}
+static void afin_cb(lv_event_t *e)
+{
+    const int q = (int)(intptr_t)lv_event_get_user_data(e);
+    if (s_afin_k < 0) return;
+    if (q == 2) afin_cambiar(s_afin_k, 0); /* el nombre: la de siempre */
+    else afin_cambiar(s_afin_k, s_afin[s_afin_k] + (q ? 1 : -1));
+}
+static void afin_abrir(int k)
+{
+    if ((unsigned)k >= CRIS_TOT || !s_sim) return;
+    if (!s_afin_caja) {
+        s_afin_caja = caja(s_sim);
+        lv_obj_set_size(s_afin_caja, 170, 50);
+        lv_obj_set_style_radius(s_afin_caja, 25, 0);
+        lv_obj_set_style_bg_color(s_afin_caja, lv_color_hex(0x1A1430), 0);
+        lv_obj_set_style_bg_opa(s_afin_caja, LV_OPA_90, 0);
+        lv_obj_set_style_border_width(s_afin_caja, 2, 0);
+        lv_obj_set_style_border_color(s_afin_caja, lv_color_hex(0xB48AF0), 0);
+        lv_obj_add_flag(s_afin_caja, LV_OBJ_FLAG_CLICKABLE);
+        for (int b = 0; b < 2; b++) {
+            s_afin_b[b] = boton(s_afin_caja, 44, 40, afin_cb, b);
+            lv_obj_set_style_radius(s_afin_b[b], 20, 0);
+            lv_obj_align(s_afin_b[b], b ? LV_ALIGN_RIGHT_MID : LV_ALIGN_LEFT_MID, b ? -3 : 3, 0);
+            lv_obj_set_ext_click_area(s_afin_b[b], 8);
+            lv_obj_t *f = icono(s_afin_b[b], ICO_FLECHA, 2);
+            lv_obj_center(f);
+            lv_image_set_rotation(f, b ? 900 : 2700); /* la flecha de volver apunta a la izquierda: arriba y abajo */
+        }
+        s_afin_txt = lv_image_create(s_afin_caja);
+        lv_obj_add_flag(s_afin_txt, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_ext_click_area(s_afin_txt, 10);
+        lv_obj_add_event_cb(s_afin_txt, afin_cb, LV_EVENT_CLICKED, (void *)(intptr_t)2);
+    }
+    s_afin_k = k;
+    s_afin_ult = s_ms;
+    const int lado = k < SIM_CRIS ? 12 * SIM_POS[k][2] : 60;
+    int x = SIM_POS[k][0] - 85, y = SIM_POS[k][1] - lado - 58;
+    if (x < 40) x = 40;
+    if (x > W - 210) x = W - 210;
+    if (y < 120) y = 120;
+    lv_obj_set_pos(s_afin_caja, x, y);
+    ocultar(s_afin_caja, false);
+    lv_obj_move_foreground(s_afin_caja);
+    afin_pintar();
+    if (!s_nino) sim_texto("FLECHAS: SUBE O BAJA SU NOTA. TOCA EL NOMBRE PARA LA DE SIEMPRE");
+}
+/* (1.0.61) el botón AFINAR del modo libre (a la izquierda de la X): prendido, tocar un cristal abre su afinador en vez de
+ * tocarlo en la canción. Más fácil de encontrar que mantener apretado (que sigue andando). */
+static lv_obj_t *s_afin_btn;
+static bool s_afin_modo;
+static void afin_btn_pintar(void)
+{
+    if (!s_afin_btn) return;
+    lv_obj_set_style_bg_color(s_afin_btn, lv_color_hex(s_afin_modo ? 0xB48AF0 : C_BOTON), 0);
+    lv_obj_set_style_bg_opa(s_afin_btn, s_afin_modo ? LV_OPA_COVER : LV_OPA_80, 0);
+}
+/* (1.0.63) mantener apretado el botón de las notas: todos los cristales vuelven a su nota de siempre. LVGL igual manda
+ * CLICKED al soltar después de un toque largo: s_afin_largo lo ignora (si no, además se prendía/apagaba el modo afinar). */
+static bool s_afin_largo;
+static void afin_todas_cb(lv_event_t *e)
+{
+    const lv_event_code_t c = lv_event_get_code(e);
+    if (c == LV_EVENT_PRESSED) { s_afin_largo = false; return; }
+    if (c != LV_EVENT_LONG_PRESSED) return;
+    s_afin_largo = true;
+    int cambiadas = 0;
+    for (int k = 0; k < CRIS_TOT; k++) {
+        s_sim_luz_k[k] = s_ms; /* se encienden todos juntos */
+        if (!s_afin[k]) continue;
+        s_afin[k] = 0;
+        accion(UI_ACCION_AFINAR, k | (64 << 8));
+        cambiadas++;
+    }
+    afin_cerrar();
+    s_afin_modo = false;
+    afin_btn_pintar();
+    accion(UI_ACCION_SONAR, cris_son(0));
+    if (!s_nino) sim_texto(cambiadas ? "TODOS LOS CRISTALES VOLVIERON A SU NOTA DE SIEMPRE" : "LOS CRISTALES YA TIENEN SU NOTA DE SIEMPRE");
+}
+static void afin_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    if (s_afin_largo) { s_afin_largo = false; return; }
+    s_afin_modo = !s_afin_modo;
+    afin_btn_pintar();
+    if (!s_afin_modo) afin_cerrar();
+    if (!s_nino) sim_texto(s_afin_modo ? "AFINAR: TOCA UN CRISTAL Y CAMBIA SU NOTA. MANTÉN APRETADO ESTE BOTÓN PARA VOLVER TODAS A LA DE SIEMPRE" : "LISTO: A TOCAR");
+}
+static void afin_btn_mostrar(bool ver)
+{
+    s_afin_modo = false; s_afin_largo = false;
+    if (ver && !s_afin_btn && s_sim) {
+        s_afin_btn = boton(s_sim, BOTON_ABAJO, BOTON_ABAJO, afin_btn_cb, 0);
+        lv_obj_set_style_radius(s_afin_btn, LV_RADIUS_CIRCLE, 0);
+        lv_obj_align(s_afin_btn, LV_ALIGN_TOP_MID, -VOLVER_DX, BOTON_ABAJO_Y);
+        lv_obj_set_ext_click_area(s_afin_btn, 10);
+        lv_obj_t *ic = icono(s_afin_btn, ICO_NOTA, 2);
+        lv_obj_center(ic);
+        lv_obj_add_event_cb(s_afin_btn, afin_todas_cb, LV_EVENT_PRESSED, NULL);
+        lv_obj_add_event_cb(s_afin_btn, afin_todas_cb, LV_EVENT_LONG_PRESSED, NULL);
+    }
+    if (s_afin_btn) { ocultar(s_afin_btn, !ver); if (ver) { afin_btn_pintar(); lv_obj_move_foreground(s_afin_btn); } }
+}
+static void afin_largo_cb(lv_event_t *e) /* mantener apretado un cristal (solo en el modo libre) */
+{
+    const int k = (int)(intptr_t)lv_event_get_user_data(e);
+    if (s_sim_on && s_sim_libre) afin_abrir(k);
+}
 static void sim_nueva_ronda(void)
 {
     static const uint8_t LARGO[3] = {3, 5, 7}, LARGO_CHICO[3] = {2, 3, 4};
@@ -2191,6 +2413,8 @@ static void sim_fin(void)
     if (!s_sim_on) return;
     const bool libre = s_sim_libre;
     lib_cerrar();
+    afin_cerrar(); /* (1.0.53) */
+    afin_btn_mostrar(false); /* (1.0.61) */
     s_sim_on = false;
     /* v88: primero se sueltan las imágenes grandes del juego (fondo de la cueva y el dragón) y recién después vuelve el mundo:
      * así el fondo del mundo tiene memoria para armarse de una vez y no se redibuja a tirones mientras todavía se ve la cueva */
@@ -2210,6 +2434,7 @@ static void sim_cris_cb(lv_event_t *e)
 {
     int k = (int)(intptr_t)lv_event_get_user_data(e);
     if (s_sim_on && s_sim_libre) { lib_toque(k); return; } /* (v38) el modo libre */
+    if (s_sim_on && s_sim_inst) { sim_inst_fin(); return; } /* (1.0.43) un toque cierra las instrucciones */
     if (k >= SIM_CRIS) { if (s_sim_on) sim_encender(k); return; } /* (v39) los de las orillas suenan, pero no son del juego de memoria */
     if (!s_sim_on || s_sim_fase != SIM_TURNO) return;
     sim_encender(k);
@@ -2225,7 +2450,7 @@ static void sim_cris_cb(lv_event_t *e)
     }
 }
 static void sim_x_cb(lv_event_t *e) { (void)e; sim_fin(); }
-static void sim_fondo_cb(lv_event_t *e) { (void)e; if (s_sim_fase == SIM_FIN && !s_sim_libre) sim_fin(); }
+static void sim_fondo_cb(lv_event_t *e) { (void)e; if (s_sim_inst) { sim_inst_fin(); return; } if (s_sim_fase == SIM_FIN && !s_sim_libre) sim_fin(); }
 static void cristales_empezar(void)
 {
     cerrar_panel();
@@ -2263,6 +2488,7 @@ static void cristales_empezar(void)
             lv_obj_add_flag(s_sim_cris[k], LV_OBJ_FLAG_CLICKABLE);
             lv_obj_set_ext_click_area(s_sim_cris[k], 10);
             lv_obj_add_event_cb(s_sim_cris[k], sim_cris_cb, LV_EVENT_PRESSED, (void *)(intptr_t)k);
+            lv_obj_add_event_cb(s_sim_cris[k], afin_largo_cb, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)k); /* (1.0.53) afinar */
             int lado = 12 * SIM_POS[k][2];
             lv_obj_set_pos(s_sim_cris[k], SIM_POS[k][0] - lado / 2, SIM_POS[k][1] - lado);
         }
@@ -2282,6 +2508,7 @@ static void cristales_empezar(void)
             lv_obj_set_style_bg_opa(s_sim_borde[b], 0, 0);
             lv_obj_add_flag(s_sim_borde[b], LV_OBJ_FLAG_CLICKABLE);
             lv_obj_add_event_cb(s_sim_borde[b], sim_cris_cb, LV_EVENT_PRESSED, (void *)(intptr_t)k);
+            lv_obj_add_event_cb(s_sim_borde[b], afin_largo_cb, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)k); /* (1.0.53) afinar */
         }
         s_sim_t = lv_image_create(s_sim);
         s_sim_x = boton(s_sim, BOTON_ABAJO, BOTON_ABAJO, sim_x_cb, 0);
@@ -2290,6 +2517,8 @@ static void cristales_empezar(void)
         lv_obj_t *xi = icono(s_sim_x, ICO_NO, 2); lv_obj_center(xi);
     }
     s_sim_on = true;
+    for (int k = 0; k < CRIS_TOT; k++) s_afin[k] = s_disp_aj ? s_disp_aj->afinacion[k] : 0; /* (1.0.53) la afinación guardada */
+    afin_cerrar();
     lv_obj_add_flag(s_fondo, LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(s_mundo, LV_OBJ_FLAG_HIDDEN); /* tapado por el juego: no lo pintes debajo (era lo que lo hacía lento) */
     { const lv_image_dsc_t *cv = art_cristales_fondo565(); if (cv) poner_src(s_sim_fondo, cv); }
     s_sim_ronda = 0; s_sim_ganadas = 0;
@@ -2300,15 +2529,23 @@ static void cristales_empezar(void)
     lv_obj_set_ext_click_area(s_sim_x, 20);
     s_sim_inicio = s_ms;
     sim_nueva_ronda();
+    s_sim_inst = false;
+    if (!s_nino) { /* (1.0.43) primero las instrucciones; la melodía, cuando se van (5 s) o las tocas */
+        s_sim_inst = true;
+        s_sim_t0 = s_ms + 5000;
+        sim_texto("LOS CRISTALES CANTAN UNA MELODÍA. ESCÚCHALA Y DESPUÉS TÓCALOS EN EL MISMO ORDEN");
+    }
 }
 static void animar_cristales_juego(void)
 {
     if (!s_sim_on) return;
     if (s_ms - s_sim_inicio > 240000u) { sim_fin(); return; } /* por si algo se pega: sale solo */
     const int32_t t = (int32_t)(s_ms - s_sim_t0);
+    if (s_afin_k >= 0 && s_ms - s_afin_ult > 5000u) afin_cerrar(); /* (1.0.53) el afinador se cierra solo */
     if (s_sim_libre) animar_libre(); /* (v38) sin rondas */
     else switch (s_sim_fase) {
     case SIM_MUESTRA: /* se encienden uno por uno, con su nota */
+        if (s_sim_inst) { if (t < 0) break; sim_inst_fin(); break; } /* (1.0.43) todavía las instrucciones */
         if (t >= 0 && t / 700 >= s_sim_paso && s_sim_paso < s_sim_largo) { sim_encender(s_sim_seq[s_sim_paso]); s_sim_paso++; }
         if (s_sim_paso >= s_sim_largo && t > s_sim_largo * 700 + 200) { s_sim_fase = SIM_TURNO; s_sim_paso = 0; sim_texto("¡AHORA TÚ!"); }
         break;

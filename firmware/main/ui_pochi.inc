@@ -695,6 +695,7 @@ static void pc_empezar(void)
         pc_puesto(i, &c->x, &c->y);
         c->modo = PC_SIGUE; c->hecho = false; c->chequeo = s_ms + (uint32_t)i * 300u; c->paso = 0;
         c->lengua_hasta = 0; c->lengua_prox = s_ms + 4000u + azar() % 12000u;
+        c->cosa_k = (int)(azar() % 4); /* (1.0.36) lo que te trae Rony se elige al llegar: el saludo ya lo nombra */
     }
 }
 static void pc_solo_uno(int k) /* (1.0.30) viene con este cachorro (para la visita de saludo, si no venía ninguno) */
@@ -713,6 +714,7 @@ static void pc_solo_uno(int k) /* (1.0.30) viene con este cachorro (para la visi
     pc_puesto(0, &c->x, &c->y);
     c->modo = PC_SIGUE; c->hecho = false; c->chequeo = s_ms; c->paso = 0;
     c->lengua_hasta = 0; c->lengua_prox = s_ms + 4000u + azar() % 12000u;
+    c->cosa_k = (int)(azar() % 4); /* (1.0.36) */
 }
 static void pc_reubicar(void) /* (cambió la zona sin ellos: aparecen junto a su mamá) */
 {
@@ -721,7 +723,7 @@ static void pc_reubicar(void) /* (cambió la zona sin ellos: aparecen junto a su
 }
 /* su momento con ella (una vez por visita, cuando su mamá ya comió; de a uno). Todos duran parecido (~10 s) */
 static const art_icono_t PC_COSAS[4] = {ICO_PIEDRA, ICO_HOJA, ICO_PLUMA, ICO_CHAPITA};
-static const char *const PC_COSAS_N[4] = {"PIEDRITA", "HOJITA", "PLUMITA", "CHAPITA"};
+static const char *const PC_COSAS_N[4] = {"PIEDRITA", "HOJITA", "PLUMITA", "TAPITA"}; /* (1.0.36: «TAPITA», como la de Pochi) */
 static bool pc_turno(cach_t *c, int *f, float *oy, int *rot) /* false: terminó */
 {
     const uint32_t t = s_ms - c->t0;
@@ -729,7 +731,7 @@ static bool pc_turno(cach_t *c, int *f, float *oy, int *rot) /* false: terminó 
     const float lado = c->x < mx ? -1.0f : 1.0f;
     if (c->k == POCHI_RONY) { /* persigue una cosita chiquita, la patea, y se la trae */
         if (c->hito == 0) {
-            c->hito = 1; c->cosa_k = (int)(azar() % 4);
+            c->hito = 1; if ((unsigned)c->cosa_k >= 4u) c->cosa_k = (int)(azar() % 4); /* (1.0.36: ya elegida al llegar) */
             c->cx = mx + (azar() % 2 ? 90.0f : -90.0f); c->cy = my + 6; c->cvx = c->cvy = 0;
             po_di(po_buf("¡RONY ENCONTRÓ UNA %s! ¡SIEMPRE CON COSAS CHIQUITITAS!", PC_COSAS_N[c->cosa_k]), ICO_POCHI, 3000);
         }
@@ -1388,18 +1390,35 @@ static void pa_paso(uint32_t t, art_icono_t *ico, float *oy, int *rot)
 static void po_saludo_cachorro(void)
 {
     if (!s_pet) return;
+    /* (1.0.36) a uno que ya conoces no te lo presenta de nuevo: te cuenta a qué vino. Y al presentarlo queda anotado
+     * (PET_POCHI_F_CONOCE): antes solo se anotaba al terminar su momento, y si la visita no llegaba hasta ahí, la próxima
+     * vez lo volvía a presentar */
     static const char *const PRES[PET_POCHI_CACHORROS] = {"¡TE PRESENTO A CHAPI! ES UN COCHINITO... ¡PERO MUY AMOROSO!",
         "¡ELLA ES PASITA, MI HIJITA! ES LA MÁS TIERNA", "¡ELLA ES MORITA! ES TIERNA Y UN POQUITO TÍMIDA",
         "¡TE PRESENTO A RONY! ES EL MÁS LOCO DE MIS CACHORROS"};
-    static const char *const HOY[PET_POCHI_CACHORROS] = {"¡HOY SE VINO CHAPI! ¡OJO, QUE VIENE CON GANAS DE ABRAZAR!",
-        "¡HOY ME ACOMPAÑA PASITA!", "¡HOY VINO MORITA! ESTÁ UN POCO VERGONZOSA", "¡HOY SE VINO RONY! ¡CUIDA TUS COSAS CHIQUITAS!"};
+    static const char *const HOY[PET_POCHI_CACHORROS][3] = {
+        {"¡CHAPI TE QUISO VENIR A DAR UN ABRAZO! ¡OJO, QUE VIENE CON BARRO!", "¡HOY SE VINO CHAPI! ¡OJO, QUE VIENE CON GANAS DE ABRAZAR!",
+         "¡CHAPI TE EXTRAÑABA! SE REVOLCÓ TODO EL CAMINO DE CONTENTO"},
+        {"¡PASITA TE QUISO BUSCAR UNA FLORCITA!", "¡HOY ME ACOMPAÑA PASITA! PREGUNTÓ POR TI TODA LA MAÑANA",
+         "¡PASITA QUERÍA VERTE OTRA VEZ!"},
+        {"¡MORITA TE QUISO VENIR A VER! AUNQUE ESTÁ UN POCO VERGONZOSA", "¡HOY VINO MORITA! SE ACUERDA DE TI, PERO LE DA VERGÜENZA",
+         "¡MORITA ME PIDIÓ VENIR! DICE QUE TE GUARDÓ UN BESITO"},
+        {NULL, NULL, "¡HOY SE VINO RONY! ¡CUIDA TUS COSAS CHIQUITAS!"}};
     int conocidos = 0;
     for (int i = 0; i < s_pc_n; i++) conocidos += pet_pochi_pup_met(s_pet, s_pc[i].k);
     if (s_pc_n == PET_POCHI_CACHORROS && conocidos == s_pc_n) po_di("¡HOY VINIMOS TODOS! CHAPI, PASITA, MORITA Y RONY", ICO_CORAZON, 3600);
     else if (s_pc_n >= 2 && conocidos == s_pc_n) {
         char t[100]; snprintf(t, sizeof t, "¡HOY SE VINIERON %s Y %s CONMIGO!", PC_NOMBRE[s_pc[0].k], PC_NOMBRE[s_pc[1].k]);
         po_di(t, ICO_CORAZON, 3200);
-    } else for (int i = 0; i < s_pc_n; i++) po_di(pet_pochi_pup_met(s_pet, s_pc[i].k) ? HOY[s_pc[i].k] : PRES[s_pc[i].k], ICO_CORAZON, 3600);
+    } else for (int i = 0; i < s_pc_n; i++) {
+        const int k = s_pc[i].k;
+        if (!pet_pochi_pup_met(s_pet, k)) { po_di(PRES[k], ICO_CORAZON, 3600); continue; }
+        const int v = (int)(azar() % 3);
+        if (k == POCHI_RONY && v < 2) /* lo que te trae ya está elegido (pc_empezar): «¡RONY TE QUISO TRAER UNA TAPITA!» */
+            po_di(po_buf("¡RONY TE QUISO TRAER UNA %s!", PC_COSAS_N[(unsigned)s_pc[i].cosa_k < 4u ? s_pc[i].cosa_k : 3]), ICO_CORAZON, 3600);
+        else po_di(HOY[k][v] ? HOY[k][v] : HOY[k][2], ICO_CORAZON, 3600);
+    }
+    for (int i = 0; i < s_pc_n; i++) if (!pet_pochi_pup_met(s_pet, s_pc[i].k)) accion(UI_ACCION_POCHI, PET_POCHI_F_CONOCE + s_pc[i].k);
 }
 /* ---- (1.0.30) la tapita: Pochi la deja a sus pies; tocas donde quieras que caiga, sale volando, ella corre, la trae
  * en la boca y te la devuelve. Tres veces. Si no la tiras, te la vuelve a pedir y al final la tira ella. ---- */

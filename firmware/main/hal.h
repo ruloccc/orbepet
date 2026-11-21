@@ -24,7 +24,8 @@ bool hal_mic_ok(void);            /* v90: false si el micrófono no se pudo abri
 void hal_log_flush_pantalla(bool encendida); /* v89: con la pantalla encendida el registro se escribe cada 5 min */
 void hal_vel_info2(int *cuadros, int *prom_ms, int *max_ms, int *kpx, int *tick_ms, int *tick_max); /* v89 */
 /* v88: resumen aparte de eventos raros (reinicios y su motivo, fallos, memoria baja, pantallas trabadas, fondos que no cargan).
- * Va a su propio archivo (eventos.txt, hasta 8 KB), no lo borra el desborde del registro normal y sobrevive a un reinicio por fallo. */
+ * Va a su propio lugar (1.0.64: la zona de eventos de la partición «registro», 24 KB; antes eventos.txt), no lo borra el
+ * desborde del registro normal y sobrevive a un reinicio por fallo. */
 void hal_evento(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void hal_ram_log(const char *donde); /* anota cuánta RAM interna queda */
 const char *hal_ram_fases(void); /* v88: PSRAM libre al comienzo de cada fase del arranque */
@@ -67,6 +68,12 @@ void hal_reserve_boot_check(void);
 void hal_night_enter(uint32_t hasta_utc);
 void hal_night_boot_check(void);
 const char *hal_night_wake_reason(void);
+/* (1.0.54) modo paseo: sueño profundo caminando, con el contador de pasos del chip encendido (ver services.c) */
+void hal_walk_enter(uint32_t alarma_utc, uint32_t cuenta_chip);
+void hal_walk_boot_check(void);
+int hal_res_informe(char *b, int cap); /* (1.0.59) cuánto ocupan recursos y fotos, y los archivos más grandes */
+uint32_t hal_walk_take(uint32_t *min_caminando, uint32_t *min_quieto, bool *a_oscuras); /* los pasos que dio durmiendo */
+const char *hal_walk_wake_reason(void);
 
 /* acelerómetro (QMI8658) */
 esp_err_t hal_imu_init(void);
@@ -103,6 +110,7 @@ esp_err_t hal_sound_init(void);
 void hal_sound_play(sound_t s);
 void hal_sound_stop(void); /* (v39) corta el sonido que esté sonando (no las notas de cristal ni el ambiente) */
 void hal_sound_play_soft(sound_t s); /* igual, pero con el volumen de efectos aunque sea un sonido de alarma (no suena si los efectos están en 0) */
+void hal_sound_note(sound_t s, int semi, bool suave); /* (1.0.53) una nota de cristal afinada (semitonos -24..+24) */
 void hal_sound_volume(int pct); /* 0..100 (el volumen general del parlante: queda en 100) */
 void hal_sound_pantalla(bool encendida); /* con la pantalla apagada el parlante (amplificador y reloj de audio) se apaga tras 15 s sin sonar; al encender se prepara */
 bool hal_sound_ready(void); /* la tarea del sonido está viva */

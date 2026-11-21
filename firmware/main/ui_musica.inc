@@ -63,8 +63,8 @@ static void animar_reproductor(void)
     const int k = PET_CANCION_CRISTAL(b) % CRIS_TOT;
     const int suave = (s_rep_modo & REP_SUAVE) ? 0x100 : 0;
     /* (v39) su «la» sonaba zumbón, como un sonido roto: ahora ella «canta» con notas de cristal suaves (y las notitas que flotan) */
-    if (s_rep_modo & REP_CRISTAL) accion(UI_ACCION_SONAR, snd_cristal(k) | suave);
-    else if (s_rep_modo & REP_VOZ) accion(UI_ACCION_SONAR, snd_cristal(k) | 0x100);
+    if (s_rep_modo & REP_CRISTAL) accion(UI_ACCION_SONAR, cris_son(k) | suave); /* (1.0.53) con su afinación */
+    else if (s_rep_modo & REP_VOZ) accion(UI_ACCION_SONAR, cris_son(k) | 0x100);
     if (s_sim_on) { s_sim_luz_k[k] = s_ms; if (s_rep_modo & REP_VOZ) lib_nota_flota(k); }
     else if ((s_rep_modo & REP_FLOTAR) && s_mascota.visible) flotar(ICO_NOTA, NULL, 0, (int)s_mascota.x - 16 + (int)(azar() % 32), cabeza_y(&s_mascota) - 6, 0);
     s_rep_prox += (uint32_t)PET_CANCION_PASOS(b) * PET_PASO_MS;
@@ -197,6 +197,7 @@ static void cristales_libre(bool componer)
 {
     cristales_empezar(); /* la misma pantalla (cueva, cristales, la X) */
     s_sim_libre = true;
+    s_sim_inst = false; /* (1.0.43) el modo libre no tiene instrucciones de rondas */
     s_sim_fase = SIM_TURNO; /* (sin rondas: que no se muestre la secuencia del juego de memoria) */
     s_sim_paso = 0;
     lib_crear();
@@ -217,7 +218,8 @@ static void cristales_libre(bool componer)
     lv_obj_move_foreground(s_lib_roca); lv_obj_move_foreground(s_lib_pet);
     for (int i = 0; i < 6; i++) lv_obj_move_foreground(s_lib_nota[i]);
     lv_obj_move_foreground(s_sim_x);
-    lib_texto(componer ? NULL : "TOCA LIBRE: COMO QUIERAS, SIN ERRORES");
+    afin_btn_mostrar(!componer); /* (1.0.61) el botón AFINAR, junto a la X */
+    lib_texto(componer ? NULL : "TOCA LIBRE: COMO QUIERAS. CON LA NOTA DE ABAJO CAMBIAS EL SONIDO DE CADA CRISTAL");
     s_lib_reac_t0 = s_ms;
     if (componer) { s_cp_propone = 1; s_lib_fase = LB_CAMINA; s_lib_camina_t0 = s_ms; cp_empezar_frase(); } /* (desde el menú: directo a tocar la frase) */
 }
@@ -248,6 +250,7 @@ static void lib_reaccion_cortar(void)
 static void cp_toque(int k);
 static void lib_toque(int k) /* tocaste un cristal en el modo libre */
 {
+    if (s_afin_modo) { sim_encender(k); afin_abrir(k); return; } /* (1.0.61) afinando: no cuenta para la canción */
     sim_encender(k);
     lib_nota_flota(k);
     s_sim_inicio = s_ms; /* (en el modo libre se sale solo recién después de 4 minutos sin tocar) */

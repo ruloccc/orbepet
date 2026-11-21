@@ -237,6 +237,7 @@ static void zr_portada(void)
     if (!s_nino) {
         lv_obj_t *t = zj_texto_c(c, 0, "SE DESLIZA POR EL ARCOÍRIS. MUÉVELA A LOS LADOS CON EL DEDO: JUNTA ESTRELLITAS Y ESQUIVA LAS NUBES DE TORMENTA Y LOS PÁJAROS.", 0xCFE8FF, 2, 296);
         lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 92);
+        { const char *r = zj_texto_c_ultimo; zj_portada_leer(r); } /* (1.0.43) */
         lv_obj_t *t2 = zj_texto_c(c, 1, "TOCA PARA EMPEZAR", 0xFFE9A0, 2, 280); lv_obj_align(t2, LV_ALIGN_BOTTOM_MID, 0, -14);
     }
     s_zj_o[45] = c;

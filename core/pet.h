@@ -666,8 +666,8 @@ typedef enum {
     X(SND_LA_4,          "voz",     "La (cristal violeta)", "Ella canta «la» en la nota del cristal violeta (re)", "Toca contigo en los cristales; canta nuestra canción") \
     X(SND_LA_5,          "voz",     "La (cristal blanco)",  "Ella canta «la» en la nota del cristal blanco (la)", "Toca contigo en los cristales; canta nuestra canción") \
     X(SND_DRAGON_TARAREA, "cueva",  "El dragón tararea",    "Un zumbido grave y redondo, como un ronroneo con música", "El dragón de cristal escucha lo que tocaste") \
-    X(SND_CRISTAL_CELESTE, "cueva", "Cristal celeste",      "Una nota grave y redonda, como un bajo (do grave)", "Tocas el cristal celeste de la orilla izquierda de la cueva") \
-    X(SND_CRISTAL_MORADO,  "cueva", "Cristal morado",       "Una nota aguda con brillo, como una campanita (re alto)", "Tocas el cristal morado de la orilla derecha de la cueva") \
+    X(SND_CRISTAL_CELESTE, "cueva", "Cristal celeste",      "Una nota de cristal (sol grave)", "Tocas el cristal celeste de la orilla izquierda de la cueva") \
+    X(SND_CRISTAL_MORADO,  "cueva", "Cristal morado",       "Una nota de cristal (re alto)", "Tocas el cristal morado de la orilla derecha de la cueva") \
     X(SND_CHUCAO,          "animal", "El chucao",            "«¡Chu-cao!»: dos notas fuertes, la segunda más grave, de un pajarito chiquito", "El chucao del claro avisa que hay algo escondido") \
     X(SND_CONDOR,          "animal", "El cóndor",            "Un soplo de viento largo bajo las alas y un graznido ronco, bajito", "El cóndor del mirador sale a planear")
 #define PET_SONIDO_ENUM(id, g, n, s, c) id,
@@ -1556,6 +1556,9 @@ bool pet_stinky(const pet_t *p);     /* la roció el zorrillo (o se puso hediond
 /* (1.0.18) le soplaste o espantaste el olor: se le quita (el olor «suelto», no el del zorrillo, que es más fuerte y
  * pide baño; ese solo baja a la mitad). Devuelve 1 si se le quitó, 2 si solo bajó, 0 si no estaba hedionda. */
 int pet_air_out(pet_t *p, uint32_t ahora);
+/* (1.0.36) se sentó en el tronco del claro a mirar las luciérnagas: la tranquiliza y descansa un poquito (más de noche).
+ * Devuelve 2 si le hizo efecto, 1 si ya lo había hecho hace menos de 10 min (solo cuenta como compañía), 0 si no se pudo. */
+int pet_firefly_watch(pet_t *p, bool noche, uint32_t ahora);
 
 /* ---------- Criaturas mágicas (versión 23) ----------
  * Una en cada zona. A veces te escriben para invitarte a hacer algo juntos: si después de leer la carta van a
@@ -1736,6 +1739,7 @@ enum {
     PET_POCHI_F_ANIMAL = 14,    /* ella o un cachorro se encontraron con un animal del lugar */
     PET_POCHI_F_AMIGO = 30,     /* 30 + k: el cachorro k estuvo con su animal amigo (la primera vez se hacen amigos) */
     PET_POCHI_F_CACHORRO = 20,  /* 20 + k: el cachorro k jugó contigo (y ya lo conoces) */
+    PET_POCHI_F_CONOCE = 40,    /* (1.0.36) 40 + k: Pochi ya te presentó al cachorro k (solo lo anota: la próxima vez no lo presenta de nuevo) */
 };
 enum { PET_POCHI_ULT_NADA = 0, PET_POCHI_ULT_PASEO, PET_POCHI_ULT_COMIO, PET_POCHI_ULT_HOYNO }; /* paseó / comió sin pasear / le dijiste «hoy no» */
 #define PET_POCHI_CACHORROS 4
@@ -2140,7 +2144,7 @@ bool pet_upgrade(pet_t *p);
 
 /* ---------- Ajustes del dispositivo ----------
  * Son de la casa, no de cada mascota ni del respaldo: main los guarda aparte (NVS "disp"). */
-#define PET_DEVICE_VERSION 11
+#define PET_DEVICE_VERSION 13
 #define PET_BRILLO_MIN 8           /* nunca la pantalla negra */
 #define PET_ALARMA_VOLUMEN_MIN 45  /* la alarma suena aunque el volumen esté en 0 */
 #define PET_ALARMA_VOLUMEN 85      /* las alarmas tienen su propio volumen: ninguna barra las calla */
@@ -2159,12 +2163,16 @@ typedef struct {
     uint8_t alarmas;  /* volumen de las alarmas: PET_ALARMA_VOLUMEN_MIN..100 (en las partidas de antes vale 0: se usa el de siempre, 85) */
     uint8_t arrullo_vol; /* volumen de los grillos del arrullo: 0..100 (versión 9) */
     uint8_t pecera;   /* (versión 11) cuánto dura encendida la pecera con batería: 0 = 10 min, 1 = 30 min, 2 = 1 hora, 3 = no se apaga */
+    uint8_t brillo_pecera; /* (versión 12) el brillo de la pecera, que se cambia deslizando el dedo en ella: PET_BRILLO_MIN..100;
+                            * 0 = el mismo brillo de siempre (de fábrica) */
+    int8_t afinacion[8]; /* (versión 13) la nota de cada cristal de la cueva, en semitonos sobre la suya (-12..+12; 0 = la de siempre) */
 } pet_device_t;
 void pet_device_defaults(pet_device_t *d);
 void pet_device_fix(pet_device_t *d); /* corrige valores fuera de rango (o de otra versión) */
 uint32_t pet_device_screen_ms(const pet_device_t *d);
 uint32_t pet_device_aquarium_ms(const pet_device_t *d); /* (v99) la pecera con batería: UINT32_MAX = no se apaga sola */
-/* brillo a usar: el elegido, multiplicado en modo pecera (0,55) y de noche u hora de dormir (0,3) */
+/* brillo a usar: el elegido (en la pecera, el suyo si lo cambiaste deslizando; 1.0.41: ya no se baja a 0,55 de día), por
+ * 0,3 de noche o a la hora de dormir */
 int pet_device_brightness(const pet_device_t *d, bool pecera, bool noche);
 int pet_device_alarm_volume(const pet_device_t *d);
 /* tres volúmenes: 0 = ella (sus sonidos), 1 = efectos (fuegos, juegos, truenos), 2 = alarmas (aparte: no las callan las barras) */

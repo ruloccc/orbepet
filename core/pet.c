@@ -2035,6 +2035,10 @@ void pet_pochi(pet_t *p, int fase, uint32_t t)
 {
     if (p->etapa == STAGE_HUEVO) return;
     if (fase >= PET_POCHI_F_FIN && fase < PET_POCHI_F_FIN + 4) { p->pochi_mem = (uint8_t)((p->pochi_mem & ~3u) | (unsigned)(fase - PET_POCHI_F_FIN)); return; }
+    if (fase >= PET_POCHI_F_CONOCE && fase < PET_POCHI_F_CONOCE + PET_POCHI_CACHORROS) { /* (1.0.36) */
+        p->pochi_mem |= (uint8_t)(1u << (2 + (fase - PET_POCHI_F_CONOCE)));
+        return;
+    }
     if (fase >= PET_POCHI_F_CACHORRO && fase < PET_POCHI_F_CACHORRO + PET_POCHI_CACHORROS) {
         const int k = fase - PET_POCHI_F_CACHORRO;
         p->pochi_mem |= (uint8_t)(1u << (2 + k));
@@ -2740,20 +2744,31 @@ static void paso_mundo(pet_t *p, uint32_t t, float dt, bool vivo)
         bool calido = est == ESTACION_PRIMAVERA || est == ESTACION_VERANO;
         const bool dia_largo = hl >= 7 && hl < 20;
         const float casa = e == ESC_PRADO ? 1.3f : 1.0f; /* en su prado se ven más seguido */
+        /* (1.0.39, pedido del usuario: «con las mariposas pasa lo mismo» que con la rana) las tasas por hora pasaban de 1
+         * (la mariposa en el prado en primavera: (0,75 + 0,12·flores)·1,3; la abeja con 3 flores: 1,05) y prob_paso las deja
+         * en «siempre»: apenas se iban, volvían. Ahora tienen tope y, si ya hay otro de visita (un animal o otro bichito),
+         * vienen menos: se turnan el protagonismo */
+        bool otro = false;
+        for (int a = 0; a < ANIMAL_COUNT && !otro; a++) otro = pet_animal_here(p, (animal_t)a, t);
+        for (int f = 0; f < FAUNA_COUNT && !otro; f++) otro = pet_fauna_here(p, (fauna_t)f, t);
+        const float turno = otro ? 0.4f : 1.0f;
         if (!pet_fauna_here(p, FAUNA_MARIPOSA, t) && dia && buen_tiempo && est != ESTACION_INVIERNO &&
-            chance(p, prob_paso(((calido ? 0.75f : 0.3f) + 0.12f * (float)flores) * casa, dt)))
+            chance(p, prob_paso(fminf(((calido ? 0.4f : 0.15f) + 0.06f * (float)flores) * casa, 0.65f) * turno, dt)))
             aparece(p, FAUNA_MARIPOSA, t, 900u + rng_next(p) % 1500u, vivo);
         if (!pet_fauna_here(p, FAUNA_ABEJA, t) && dia && c == CLIMA_DESPEJADO && calido && flores >= 1 &&
-            chance(p, prob_paso(0.3f + 0.25f * (float)flores, dt)))
+            chance(p, prob_paso(fminf(0.2f + 0.1f * (float)flores, 0.6f) * turno, dt)))
             aparece(p, FAUNA_ABEJA, t, 600u + rng_next(p) % 900u, vivo);
         if (!pet_fauna_here(p, FAUNA_PAJARO, t) && dia_largo && c != CLIMA_TORMENTA && e != ESC_COLINA &&
-            chance(p, prob_paso(0.6f * casa, dt)))
+            chance(p, prob_paso(0.45f * casa * turno, dt)))
             aparece(p, FAUNA_PAJARO, t, 900u + rng_next(p) % 1500u, vivo);
         if (!pet_fauna_here(p, FAUNA_ZORRO, t) && (e == ESC_PRADO || e == ESC_BOSQUE) && hl >= 9 && hl < 21 && t >= p->protege_hasta &&
             (p->inventario[ITEM_FRUTA] || p->inventario[ITEM_MIEL]) && chance(p, prob_paso(0.07f, dt)))
             aparece(p, FAUNA_ZORRO, t, 300u, vivo);
-        if (!pet_fauna_here(p, FAUNA_RANA, t) && e == ESC_LAGO && est != ESTACION_INVIERNO && chance(p, prob_paso(1.2f, dt)))
-            aparece(p, FAUNA_RANA, t, 900u + rng_next(p) % 900u, vivo);
+        /* (1.0.38) la rana: antes 1,2 por hora, que prob_paso deja en «siempre» (con 1 o más da 1): apenas se iba volvía y
+         * estaba en el lago casi todo el rato. Ahora ~0,6 por hora, y si otro animal está de visita (el pato, la nutria,
+         * la garza...) le deja el protagonismo: viene mucho menos */
+        if (!pet_fauna_here(p, FAUNA_RANA, t) && e == ESC_LAGO && est != ESTACION_INVIERNO &&
+            chance(p, prob_paso(otro ? 0.15f : 0.6f, dt))) aparece(p, FAUNA_RANA, t, 900u + rng_next(p) % 900u, vivo);
     }
     for (int f = 0; f < FAUNA_COUNT; f++) {
         if (!p->fauna_hasta[f] || t < p->fauna_hasta[f]) continue;
@@ -3684,7 +3699,7 @@ static void plan_sesgo(pet_t *p, float *u, int *lugar, bool urgente)
         if (act == NP) return;
         if (u[act] <= 0) { /* algunas se pueden hacer siempre, aunque nada las pida */
             const bool libre = act == ACTV_MIRAR || act == ACTV_CANTAR || act == ACTV_BAILAR || act == ACTV_ESPERAR || act == ACTV_PASEAR ||
-                               (act == ACTV_SIESTA && N[NEED_ENERGIA] < 85);
+                               (act == ACTV_SIESTA && N[NEED_ENERGIA] < 60); /* (1.0.38: era < 85: recién jugando ya se echaba a dormir) */
             if (libre && N[NEED_ENERGIA] > 25 && !p->enferma) u[act] = 0.3f;
         }
         if (u[act] > 0) {
@@ -3926,7 +3941,7 @@ static void elegir_actividad(pet_t *p, uint32_t t, bool vivo)
     if (afuera && c != CLIMA_TORMENTA && c != CLIMA_LLUVIA && c != CLIMA_NIEVE && N[NEED_ENERGIA] > 35 && N[NEED_DIVERSION] < 92)
         { u[ACTV_PELOTA] = 0.12f + 0.25f * R[TRAIT_ENERGICA] + (N[NEED_DIVERSION] < 60 ? 0.1f : 0.0f); lugar[ACTV_PELOTA] = LUGAR_CLARO; }
     int quedan = 0; /* ropa del baúl que no lleva puesta, y objetos que tiene en la bolsa */
-    for (int r = 0; r < ROPA_COUNT; r++) if (((p->ropa_tiene >> r) & 1u) && pet_wearing(p, pet_clothes_slot((ropa_t)r)) != r) quedan++;
+    for (int r = 0; r < ROPA_COUNT; r++) if (((p->ropa_tiene >> r) & 1u) && pet_clothes_slot((ropa_t)r) != RANURA_CUELLO && pet_wearing(p, pet_clothes_slot((ropa_t)r)) != r) quedan++; /* (1.0.49) sin lo del cuello: no se ve */
     for (int o = 0; o < PET_OBJETOS; o++) if (p->bolsa[o]) quedan++;
     if (quedan > 0 && !p->enferma && N[NEED_ENERGIA] > 30) { u[ACTV_PROBAR] = 0.1f + 0.22f * R[TRAIT_CURIOSA]; lugar[ACTV_PROBAR] = LUGAR_CLARO; }
     if (afuera && p->escena != ESC_ISLA && N[NEED_ENERGIA] > 30) {
@@ -4024,7 +4039,7 @@ static void elegir_actividad(pet_t *p, uint32_t t, bool vivo)
     if (mejor == ACTV_PROBAR) {
         dur = 90u + rng_next(p) % 90u;
         int n = 0, pick[ROPA_COUNT + PET_OBJETOS];
-        for (int r = 0; r < ROPA_COUNT; r++) if (((p->ropa_tiene >> r) & 1u) && pet_wearing(p, pet_clothes_slot((ropa_t)r)) != r) pick[n++] = r + 1;
+        for (int r = 0; r < ROPA_COUNT; r++) if (((p->ropa_tiene >> r) & 1u) && pet_clothes_slot((ropa_t)r) != RANURA_CUELLO && pet_wearing(p, pet_clothes_slot((ropa_t)r)) != r) pick[n++] = r + 1;
         for (int o = 0; o < PET_OBJETOS; o++) if (p->bolsa[o]) pick[n++] = 32 + o;
         p->probando = n ? (uint8_t)pick[rng_next(p) % (unsigned)n] : 0;
         if (!p->probando) mejor = ACTV_PASEAR;
@@ -4870,6 +4885,12 @@ int pet_action(pet_t *p, action_t a, int arg, uint32_t ahora)
             despertarse(p, ahora, true);
             r = malhumor ? -1 : 1;
             push_event(p, EV_REACCION, a, r, ahora);
+        } else if (p->actividad == ACTV_SIESTA) { /* (1.0.40) la despiertas de su siesta: se levanta y se queda contigo un rato */
+            p->actividad = ACTV_ESPERAR;
+            p->actividad_hasta = ahora + 120u;
+            r = N[NEED_ENERGIA] < 30 ? -1 : 1;
+            push_event(p, EV_ACTIVIDAD, ACTV_ESPERAR, p->lugar, ahora);
+            push_event(p, EV_REACCION, a, r, ahora);
         }
         break;
     case ACT_CURAR:
@@ -5310,6 +5331,8 @@ void pet_device_defaults(pet_device_t *d)
     d->alarmas = PET_ALARMA_VOLUMEN;
     d->arrullo_vol = 55;
     d->pecera = 1; /* media hora */
+    d->brillo_pecera = 0; /* (versión 12) el mismo de siempre, hasta que lo cambies deslizando en la pecera */
+    for (int k = 0; k < 8; k++) d->afinacion[k] = 0; /* (versión 13) cada cristal con su nota de siempre */
 }
 void pet_device_fix(pet_device_t *d)
 {
@@ -5323,6 +5346,8 @@ void pet_device_fix(pet_device_t *d)
     if (d->version == 8) { d->version = 9; d->arrullo_vol = 55; if (d->arrullo) d->arrullo = 3; } /* la 8 no tenía volumen del arrullo; la lluvia y el mar pasan a grillos */
     if (d->version == 9) { d->version = 10; d->musica = 0; }          /* la 9: la escucha de música vuelve a venir apagada (consume batería; se enciende en Sonido) */
     if (d->version == 10) { d->version = 11; d->pecera = 1; }        /* la 10 apagaba la pecera a los 10 min: ahora se elige (de fábrica, 30 min) */
+    if (d->version == 11) { d->version = 12; d->brillo_pecera = 0; } /* (1.0.41) la 11 no tenía brillo propio de la pecera */
+    if (d->version == 12) { d->version = 13; for (int k = 0; k < 8; k++) d->afinacion[k] = 0; } /* (1.0.53) la 12 no afinaba los cristales */
     if (d->version != PET_DEVICE_VERSION) { pet_device_defaults(d); return; }
     if (d->ambiente > 100) d->ambiente = 100;
     if (d->volumen > 100) d->volumen = 100;
@@ -5330,7 +5355,7 @@ void pet_device_fix(pet_device_t *d)
     if (d->brillo > 100) d->brillo = 100;
     if (d->brillo < PET_BRILLO_MIN) d->brillo = PET_BRILLO_MIN;
     if (d->girar > 1) d->girar = 1;
-    if (d->musica > 1) d->musica = 0;
+    d->musica = 0; /* (1.0.44, pedido del usuario) «escuchar música» ya no existe: el micrófono solo se abre para un soplido */
     if (d->arrullo > 3) d->arrullo = 0;
     if (d->arrullo) d->arrullo = 3;
     if (d->arrullo_vol > 100) d->arrullo_vol = 100;
@@ -5338,6 +5363,9 @@ void pet_device_fix(pet_device_t *d)
     if (d->fuente > 1) d->fuente = 0;
     if (d->apagado > 4) d->apagado = 4;
     if (d->pecera > 3) d->pecera = 1;
+    if (d->brillo_pecera > 100) d->brillo_pecera = 100;
+    if (d->brillo_pecera && d->brillo_pecera < PET_BRILLO_MIN) d->brillo_pecera = PET_BRILLO_MIN;
+    for (int k = 0; k < 8; k++) if (d->afinacion[k] < -12 || d->afinacion[k] > 12) d->afinacion[k] = 0;
     if (!d->alarmas) d->alarmas = PET_ALARMA_VOLUMEN;
     if (d->alarmas > 100) d->alarmas = 100;
     if (d->alarmas < PET_ALARMA_VOLUMEN_MIN) d->alarmas = PET_ALARMA_VOLUMEN_MIN;
@@ -5355,7 +5383,7 @@ uint32_t pet_device_aquarium_ms(const pet_device_t *d)
 int pet_device_brightness(const pet_device_t *d, bool pecera, bool noche)
 {
     float b = d->brillo;
-    if (pecera) b *= 0.55f;
+    if (pecera) b = d->brillo_pecera ? d->brillo_pecera : d->brillo; /* (1.0.41, pedido del usuario: al aire libre casi no se veía) antes ×0,55 */
     if (noche) b *= 0.3f;
     int r = (int)(b + 0.5f);
     return r < 5 ? 5 : r;
@@ -5650,10 +5678,7 @@ int pet_object_use(pet_t *p, int id, uint32_t ahora)
     case OEF_MIRAR:
         sumar(p, NEED_CURIOSIDAD, 8); impulsar(p, EMO_CURIOSIDAD, 0.5f, CAUSA_NOVEDAD);
         if (id == OBJ_SEDA_ARANA && !pet_has_clothes(p, ROPA_BUFANDA)) { /* con la seda, alguien le teje su bufanda */
-            p->ropa_tiene |= (uint16_t)(1u << ROPA_BUFANDA);
-            push_event(p, EV_NUEVO, 0, ROPA_BUFANDA, ahora);
-            anotar(p, DIA_NUEVO, 0, ROPA_BUFANDA, ahora);
-            sonar(p, SND_NUEVO, ahora);
+            p->ropa_tiene |= (uint16_t)(1u << ROPA_BUFANDA); /* (1.0.49) sin anunciarla: el cuello ya no se ve (ver desbloqueos) */
         }
         break;
     case OEF_COMER:
@@ -6548,12 +6573,25 @@ int pet_island_game(pet_t *p, int juego, int puntos, uint32_t t)
 int pet_air_out(pet_t *p, uint32_t t)
 {
     if (!p || !p->hediondo) return 0;
-    if (p->hediondo > 6) { p->hediondo = (uint8_t)(p->hediondo / 2); return 2; } /* el del zorrillo: baja, pero sigue (el baño sí lo quita) */
+    /* (1.0.50, pedido del usuario) soplarle quita cualquier olor, también el del zorrillo (antes ese solo bajaba a la mitad) */
     p->hediondo = p->hediondo_min = 0;
     impulsar(p, EMO_ALEGRIA, 0.3f, CAUSA_CARICIAS);
     p->ultima_interaccion = t;
     push_event(p, EV_HEDIONDA, 0, 1, t);
     return 1;
+}
+int pet_firefly_watch(pet_t *p, bool noche, uint32_t t)
+{
+    static uint32_t ultima; /* (como s_terca_aviso: no se guarda; tras reiniciar puede volver a hacer efecto) */
+    if (!p || p->etapa == STAGE_HUEVO || p->dormida) return 0;
+    p->ultima_interaccion = t;
+    if (ultima && t >= ultima && t - ultima < 600u) return 1;
+    ultima = t;
+    sumar(p, NEED_SEGURIDAD, noche ? 12 : 8);
+    sumar(p, NEED_ENERGIA, 4);
+    sumar(p, NEED_DIVERSION, noche ? 6 : 4);
+    impulsar(p, EMO_ALEGRIA, noche ? 0.45f : 0.3f, CAUSA_LUGAR);
+    return 2;
 }
 int pet_duo_game(pet_t *p, int juego, int resultado, uint32_t t)
 {
@@ -7644,6 +7682,7 @@ static void revisar_baul(pet_t *p, uint32_t t, bool vivo)
         if (d->juguete) p->juguetes_tiene |= (uint8_t)(1u << d->id);
         else p->ropa_tiene |= (uint16_t)(1u << d->id);
         if (d->regla == R_INICIAL) continue;
+        if (!d->juguete && pet_clothes_slot((ropa_t)d->id) == RANURA_CUELLO) continue; /* (1.0.49) lo del cuello ya no se viste ni se ve: no se anuncia («algo nuevo» que no estaba) */
         push_event(p, EV_NUEVO, d->juguete, d->id, t);
         anotar(p, DIA_NUEVO, d->juguete, d->id, t);
         if (vivo) sonar(p, SND_NUEVO, t);

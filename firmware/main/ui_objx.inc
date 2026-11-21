@@ -17,6 +17,7 @@ static void cofre_cb(lv_event_t *e)
 {
     (void)e;
     if (!s_pet || s_panel != PANEL_NINGUNO) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     switch (pet_chest_status(s_pet)) {
     case 4: accion(UI_ACCION_OBJETO, 5 << 8); break;
     case 3: globo(ICO_CANDADO, "LE FALTA EL CANDADO RÚNICO", 3000); break;
@@ -36,6 +37,7 @@ static void nido_cb(lv_event_t *e)
 {
     int i = (int)(intptr_t)lv_event_get_user_data(e);
     if (i < 0 || i >= PET_NIDOS || !s_pet || s_panel != PANEL_NINGUNO) return;
+    if (durmiendo_aviso()) return; /* (1.0.40) */
     s_nido_tocado |= (uint8_t)(1u << i);
     ocultar(s_nido[i], true);
     for (int k = 0; k < 3; k++) flotar(ICO_ESTRELLA, NULL, 0, NIDO_XY[s_escena == ESC_BOSQUE][i][0] - 12 + k * 12, NIDO_XY[s_escena == ESC_BOSQUE][i][1] - 6, (uint32_t)k * 120);
