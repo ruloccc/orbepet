@@ -1,0 +1,9 @@
+{
+  "version": "1.0.65",
+  "nombre": "LA REGADERA DE VERDAD",
+  "tam": 8185712,
+  "sha256": "330d8b7171f4f04361dfd32593919f5ba546f8e752f513aa5930fcbd515d4a4d",
+  "fecha": "2026-11-21T19:32Z",
+  "commit": "623a558",
+  "recursos": "pj0.bin:83230:51f4e9ae pj1.bin:128776:80064c85 pj2.bin:85508:03371bfd pj3.bin:154152:421c64c0 pj4.bin:78145:e28fdeb6 pj5.bin:53898:e5fd7e1e pj6.bin:58882:c23f1822 pj7.bin:24984:4bacf43c"
+}
